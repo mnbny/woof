@@ -1,0 +1,51 @@
+{
+  "name": "woof",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Woof CLI",
+  "type": "module",
+  "bin": {
+    "woof": "./cli/woof.mjs"
+  },
+  "scripts": {
+    "build": "tsx .tools/scripts/build.ts",
+    "test": "vitest run --config .tools/tests/vitest.config.ts",
+    "validate": "tsx .tools/scripts/scripty.ts --sequential && pnpm build",
+    "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
+    "validate:lint": "SCRIPTY=2 eslint --fix --cache --format=pretty .",
+    "validate:typecheck": "SCRIPTY=3 tsc --noEmit"
+  },
+  "dependencies": {
+    "@bomb.sh/tab": "0.0.22",
+    "@clack/prompts": "1.8.1",
+    "ansis": "4.4.0",
+    "change-case": "5.4.4",
+    "citty": "0.2.2",
+    "tsx": "4.23.15",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-formatter-pretty": "7.1.0",
+    "eslint-plugin-import": "2.32.0",
+    "eslint-plugin-prettier": "5.5.7",
+    "eslint-plugin-simple-import-sort": "14.0.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-packagejson": "3.0.3",
+    "prettier-plugin-sh": "0.20.2",
+    "terser": "5.51.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.0.5"
+  },
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
+  }
+}
