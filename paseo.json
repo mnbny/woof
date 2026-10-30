@@ -1,0 +1,16 @@
+{
+  "worktree": {
+    "setup": ["asdf install", "pnpm install", "node cli/setup.mjs --dev"]
+  },
+  "scripts": {
+    "setup": {
+      "type": "service",
+      "command": "asdf install && pnpm install && node cli/setup.mjs --dev"
+    }
+  },
+  "metadataGeneration": {
+    "commitMessage": {
+      "instructions": "Use the ir-convention-pass commit convention"
+    }
+  }
+}
