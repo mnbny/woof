@@ -1,0 +1,2 @@
+# Generated, committed for consumers. Regenerate with `pnpm build`; never merge it by hand.
+cli/woof.bundle.mjs -diff linguist-generated=true
