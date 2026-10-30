@@ -1,0 +1,6 @@
+.agents/docs/project-vision.md
+# Symlinks to AGENTS.md and .agents; Prettier errors when it encounters symlinks.
+.claude/
+CLAUDE.md
+pnpm-lock.yaml
+cli/woof.bundle.mjs
