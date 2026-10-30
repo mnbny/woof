@@ -1,0 +1,5 @@
+.context/
+.agents/plans/
+.DS_Store
+.eslintcache
+node_modules/
