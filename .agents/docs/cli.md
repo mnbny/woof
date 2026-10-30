@@ -1,19 +1,25 @@
 # CLI
 
-## Entry points
+## Purpose and ownership
 
-`cli/cli.ts` defines the root command with package metadata. Product commands will be registered from `cli/commands/`. Currently, the only behavior is help, version information, and shell completion.
+The CLI owns command registration, startup configuration checks, caller detection, shell completion, and shared presentation. Each command owns its operation and recovery.
 
-`cli/woof.mjs` runs source through the checkout's tsx installation. `cli/woof.bundle.mjs` is the generated, self-contained executable.
+## Installation identity
 
-## Setup
+Setup selects source execution for development or bundle execution for direct use. The executable link remains outside versioned Node.js installations.
 
-`node cli/setup.mjs` links `~/.local/bin/woof` to the bundle. `node cli/setup.mjs --dev` links it to the source launcher. The link stays outside versioned Node installations. Setup skips linking in CI and refuses to replace an existing regular file.
+Source execution uses checkout changes directly. Bundle execution uses the generated artifact. Both modes identify their own installation independently of the caller's working directory.
 
-Setup registers completion in `.zshrc` or `.bashrc` without duplicate registration. For zsh, registration requires `compdef` to be available. Fish and PowerShell users can register the output of `woof complete <shell>` themselves.
+Setup registers supported shell completion without duplicate registration. Dependency installation does not perform shell setup automatically. Completion remains available to the shell but is hidden from the normal command list.
 
-Setup changes the user's local executable link and shell configuration. Dependency installation does not run setup automatically.
+## Caller modes
 
-## Completion
+The shared agent-mode contract owns caller identity, noninteractive execution, output, and permission boundaries. Commands retain their operations and adapt presentation to the caller. Terminal availability remains separate from caller identity.
 
-`@bomb.sh/tab` injects the `complete` subcommand. It stays available to shells and is hidden from normal help. Future product commands can add completion handlers as needed.
+## Shared configuration checks
+
+Personal configuration is optional. Startup checks existing configuration without creating a missing file or rewriting saved content.
+
+Invalid configuration blocks normal root execution and help. Customize and Upgrade remain available for recovery. Their own operations determine success or failure. Completion suppresses configuration errors so completion remains usable.
+
+A configuration from a newer schema requires a checkout upgrade. Other configuration errors direct the developer to configuration repair.

@@ -2,10 +2,12 @@
 
 ## Purpose
 
-This brief holds open product or policy questions that require an owner decision. Implementation details belong in the document that owns the behavior.
+This brief holds product and policy questions that require an owner decision. Command-specific behavior belongs to the domain that owns it.
 
 ## Questions
 
 ### Product scope
 
-Only the CLI delivery format is known. The owner will supply the intended behavior, users, and commands before product implementation begins. This does not block the scaffold.
+Which users and problems should Woof serve?
+
+The command-line delivery format and shared CLI operations are defined. Product purpose, intended users, and integrations remain open. These decisions determine the product's vocabulary and command boundaries.

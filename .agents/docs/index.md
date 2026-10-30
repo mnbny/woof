@@ -38,23 +38,38 @@ Add each document using this format:
 
 #### [project-vision.md](./project-vision.md)
 
-- Description: Placeholder for the owner's product vision. Preserve the vision once supplied; do not update it with the `ir-living-docs` skill.
+- Description: Placeholder for the owner's product vision. Preserve the vision once supplied; do not update it with the `toolkit-living-docs` skill.
 - Tags: `vision`
 
 #### [project-brief.md](./project-brief.md)
 
-- Description: Confirmed project scope and the boundary between scaffolding and product work.
+- Description: Woof's purpose, scope, ownership, and shared vocabulary.
 - Tags: `scope`, `vocabulary`
 
 #### [technical-brief.md](./technical-brief.md)
 
-- Description: Repository structure, dependencies, code conventions, builds, validation, and tests.
+- Description: Shared execution model, technical responsibilities, tooling roles, and engineering conventions.
 - Tags: `architecture`, `build`, `dependencies`, `conventions`, `validation`, `testing`
 
 #### [cli.md](./cli.md)
 
-- Description: CLI entry points, local setup, and shell completion.
-- Tags: `cli`, `setup`, `completions`
+- Description: CLI ownership, installation identity, configuration checks, and shell completion.
+- Tags: `cli`, `setup`, `configuration`, `completions`
+
+#### [cli-flag-agent.md](./cli-flag-agent.md)
+
+- Description: Caller detection, noninteractive execution, output, and permission boundaries.
+- Tags: `cli`, `agent`
+
+#### [cli-command-customize.md](./cli-command-customize.md)
+
+- Description: Personal configuration ownership, creation, display, and recovery.
+- Tags: `customize`, `configuration`
+
+#### [cli-command-upgrade.md](./cli-command-upgrade.md)
+
+- Description: Checkout ownership, update policy, preservation of local work, and recovery.
+- Tags: `upgrade`
 
 #### [questions-brief.md](./questions-brief.md)
 
