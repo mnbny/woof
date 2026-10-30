@@ -2,7 +2,7 @@
 
 Read [.agents/docs/index.md](./.agents/docs/index.md).
 
-After a feature or change reaches its logical conclusion, use `ir-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
+After a feature or change reaches its logical conclusion, use `toolkit-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
 
 This repository is a CLI scaffold. Product behavior has not been specified. Do not infer commands, integrations, or domain concepts from the project name or from the MAACS reference project.
 
