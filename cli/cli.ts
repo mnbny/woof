@@ -1,32 +1,9 @@
-import type { CommandMeta, SubCommandsDef } from 'citty'
+import { isAgent } from './utils/agent.ts'
 
-import tab from '@bomb.sh/tab/citty'
-import { defineCommand, runMain } from 'citty'
-
-import manifest from '../package.json' with { type: 'json' }
-
-process.stdout.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code !== 'EPIPE') throw error
-})
-
-const subCommands: SubCommandsDef = {}
-
-const main = defineCommand({
-  meta: {
-    name: manifest.name,
-    version: manifest.version,
-    description: manifest.description,
-  },
-  subCommands,
-})
-
-await tab(main)
-
-// Shells need this command, but it does not belong in the normal help listing.
-const completion = subCommands['complete']
-if (completion && typeof completion === 'object' && 'meta' in completion) {
-  completion.meta = { ...(completion.meta as CommandMeta), hidden: true }
+// Color libraries read their environment on import, including help and error output.
+if (process.argv.includes('--agent') || isAgent()) {
+  process.env['NO_COLOR'] = '1'
+  delete process.env['FORCE_COLOR']
 }
 
-const rawArgs = process.argv.slice(2)
-await runMain(main, { rawArgs: rawArgs.length ? rawArgs : ['--help'] })
+await import('./main.ts')
