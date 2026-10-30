@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { cp, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inject, test as baseTest } from 'vitest'
 
@@ -13,6 +13,11 @@ declare module 'vitest' {
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
+export async function put(path: string, content: string) {
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, content)
+}
+
 export const test = baseTest
   // eslint-disable-next-line no-empty-pattern -- Vitest requires destructured fixture dependencies.
   .extend('directory', async ({}, { onCleanup }) => {
@@ -22,21 +27,23 @@ export const test = baseTest
   })
   .extend('cli', async ({ directory }) => {
     const checkout = join(directory, 'checkout')
+    const bin = join(directory, 'bin')
     const project = join(directory, 'project')
     const taskHome = join(directory, "developer's $HOME `literal`")
     const bundleDirectory = join(directory, 'standalone')
     const entry = join(bundleDirectory, 'woof.bundle.mjs')
     const sourceEntry = join(checkout, 'cli', 'woof.mjs')
+    const checkoutEntry = join(checkout, 'cli', 'woof.bundle.mjs')
     const env = {
       HOME: taskHome,
-      PATH: '/usr/bin:/bin',
+      PATH: `${bin}:/usr/bin:/bin`,
       GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_CONFIG_NOSYSTEM: '1',
       NO_COLOR: '1',
       TERM: 'dumb',
     }
 
-    await Promise.all([taskHome, project, bundleDirectory].map(path => mkdir(path, { recursive: true })))
+    await Promise.all([taskHome, project, bin, bundleDirectory].map(path => mkdir(path, { recursive: true })))
     await cp(join(repoRoot, 'cli'), join(checkout, 'cli'), {
       recursive: true,
       filter: path => basename(path) !== 'woof.bundle.mjs',
@@ -44,6 +51,7 @@ export const test = baseTest
     await cp(join(repoRoot, 'package.json'), join(checkout, 'package.json'))
     await symlink(join(repoRoot, 'node_modules'), join(checkout, 'node_modules'))
     await writeFile(entry, inject('cliSource'))
+    await writeFile(checkoutEntry, inject('cliSource'))
 
     function run(file: string, args: string[], cwd = project, markers: NodeJS.ProcessEnv = {}, timeout = 5_000) {
       return new Promise<{ status: number; stdout: string; stderr: string }>((resolve, reject) => {
@@ -60,5 +68,5 @@ export const test = baseTest
       })
     }
 
-    return { entry, project, run, sourceEntry, taskHome }
+    return { bin, checkout, checkoutEntry, entry, project, run, sourceEntry, taskHome }
   })
