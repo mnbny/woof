@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -217,13 +218,19 @@ function cleanupPaths(paths: Iterable<string>) {
 }
 
 function cleanupDirectories(directories: string[]) {
+  const warnings: string[] = []
   for (const directory of directories.sort((left, right) => right.length - left.length)) {
     try {
-      rmSync(directory)
-    } catch {
-      // A nonempty directory contains live or concurrently-created content.
+      rmdirSync(directory)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'ENOENT') continue
+      warnings.push(
+        `Could not remove empty import directory ${directory}: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
+  return warnings
 }
 
 function temporaryArtifacts(home: string, path: string, kind: 'stage' | 'backup') {
@@ -267,8 +274,10 @@ export function applyImport(candidate: ReviewedImportCandidate) {
     }
     for (const source of candidate.sources) currentDigest(candidate.home, source)
   } catch (error) {
-    const warnings = cleanupPaths(staged.flatMap(change => [change.staging, ...(change.backup ? [change.backup] : [])]))
-    cleanupDirectories(createdDirectories)
+    const warnings = [
+      ...cleanupPaths(staged.flatMap(change => [change.staging, ...(change.backup ? [change.backup] : [])])),
+      ...cleanupDirectories(createdDirectories),
+    ]
     throw new ImportApplyError(
       `Import staging failed before any live replacement: ${error instanceof Error ? error.message : String(error)}`,
       report(
@@ -326,8 +335,10 @@ export function applyImport(candidate: ReviewedImportCandidate) {
     const unnecessaryBackups = staged
       .filter(change => !appliedBackups.has(change.backup) && change.backup)
       .map(change => change.backup!)
-    const warnings = cleanupPaths([...staged.map(change => change.staging), ...unnecessaryBackups])
-    cleanupDirectories(createdDirectories)
+    const warnings = [
+      ...cleanupPaths([...staged.map(change => change.staging), ...unnecessaryBackups]),
+      ...cleanupDirectories(createdDirectories),
+    ]
     const pending = staged.filter(change => !completed.includes(change)).map(change => change.path)
     throw new ImportApplyError(
       `Import failed: ${error instanceof Error ? error.message : String(error)}. ${rollbackErrors.join(' ')}`,
