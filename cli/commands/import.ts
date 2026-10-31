@@ -16,6 +16,7 @@ import { getWoofHome } from '../utils/paths.ts'
 import {
   chooseOption,
   enterText,
+  presentCode,
   presentConflict,
   presentError,
   presentResult,
@@ -174,6 +175,14 @@ function outcome(report: ImportApplyReport) {
     pending: report.pending.join(', ') || 'None',
     recovery: report.recovery.join(', ') || 'None',
     warnings: report.warnings.join('; ') || 'None',
+  })
+}
+
+function presentBackup(backup: string | undefined) {
+  if (!backup) return
+  presentCode('Backup of Woof home before this import', backup, {
+    template: 'import-backup',
+    values: { backup, backupArgument: shellQuote(backup), homeArgument: shellQuote(getWoofHome()) },
   })
 }
 
@@ -395,6 +404,7 @@ export default defineCommand({
             }
           : { template: 'import-unchanged', values: { report, rechecked, validation } },
       )
+      presentBackup(result.backup)
       if (findings.length) {
         const configurationBroken = findings.some(finding =>
           /Could not parse configuration|Invalid configuration|Could not read configuration|requires an explicit \$schemaVersion|unsupported \$schemaVersion/.test(
@@ -418,6 +428,7 @@ export default defineCommand({
         },
         { template: 'import-error', values: { details: message, report } },
       )
+      if (error instanceof ImportApplyError) presentBackup(error.report.backup)
       process.exitCode = 1
     }
   },
