@@ -38,40 +38,90 @@ Add each document using this format:
 
 #### [project-vision.md](./project-vision.md)
 
-- Description: Owner's problems, product decisions, proposed MVP, deferred ideas, and open questions. Update only at the owner's request; exclude from routine living-documentation maintenance.
+- Description: How Woof started and where the owner wants Woof to go: problems, founding ideas, and future ideas. Update only at the owner's request. Exclude from routine living-documentation maintenance.
 - Tags: `vision`
 
 #### [project-brief.md](./project-brief.md)
 
-- Description: Woof's purpose, scope, ownership, and shared vocabulary.
+- Description: Woof's current purpose, product model, scope, and shared vocabulary.
 - Tags: `scope`, `vocabulary`
 
 #### [technical-brief.md](./technical-brief.md)
 
-- Description: Shared execution model, technical responsibilities, tooling roles, and engineering conventions.
+- Description: Execution model, repository organization, dependency roles, cross-cutting conventions, and validation and testing practice.
 - Tags: `architecture`, `build`, `dependencies`, `conventions`, `validation`, `testing`
 
 #### [cli.md](./cli.md)
 
-- Description: CLI ownership, startup configuration, migration, presentation, and package execution.
-- Tags: `cli`, `setup`, `configuration`, `completions`
+- Description: Command set, invocation and startup order, presentation and exit status, completion, and distribution.
+- Tags: `cli`, `commands`, `completions`, `distribution`
+
+#### [cli-command-readme.md](./cli-command-readme.md)
+
+- Description: User-guide output for people and agents who want to learn what Woof does.
+- Tags: `readme`
+
+#### [cli-command-get.md](./cli-command-get.md)
+
+- Description: Exact lookup, discovery fallback, candidate output, and lookup exit status.
+- Tags: `get`, `lookup`
+
+#### [cli-command-projects.md](./cli-command-projects.md)
+
+- Description: Registered project list and report of the current selection.
+- Tags: `projects`
+
+#### [cli-command-explain.md](./cli-command-explain.md)
+
+- Description: Resolution trace for one token, without script execution.
+- Tags: `explain`, `provenance`
+
+#### [cli-command-validate.md](./cli-command-validate.md)
+
+- Description: Checks of the selected catalog or one token graph, without script execution.
+- Tags: `validate`
+
+#### [cli-command-export.md](./cli-command-export.md)
+
+- Description: Project archive assembly, destination naming, and export report.
+- Tags: `export`
+
+#### [cli-command-import.md](./cli-command-import.md)
+
+- Description: Review loop, decision handoff, application report, and post-import validation.
+- Tags: `import`, `decisions`
 
 #### [cli-flag-agent.md](./cli-flag-agent.md)
 
-- Description: Caller detection, noninteractive execution, output, and permission boundaries.
-- Tags: `cli`, `agent`
+- Description: Caller detection, noninteractive execution, handoffs, output, and permission boundaries.
+- Tags: `agent`
+
+#### [configuration.md](./configuration.md)
+
+- Description: Configuration documents, structure rules, resource references, home lifecycle, versions, and migration.
+- Tags: `configuration`, `schema`, `migration`
+
+#### [projects.md](./projects.md)
+
+- Description: Registered and repository projects, selection order, and checkout and worktree matching.
+- Tags: `projects`, `selection`, `worktrees`
 
 #### [tokens.md](./tokens.md)
 
-- Description: Token schemas, project resolution, metadata discovery, and computed execution.
-- Tags: `tokens`, `resolution`, `discovery`, `scripts`
+- Description: Design-token lineage, token tiers and modes, project overlay, references, preflight and provenance, and discovery rules.
+- Tags: `tokens`, `design-tokens`, `resolution`, `discovery`
+
+#### [scripts.md](./scripts.md)
+
+- Description: Computed resource runtimes, execution, output, failure, and cancellation.
+- Tags: `scripts`, `execution`
 
 #### [sharing.md](./sharing.md)
 
-- Description: Portable project archives, conflict review, destination ownership, and recovery.
-- Tags: `sharing`, `transfer`, `import`, `export`
+- Description: Portable archive content, import review semantics, remapping, decisions, and application safety.
+- Tags: `sharing`, `export`, `import`
 
 #### [questions-brief.md](./questions-brief.md)
 
-- Description: Product and policy decisions that remain open.
+- Description: Open product and policy decisions for resolution, computed resources, interaction, and authoring.
 - Tags: `questions`
