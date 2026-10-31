@@ -165,7 +165,7 @@ settings:
 importers:
 
   .:
-    dependencies:
+    devDependencies:
       '@bomb.sh/tab':
         specifier: 0.0.22
         version: 0.0.22(citty@0.2.2)
@@ -175,34 +175,6 @@ importers:
       '@clack/prompts':
         specifier: 1.8.1
         version: 1.8.1
-      ansis:
-        specifier: 4.4.0
-        version: 4.4.0
-      change-case:
-        specifier: 5.4.4
-        version: 5.4.4
-      citty:
-        specifier: 0.2.2
-        version: 0.2.2
-      diff:
-        specifier: 9.0.0
-        version: 9.0.0
-      fflate:
-        specifier: 0.8.3
-        version: 0.8.3
-      picomatch:
-        specifier: 4.0.3
-        version: 4.0.3
-      tsx:
-        specifier: 4.23.15
-        version: 4.23.15
-      valibot:
-        specifier: 1.5.0
-        version: 1.5.0(typescript@6.0.3)
-      yaml:
-        specifier: 2.9.1
-        version: 2.9.1
-    devDependencies:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.13.0(supports-color@10.2.2))
@@ -215,6 +187,18 @@ importers:
       '@types/picomatch':
         specifier: 4.0.3
         version: 4.0.3
+      ansis:
+        specifier: 4.4.0
+        version: 4.4.0
+      change-case:
+        specifier: 5.4.4
+        version: 5.4.4
+      citty:
+        specifier: 0.2.2
+        version: 0.2.2
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -236,9 +220,15 @@ importers:
       eslint-plugin-simple-import-sort:
         specifier: 14.0.0
         version: 14.0.0(eslint@10.13.0(supports-color@10.2.2))
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       globals:
         specifier: 17.13.0
         version: 17.13.0
+      picomatch:
+        specifier: 4.0.3
+        version: 4.0.3
       prettier:
         specifier: 3.9.10
         version: 3.9.10
@@ -251,15 +241,24 @@ importers:
       terser:
         specifier: 5.51.2
         version: 5.51.2
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
       typescript:
         specifier: 6.0.3
         version: 6.0.3
       typescript-eslint:
         specifier: 8.72.1
         version: 8.72.1(eslint@10.13.0(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
+      valibot:
+        specifier: 1.5.0
+        version: 1.5.0(typescript@6.0.3)
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.6)(vite@8.3.0(@types/node@26.6.6)(esbuild@0.28.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
 packages:
 
