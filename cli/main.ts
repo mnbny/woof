@@ -45,7 +45,15 @@ if (completion && typeof completion === 'object' && 'meta' in completion) {
 try {
   const invocation = parseInvocation(process.argv.slice(2))
   await prepareStartup({ migrate: invocation.migrate, passive: invocation.passive, cwd: process.cwd() })
-  await runMain(main, { rawArgs: invocation.args.length ? invocation.args : ['--help'] })
+  const rootVersion =
+    invocation.args.some(arg => arg === '--version' || arg === '-v') &&
+    invocation.args.every(arg => ['--agent', '--version', '-v'].includes(arg))
+  const args = rootVersion
+    ? ['--version']
+    : invocation.args.every(arg => arg === '--agent')
+      ? [...invocation.args, '--help']
+      : invocation.args
+  await runMain(main, { rawArgs: args })
 } catch (error) {
   presentError({
     summary: 'Woof could not prepare the invocation.',

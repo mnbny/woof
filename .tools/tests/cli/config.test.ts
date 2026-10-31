@@ -50,7 +50,10 @@ test('migrates the known legacy format while preserving its link and mode', asyn
   expect((await run(cli, home, ['get', '--', '--migrate'])).status).toBe(1)
   expect(await readFile(target, 'utf8')).toBe('{"schemaVersion":1}\n')
 
-  expect((await run(cli, home, ['--migrate'])).status).toBe(0)
+  const migrated = await run(cli, home, ['--migrate', '--agent'])
+  expect(migrated.status).toBe(0)
+  expect(migrated.stderr).toContain('Migrated configuration')
+  expect((await run(cli, home, ['--agent', '--migrate'])).status).toBe(0)
   expect((await lstat(file)).isSymbolicLink()).toBe(true)
   expect((await lstat(target)).mode & 0o777).toBe(0o640)
   expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ $schemaVersion: 2 })
