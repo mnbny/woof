@@ -98,8 +98,16 @@ function markedLocation(reference: string, repoRoot: string | undefined): Resour
 function directLocation(file: string, rootKind: ResourceRootKind, repoRoot: string | undefined): ResourceLocation {
   const markedRoot = rootKind === 'root' ? getWoofHome() : repoRoot
   if (!markedRoot) throw new ResourceLoadError(file, 'no active checkout or worktree supplies the configuration root.')
-  const { file: physical, root } = physicalFile(markedRoot, resolve(markedRoot, file), file)
-  return { file: physical, root, rootKind, markedPath: file }
+  try {
+    const root = realpathSync(markedRoot)
+    const physical = realpathSync(resolve(markedRoot, file))
+    if (!statSync(physical).isFile()) throw new ResourceLoadError(file, 'the configuration is not a regular file.')
+    return { file: physical, root, rootKind, markedPath: file }
+  } catch (error) {
+    if (error instanceof ResourceLoadError) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    throw new ResourceLoadError(file, message, { cause: error })
+  }
 }
 
 export function resolveResourceLocation(reference: string, options: { cwd?: string; repoRoot?: string } = {}) {
