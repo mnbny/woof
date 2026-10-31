@@ -37,9 +37,11 @@ Each decision claims one physical destination. Woof compares destinations after 
 
 ## Application and recovery
 
-After each item has a decision, Woof checks each source snapshot and reuse snapshot again. Woof stages each write with its original mode. Woof replaces resources and the project configuration before the root registry.
+After each item has a decision, Woof checks each source snapshot and reuse snapshot again. Before the first write, Woof saves a backup archive in the backups area of Woof home. The archive holds the root configuration, each file that it references, and each existing file that the import replaces. Its paths are relative to Woof home, so an extraction over Woof home restores these files. If Woof cannot save the backup, the import stops before any change. An import that changes nothing makes no backup. Woof keeps every backup and has no restore command.
 
-If a write fails, Woof restores the completed replacements in reverse order. Woof does not overwrite later edits during this restoration. If the restoration cannot finish, backups stay as recovery artifacts. Woof does not promise atomic behavior across several files after a crash.
+Woof stages each write with its original mode. Woof replaces resources and the project configuration before the root registry.
+
+If a write fails, Woof restores the completed replacements in reverse order. Woof does not overwrite later edits during this restoration. If the restoration cannot finish, copies of the originals stay as recovery artifacts. Woof does not promise atomic behavior across several files after a crash.
 
 Explicit startup migration completes before the review. For this reason, rollback returns to the state after migration.
 

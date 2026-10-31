@@ -21,6 +21,8 @@ Inside a checkout that defines a repository project, import refuses to run.
 
 After the review completes, import applies the changes. It reports completed, restored, pending, recovery, and warning entries. It also lists earlier decisions that no longer needed a choice. If nothing needs to change, import reports that the review passed and writes nothing. If the application fails, import exits with status 1 and shows the same report.
 
+When import saved a backup, it shows the backup location after the report, also after a failure. Agent output tells the agent how to restore the backup, and that a restore needs the user's approval.
+
 ## Validation findings
 
 After a save, import validates the shared catalog and every registered project. It does not run scripts. Findings go to standard error after the success report, and the command still exits with status 0. If a finding shows an unreadable configuration, import asks for a repair before the next Woof run. Other findings point to the affected tokens and to project validation.
