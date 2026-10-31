@@ -1,11 +1,11 @@
 {
   "worktree": {
-    "setup": ["asdf install", "pnpm install", "node cli/setup.mjs --dev"]
+    "setup": ["asdf install", "pnpm install"]
   },
   "scripts": {
     "setup": {
       "type": "service",
-      "command": "asdf install && pnpm install && node cli/setup.mjs --dev"
+      "command": "asdf install && pnpm install"
     }
   },
   "metadataGeneration": {

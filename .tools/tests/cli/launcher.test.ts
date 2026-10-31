@@ -23,7 +23,7 @@ test.for(['sourceEntry', 'entry'] as const)(
   'keeps help and early failures plain in agent mode through %s',
   async (entry, { cli }) => {
     const color = { FORCE_COLOR: '1', NO_COLOR: undefined, TERM: 'xterm-256color' }
-    for (const args of [['customize', '--help'], ['missing-command']]) {
+    for (const args of [['--help'], ['missing-command']]) {
       const [explicit, detected] = await Promise.all([
         cli.run(process.execPath, [cli[entry], ...args, '--agent'], cli.project, color),
         cli.run(process.execPath, [cli[entry], ...args], cli.project, { ...color, CODEX_THREAD_ID: 'present' }),
@@ -35,7 +35,7 @@ test.for(['sourceEntry', 'entry'] as const)(
       expect(explicit.stdout).not.toBe('')
     }
 
-    const human = await cli.run(process.execPath, [cli[entry], 'customize', '--help'], cli.project, color)
+    const human = await cli.run(process.execPath, [cli[entry], '--help'], cli.project, color)
     expect(human.status).toBe(0)
     expect(stripVTControlCharacters(human.stdout)).not.toBe(human.stdout)
   },
