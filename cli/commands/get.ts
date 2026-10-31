@@ -1,12 +1,14 @@
 import type { ConfigurationMigrationInput } from '../utils/migrations.ts'
 import type { RegisteredProject } from '../utils/projects.ts'
+import type { ConfigurationSource } from '../utils/resources.ts'
+import type { ProjectConfiguration, RootConfiguration } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
 import { readFileSync, realpathSync } from 'node:fs'
-import { relative, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
+import { initializeWoofHome } from '../utils/bootstrap.ts'
 import { discoverResources } from '../utils/discovery.ts'
 import { shellQuote } from '../utils/display.ts'
 import { migrateConfigurationDocuments } from '../utils/migrations.ts'
@@ -17,52 +19,72 @@ import { createResourceLoader, detectCheckoutRoot, resolveResourceLocation } fro
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
 
-function insideHome(cwd: string) {
-  try {
-    const path = relative(realpathSync(getWoofHome()), realpathSync(cwd))
-    return path === '' || (!path.startsWith(`..${sep}`) && path !== '..')
-  } catch {
-    return false
-  }
-}
+type ResourceLoader = ReturnType<typeof createResourceLoader>
 
-function migrationInputs(rootData: unknown, cwd: string): ConfigurationMigrationInput[] {
-  const inputs: ConfigurationMigrationInput[] = [{ file: getWoofHome('woof.config.json'), kind: 'root' }]
+function migrationInputs(rootData: unknown, cwd: string, explicitProject?: string): ConfigurationMigrationInput[] {
+  const rootFile = getWoofHome('woof.config.json')
+  const checkoutRoot = detectCheckoutRoot(cwd)
+  const inputs: ConfigurationMigrationInput[] = [{ file: rootFile, kind: 'root' }]
   const projects =
     rootData && typeof rootData === 'object' && !Array.isArray(rootData)
       ? (rootData as Record<string, unknown>)['$projects']
       : undefined
-  if (projects && typeof projects === 'object' && !Array.isArray(projects)) {
-    const checkoutRoot = detectCheckoutRoot(cwd)
-    for (const reference of Object.values(projects)) {
-      if (typeof reference === 'string')
-        inputs.push({
-          file: resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {}).file,
-          kind: 'project',
-        })
-    }
+
+  if (explicitProject) {
+    const definition =
+      projects && typeof projects === 'object' && !Array.isArray(projects)
+        ? (projects as Record<string, unknown>)[explicitProject]
+        : undefined
+    if (typeof definition === 'string')
+      inputs.push({
+        file: resolveResourceLocation(definition, checkoutRoot ? { repoRoot: checkoutRoot } : {}).file,
+        kind: 'project',
+      })
+    return inputs
   }
 
-  const checkoutRoot = detectCheckoutRoot(cwd)
-  if (checkoutRoot && !insideHome(cwd)) {
-    const candidates = [
-      resolve(checkoutRoot, 'woof.config.json'),
-      resolve(checkoutRoot, '.agents/woof.config.json'),
-      resolve(checkoutRoot, '.claude/woof.config.json'),
-    ]
-    const physical = new Map<string, string>()
-    for (const candidate of candidates) {
-      try {
-        physical.set(realpathSync(candidate), candidate)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      }
-    }
-    if (physical.size > 1)
-      throw new Error(`Multiple distinct repository configurations exist: ${[...physical.values()].join(', ')}.`)
-    const [repository] = physical.keys()
-    if (repository) inputs.push({ file: repository, kind: 'project' })
+  const rootSource: ConfigurationSource = {
+    file: realpathSync(rootFile),
+    root: realpathSync(getWoofHome()),
+    rootKind: 'root',
+    markedPath: rootFile,
+    kind: 'root',
   }
+  const inspectionLoader: ResourceLoader = {
+    repoRoot: checkoutRoot,
+    loadRootConfiguration() {
+      return { data: rootData as RootConfiguration, source: rootSource }
+    },
+    loadProjectConfiguration(reference: string) {
+      const provenance = resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
+      return {
+        data: JSON.parse(readFileSync(provenance.file, 'utf8')) as ProjectConfiguration,
+        source: { ...provenance, kind: 'project' },
+      }
+    },
+    loadRepositoryConfiguration(file: string) {
+      if (!checkoutRoot) throw new Error(`No active checkout supplies ${file}.`)
+      const physical = realpathSync(file)
+      return {
+        data: JSON.parse(readFileSync(physical, 'utf8')) as ProjectConfiguration,
+        source: {
+          file: physical,
+          root: checkoutRoot,
+          rootKind: 'repo',
+          markedPath: file,
+          kind: 'project',
+        },
+      }
+    },
+    readResource(reference: string) {
+      const provenance = resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
+      return { content: readFileSync(provenance.file, 'utf8'), provenance }
+    },
+  }
+  const context = selectProjectContext({ loader: inspectionLoader, cwd })
+  const candidates = context.project ? [context.project] : context.candidates
+  for (const candidate of candidates)
+    if (!candidate.inline) inputs.push({ file: candidate.source.file, kind: 'project' })
   return inputs
 }
 
@@ -96,6 +118,8 @@ export default defineCommand({
   },
   meta: { description: 'Resolve an exact token or discover resources', name: 'get' },
   async run({ rawArgs }) {
+    const controller = new AbortController()
+    const onCancel = () => controller.abort()
     try {
       const { values, positionals } = parseArgs({
         args: rawArgs,
@@ -120,6 +144,7 @@ export default defineCommand({
       const migration = values.migrate === true
 
       if (migration) {
+        await initializeWoofHome()
         const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
         if (explicitProject) {
           const projects =
@@ -134,8 +159,11 @@ export default defineCommand({
           )
             throw new Error(`Unknown registered project: ${explicitProject}.`)
         }
-        await migrateConfigurationDocuments(migrationInputs(rootData, process.cwd()))
+        await migrateConfigurationDocuments(migrationInputs(rootData, process.cwd(), explicitProject))
       }
+
+      process.on('SIGINT', onCancel)
+      process.on('SIGTERM', onCancel)
 
       let context = selectProjectContext({
         ...(explicitProject ? { project: explicitProject } : {}),
@@ -173,7 +201,11 @@ export default defineCommand({
       const exactPath = qualified?.path ?? query
       const exact = Boolean(query) && !search && graph.tokens.has(exactPath)
       if (exact) {
-        const output = await resolveToken(graph, query, createScriptEvaluator({ checkoutRoot: context.checkoutRoot }))
+        const output = await resolveToken(
+          graph,
+          query,
+          createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
+        )
         writePayload(output)
         return
       }
@@ -209,17 +241,29 @@ export default defineCommand({
       const output = await resolveToken(
         graph,
         selectedCandidate.path,
-        createScriptEvaluator({ checkoutRoot: context.checkoutRoot }),
+        createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
       )
       writePayload(output)
     } catch (error) {
-      presentError({
-        summary: 'Woof could not complete the lookup.',
-        details: error instanceof Error ? error.message : String(error),
-        recovery:
-          'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',
-      })
-      process.exitCode = 1
+      if (controller.signal.aborted) {
+        presentError({
+          summary: 'Woof lookup was cancelled.',
+          details: error instanceof Error ? error.message : String(error),
+          recovery: 'Owned child cleanup has finished. Earlier completed effects are not rolled back.',
+        })
+        process.exitCode = 130
+      } else {
+        presentError({
+          summary: 'Woof could not complete the lookup.',
+          details: error instanceof Error ? error.message : String(error),
+          recovery:
+            'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',
+        })
+        process.exitCode = 1
+      }
+    } finally {
+      process.removeListener('SIGINT', onCancel)
+      process.removeListener('SIGTERM', onCancel)
     }
   },
 })
