@@ -179,3 +179,42 @@ test('copies a file from outside Woof home so that the new token resolves', asyn
   expect((await run(cli, home, ['get', 'rules.commit', '--agent'])).stdout).toBe('Use seven rules.\n')
   expect(await readFile(source, 'utf8')).toBe('Use {{base}}.\n')
 })
+
+test('edits a prompt file in place, or overrides it without touching the shared file', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'edit-home')
+  const acme = join(directory, 'acme')
+  const root = join(home, 'woof.config.json')
+  const prompt = join(home, 'prompts', 'rule.md')
+  await put(
+    root,
+    JSON.stringify({
+      $schemaVersion: 2,
+      base: 'seven rules',
+      rule: '<root>/prompts/rule.md',
+      $projects: { acme: { $metadata: { $basePaths: [acme] } } },
+    }),
+  )
+  await put(prompt, 'Use {{base}}.\n')
+  await mkdir(acme)
+  const original = await readFile(root, 'utf8')
+
+  expect((await run(cli, home, ['edit', 'rule', '--content', 'Follow {{base}}.', '--agent'])).status).toBe(0)
+  expect(await readFile(prompt, 'utf8')).toBe('Follow {{base}}.')
+  expect(await readFile(root, 'utf8')).toBe(original)
+
+  expect((await run(cli, home, ['edit', 'rule', '--content', 'Acme only.', '--agent'], acme)).status).toBe(1)
+  expect(
+    (await run(cli, home, ['edit', 'rule', '--override', '--content', 'Acme only.', '--agent'], acme)).status,
+  ).toBe(0)
+  expect(JSON.parse(await readFile(root, 'utf8')).$projects.acme.rule).toBe('Acme only.')
+  expect(await readFile(prompt, 'utf8')).toBe('Follow {{base}}.')
+
+  const edited = await readFile(root, 'utf8')
+  expect((await run(cli, home, ['edit', 'rule', '--content', 'See {{missing}}.', '--agent'])).status).toBe(1)
+  expect(await readFile(prompt, 'utf8')).toBe('Follow {{base}}.')
+  expect(await readFile(root, 'utf8')).toBe(edited)
+})
