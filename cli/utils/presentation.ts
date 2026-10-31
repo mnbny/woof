@@ -1,4 +1,4 @@
-import { isCancel, log, multiline, select, text } from '@clack/prompts'
+import { autocomplete, isCancel, log, multiline, select, text } from '@clack/prompts'
 import { readFileSync } from 'node:fs'
 
 import { isAgent } from './agent.ts'
@@ -100,6 +100,18 @@ export async function enterMultiline(message: string) {
 
 export function writePayload(payload: string) {
   process.stdout.write(payload)
+}
+
+export async function searchOption({
+  message,
+  options,
+}: {
+  message: string
+  options: { value: string; label: string; hint?: string }[]
+}) {
+  if (agentPresentation() || !isTTY()) return undefined
+  const selected = await autocomplete({ message, options })
+  return isCancel(selected) ? undefined : selected
 }
 
 // An optional prompt returns an empty string for no answer and undefined only for a cancellation.
