@@ -1,4 +1,4 @@
-import { strToU8, zipSync } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -329,6 +329,55 @@ test('restores completed resources with original modes when registry replacement
   expect((await lstat(payload)).mode & 0o777).toBe(0o664)
   expect(fs.existsSync(join(home, 'nested'))).toBe(false)
   expect((await readdir(home, { recursive: true })).filter(entry => entry.includes('woof-import-'))).toEqual([])
+})
+
+test('backs up the configuration, its files and each replaced file before an import writes', async ({
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'backup-home')
+  const original = {
+    $schemaVersion: 2,
+    payload: { $type: 'prompt', $exec: '<root>/payload.txt' },
+    $projects: { demo: '<root>/projects/demo.json' },
+  }
+  await config(home, original)
+  await put(join(home, 'payload.txt'), 'local payload')
+  await put(
+    join(home, 'projects/demo.json'),
+    JSON.stringify({ $schemaVersion: 2, demo: { $type: 'prompt', $exec: '<root>/prompts/demo.md' } }),
+  )
+  await put(join(home, 'prompts/demo.md'), 'demo')
+  await put(join(home, 'stray.txt'), 'local stray')
+  await put(join(home, 'notes.txt'), 'unrelated')
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      payload: { $type: 'prompt', $exec: '<root>/payload.txt' },
+      stray: { $type: 'prompt', $exec: '<root>/stray.txt' },
+      $projects: { other: {} },
+    }),
+    [
+      { path: 'payload.txt', data: strToU8('incoming payload') },
+      { path: 'stray.txt', data: strToU8('incoming stray') },
+    ],
+  )
+
+  const result = applyImport(ready(home, archive, directory))
+  assert(result.backup)
+  const files = unzipSync(await readFile(result.backup))
+  expect(Object.keys(files).sort()).toEqual([
+    'payload.txt',
+    'projects/demo.json',
+    'prompts/demo.md',
+    'stray.txt',
+    'woof.config.json',
+  ])
+  expect(strFromU8(files['payload.txt']!)).toBe('local payload')
+  expect(strFromU8(files['stray.txt']!)).toBe('local stray')
+  expect(JSON.parse(strFromU8(files['woof.config.json']!))).toEqual(original)
+  expect(await readFile(join(home, 'payload.txt'), 'utf8')).toBe('incoming payload')
+  expect((await lstat(result.backup)).mode & 0o777).toBe(0o600)
 })
 
 test('exports referenced checkout files without changing the source or running scripts', async ({
