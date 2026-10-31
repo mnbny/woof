@@ -9,6 +9,7 @@ import { isDeepStrictEqual } from 'node:util'
 
 import { readBundleArchive } from './bundles.ts'
 import { parseConfigurationDocument, validateConfigurationDocument } from './config.ts'
+import { inspectWriteDestination } from './import-apply.ts'
 import {
   assertImportAddress,
   flattenImportTokens,
@@ -120,7 +121,7 @@ function sourceState(home: string, path: string): ImportSourceState & { data?: U
   return {
     path,
     digest: data ? digest(data) : null,
-    physical: data ? realpathSync(resolve(home, path)) : null,
+    physical: inspectWriteDestination(home, path).target,
     ...(data ? { data } : {}),
   }
 }
@@ -544,7 +545,10 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
 
   const files = new Map<string, Uint8Array>()
   const fileItems = new Map<string, ImportConflict>()
-  const intents = new Map<string, { action: 'keep' | 'write'; data?: Uint8Array }>()
+  const intents = new Map<
+    string,
+    { action: 'keep' | 'write' | 'reserve'; data?: Uint8Array; item: ImportConflict; added?: boolean }
+  >()
   const paths = new Map<string, string>()
   const requirements = new Map<string, { reference: string; prompt: boolean; added: boolean }>()
   for (const token of described.selectedTokens) {
@@ -618,14 +622,15 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
         const identity = source.physical ?? resolve(plan.home, originalPath)
         const previous = intents.get(identity)
         if (
-          previous?.action === 'write' &&
+          previous &&
+          previous.action !== 'keep' &&
           (!source.data || !previous.data || !equalBytes(source.data, previous.data))
         ) {
           item.invalid = true
           item.notice = `Keeping ${originalPath} conflicts with an earlier choice to replace the same file.`
           continue
         }
-        intents.set(identity, { action: 'keep', ...(source.data ? { data: source.data } : {}) })
+        intents.set(identity, { action: 'keep', item, ...(source.data ? { data: source.data } : {}) })
       }
       paths.set(key, reference)
       continue
@@ -633,8 +638,16 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     if (!bytes) {
       if (forcedNew && choice && typeof choice === 'object' && choice.action === 'add') {
         const target = safePath(choice.address.replace(/^<root>\//, ''))
-        if (target === originalPath || snapshot(plan, target).data)
+        const destination = snapshot(plan, target)
+        if (target === originalPath || destination.physical === originalPhysical || destination.data)
           throw new Error(`Choose a distinct unused file destination instead of ${target}.`)
+        const identity = destination.physical!
+        if (intents.has(identity)) {
+          item.invalid = true
+          item.notice = 'This destination is already claimed by another import decision.'
+          continue
+        }
+        intents.set(identity, { action: 'reserve', item })
         paths.set(key, `<root>/${target}`)
         continue
       }
@@ -666,14 +679,22 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     const prior = intents.get(identity)
     if (
       prior &&
-      (prior.action === 'keep' || (prior.data && !equalBytes(prior.data, bytes))) &&
-      (!prior.data || !equalBytes(prior.data, bytes))
+      (prior.action === 'reserve' ||
+        prior.added ||
+        (choice && typeof choice === 'object' && choice.action === 'add') ||
+        !prior.data ||
+        !equalBytes(prior.data, bytes))
     ) {
       item.invalid = true
       item.notice = `This choice conflicts with an earlier decision for the same file; select a different destination.`
       continue
     }
-    intents.set(identity, { action: 'write', data: bytes })
+    intents.set(identity, {
+      action: 'write',
+      data: bytes,
+      item,
+      added: typeof choice === 'object' && choice.action === 'add',
+    })
     const previous = files.get(target)
     if (previous && !equalBytes(previous, bytes))
       throw new Error(`Multiple imported files require incompatible bytes at ${target}.`)
@@ -895,8 +916,12 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       if (
         action &&
         prior &&
-        (prior.action === 'keep' || action === 'keep' || (prior.data && desired && !equalBytes(prior.data, desired))) &&
-        (!prior.data || !desired || !equalBytes(prior.data, desired))
+        (prior.action === 'reserve' ||
+          prior.added ||
+          (choice && typeof choice === 'object' && choice.action === 'add') ||
+          !prior.data ||
+          !desired ||
+          !equalBytes(prior.data, desired))
       ) {
         item.invalid = true
         item.notice = `This decision conflicts with another choice for the same physical file.`
@@ -911,6 +936,15 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
         }
       }
     } else projectFile = { path, data }
+  }
+  if (projectFile) {
+    const target = snapshot(plan, projectFile.path)
+    const prior = intents.get(target.physical!)
+    const bytes = new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`)
+    if (prior && (!prior.data || !equalBytes(prior.data, bytes))) {
+      prior.item.invalid = true
+      prior.item.notice = 'This destination conflicts with the imported project configuration.'
+    }
   }
   checkReuses(projectFile)
   unresolved = pending()

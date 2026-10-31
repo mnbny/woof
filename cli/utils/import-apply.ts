@@ -93,13 +93,13 @@ function readCurrent(home: string, path: string): Uint8Array | undefined {
 function currentDigest(home: string, source: ImportSourceState) {
   const data = readCurrent(home, source.path)
   const actual = data ? digest(data) : null
-  const physical = data ? realpathSync(resolve(home, source.path)) : null
+  const physical = inspectWriteDestination(home, source.path).target
   if (actual !== source.digest || physical !== source.physical)
     throw new Error(`Import destination ${source.path} changed after review; stale decisions were not applied.`)
   return data
 }
 
-function inspectWriteDestination(home: string, path: string) {
+export function inspectWriteDestination(home: string, path: string) {
   safePath(path)
   const physicalHome = realpathSync(home)
   const logical = resolve(physicalHome, path)

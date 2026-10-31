@@ -759,3 +759,66 @@ test('saves a reused project alias when its source cycle already existed', async
   expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
   expect((await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).status).toBe(1)
 })
+
+test('reopens additions that claim a missing file destination already used by the import', async ({
+  directory,
+  expect,
+}) => {
+  for (const [name, order, withBytes, alias] of [
+    ['missing-first', ['a', 'b'], true, false],
+    ['write-first', ['b', 'a'], true, false],
+    ['both-missing', ['a', 'b'], false, false],
+    ['parent-alias', ['a', 'b'], true, true],
+  ] as const) {
+    const home = join(directory, name)
+    await config(home, { $schemaVersion: 2, a: 'local A', b: 'local B', $projects: { demo: {} } })
+    await mkdir(join(home, 'new'))
+    if (alias) await fs.promises.symlink('new', join(home, 'alias'), 'dir')
+    const tokens = Object.fromEntries(order.map(key => [key, `<root>/${key}.txt`]))
+    const archive = createBundleArchive(
+      rootConfiguration({ $schemaVersion: 2, ...tokens, $projects: { demo: {} } }),
+      withBytes ? [{ path: 'b.txt', data: Buffer.from('B payload') }] : [],
+    )
+    const plan = planImport(archive, { home, cwd: directory })
+    const choices: Record<string, 'take' | { action: 'add'; address: string }> = {}
+    let collision = false
+    let ready: Extract<ReturnType<typeof reviewImport>, { status: 'ready' }> | undefined
+    for (let count = 0; count < 20; count += 1) {
+      const result = reviewImport(plan, choices)
+      if (result.status === 'ready') {
+        ready = result
+        break
+      }
+      const item = result.next
+      if (item.kind === 'token') choices[item.id] = { action: 'add', address: `${item.path}_new` }
+      else if (item.kind === 'file') {
+        if (item.invalid) collision = true
+        choices[item.id] = {
+          action: 'add',
+          address: collision
+            ? `new/${item.path}`
+            : alias && item.path === 'b.txt'
+              ? 'alias/shared.txt'
+              : 'new/shared.txt',
+        }
+      } else choices[item.id] = 'take'
+    }
+    expect(collision).toBe(true)
+    expect(ready).toBeDefined()
+    const resultConfig = ready!.candidate.configuration as Record<string, unknown>
+    expect(resultConfig['a_new']).not.toBe(resultConfig['b_new'])
+    if (alias) {
+      await mkdir(join(home, 'other'))
+      await fs.promises.unlink(join(home, 'alias'))
+      await fs.promises.symlink('other', join(home, 'alias'), 'dir')
+      expect(() => applyImport(ready!.candidate)).toThrow(/changed/)
+      await fs.promises.unlink(join(home, 'alias'))
+      await fs.promises.symlink('new', join(home, 'alias'), 'dir')
+    }
+    await applyImport(ready!.candidate)
+    const missingPath = String(resultConfig['a_new']).replace('<root>/', '')
+    expect(fs.existsSync(join(home, missingPath))).toBe(false)
+    if (withBytes)
+      expect(await readFile(join(home, String(resultConfig['b_new']).replace('<root>/', '')), 'utf8')).toBe('B payload')
+  }
+})
