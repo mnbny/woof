@@ -2,9 +2,9 @@
 
 Read [.agents/docs/index.md](./.agents/docs/index.md).
 
-After a feature or change reaches its logical conclusion, use `toolkit-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
+After a feature or change reaches its logical conclusion, use `woof-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
 
-Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) for historical product intent and decisions. The delivered token CLI implements the finalized bundle; current resolved decisions control, while the vision remains historical context. Keep agreed decisions, proposals, and open questions distinct. Do not infer additional requirements from the project name or the MAACS reference project.
+Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) to learn how Woof started and where the owner wants Woof to go. The vision is not a specification. The project, domain, and command briefs describe current behavior. The questions brief holds open decisions. Do not infer additional requirements from the vision, the project name, or the MAACS reference project.
 
 ## Run Validations Smartly
 
@@ -36,4 +36,9 @@ Before writing a test, confirm that **all** conditions below are met. These requ
 
 ## Skills
 
-Use globally installed development skills when requested. This repository includes only the original `skills/woof-execution/SKILL.md` execution guide; it does not vendor a copied development-skill catalog.
+Use globally installed development skills when requested. This repository includes two skills:
+
+- `skills/woof-execution/SKILL.md`: the execution guide. It ships with the package.
+- `skills/woof-living-docs/SKILL.md`: the maintenance skill for this documentation system. It does not ship with the package.
+
+The repository does not vendor a broader catalog of development skills.
