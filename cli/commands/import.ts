@@ -1,5 +1,6 @@
 import type { ImportApplyReport } from '../utils/import-apply.ts'
 import type { ImportChoice, ImportConflict } from '../utils/import-plan.ts'
+import type { ProjectConfiguration, RootConfiguration } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
 import { createPatch } from 'diff'
@@ -15,7 +16,7 @@ import { shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
 import { planImport, reviewImport } from '../utils/import-plan.ts'
 import { migrationInputs } from '../utils/migration-scope.ts'
-import { migrateConfigurationDocuments } from '../utils/migrations.ts'
+import { prepareConfigurationMigration } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentConflict, presentError, presentResult } from '../utils/presentation.ts'
 import { detectCheckoutRoot } from '../utils/resources.ts'
@@ -148,12 +149,14 @@ export default defineCommand({
       const archivePath = resolve(cwd, positionals[0]!)
       const decisionsPath = values.decisions ? resolve(cwd, values.decisions) : undefined
       const agent = values.agent === true || Boolean(isAgent())
+      const migration = values.migrate === true ? ' --migrate' : ''
       if (statSync(archivePath).size > BUNDLE_LIMITS.archiveBytes)
         throw new Error(`Archive exceeds the ${BUNDLE_LIMITS.archiveBytes}-byte input limit.`)
       const archive = readFileSync(archivePath)
       const bundle = readBundleArchive(archive)
       assertImportContext(cwd)
 
+      let prepared: { root: RootConfiguration; project?: ProjectConfiguration; migrationChanged: boolean } | undefined
       if (values.migrate === true) {
         await initializeWoofHome()
         const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
@@ -167,10 +170,18 @@ export default defineCommand({
             : undefined
         if (typeof selected === 'string' && !selected.startsWith('<root>/'))
           throw new Error(`Local project ${bundle.projectName} is repository-defined and cannot be imported.`)
-        await migrateConfigurationDocuments(migrationInputs(rootData, cwd, bundle.projectName))
+        const documents = prepareConfigurationMigration(migrationInputs(rootData, cwd, bundle.projectName))
+        const rootDocument = documents.documents.find(document => document.kind === 'root')
+        if (!rootDocument) throw new Error('Import migration did not prepare a root document.')
+        const projectDocument = documents.documents.find(document => document.kind === 'project')
+        prepared = {
+          root: rootDocument.migrated as RootConfiguration,
+          ...(projectDocument ? { project: projectDocument.migrated as ProjectConfiguration } : {}),
+          migrationChanged: documents.documents.some(document => document.changed),
+        }
       }
 
-      const plan = planImport(archive, { cwd })
+      const plan = planImport(archive, { cwd, ...(prepared ? { prepared } : {}) })
       let choices: Record<string, ImportChoice> = {}
       if (decisionsPath) choices = readDecisions(decisionsPath, plan)
       for (const conflict of plan.conflicts) {
@@ -185,7 +196,7 @@ export default defineCommand({
           presentConflict({
             summary: 'Import requires an explicit decisions handoff.',
             details: JSON.stringify(decisionDocument(plan, conflict), null, 2),
-            recovery: `Save the reviewed choices and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)} --agent.`,
+            recovery: `Save the reviewed choices and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration} --agent.`,
           })
           process.exitCode = 1
           return
@@ -210,7 +221,7 @@ export default defineCommand({
         presentConflict({
           summary: `Import review is incomplete; ${reviewed.remaining} conflict(s) remain.`,
           details: `${conflictDiff(reviewed.next)}\n${JSON.stringify(decisionDocument(plan, reviewed.next), null, 2)}`,
-          recovery: `Complete every choice and rerun woof import ${shellQuote(archivePath)}${decisionsPath ? ` --decisions ${shellQuote(decisionsPath)}` : ''}${agent ? ' --agent' : ''}. No import was applied.`,
+          recovery: `Complete every choice and rerun woof import ${shellQuote(archivePath)}${decisionsPath ? ` --decisions ${shellQuote(decisionsPath)}` : ''}${migration}${agent ? ' --agent' : ''}. No import was applied.`,
         })
         process.exitCode = 1
         return

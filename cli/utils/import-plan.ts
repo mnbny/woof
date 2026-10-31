@@ -28,7 +28,11 @@ export type ImportConflict = {
 export type ImportSourceState = { path: string; digest: string | null }
 
 type ProjectFile = { path: string; data: ProjectConfiguration }
-type ImportPlanOptions = { cwd?: string; home?: string }
+type ImportPlanOptions = {
+  cwd?: string
+  home?: string
+  prepared?: { root: RootConfiguration; project?: ProjectConfiguration; migrationChanged: boolean }
+}
 
 function digest(data: Uint8Array | string) {
   return createHash('sha256').update(data).digest('hex')
@@ -185,7 +189,7 @@ function assertRepositoryImportAllowed(cwd: string) {
   }
 }
 
-function localProject(local: RootConfiguration, bundle: WoofBundle, home: string) {
+function localProject(local: RootConfiguration, bundle: WoofBundle, home: string, prepared?: ProjectConfiguration) {
   const definition = local.$projects?.[bundle.projectName]
   if (definition === undefined) return { definition, data: undefined, file: undefined, source: undefined }
   if (typeof definition === 'string') {
@@ -194,11 +198,11 @@ function localProject(local: RootConfiguration, bundle: WoofBundle, home: string
     const path = definition.slice('<root>/'.length)
     const source = sourceState(home, path)
     if (!source.data) throw new Error(`Local selected project configuration is missing: ${path}`)
-    const data = parseConfigurationDocument(new TextDecoder().decode(source.data), 'project', path)
+    const original = parseConfigurationDocument(new TextDecoder().decode(source.data), 'project', path)
     return {
       definition,
-      data,
-      file: { path, data },
+      data: prepared ?? original,
+      file: { path, data: original },
       source,
     }
   }
@@ -399,12 +403,10 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
   const rootSource = sourceState(home, 'woof.config.json')
   if (!rootSource.data)
     throw new Error('The local root configuration is missing; initialize Woof before import planning.')
-  const local = parseConfigurationDocument(
-    new TextDecoder().decode(rootSource.data),
-    'root',
-    getWoofHome('woof.config.json'),
-  )
-  const selected = localProject(local, bundle, home)
+  const local =
+    options.prepared?.root ??
+    parseConfigurationDocument(new TextDecoder().decode(rootSource.data), 'root', getWoofHome('woof.config.json'))
+  const selected = localProject(local, bundle, home, options.prepared?.project)
   const conflicts: ImportConflict[] = []
   mergeDefinition(local, bundle.configuration, 'token', {}, conflicts)
   definitionChoice(local, bundle, {}, conflicts)
@@ -439,6 +441,7 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
     home,
     initialFiles,
     local,
+    migrationChanged: options.prepared?.migrationChanged ?? false,
     rootSource: { path: rootSource.path, digest: rootSource.digest },
     selected,
     sources,
@@ -560,6 +563,7 @@ export function reviewImport(plan: ReturnType<typeof planImport>, choices: Reado
       initialFiles: plan.initialFiles,
       initialProject: plan.selected.file,
       local: plan.local,
+      migrationChanged: plan.migrationChanged,
       projectFile,
       projectName: plan.bundle.projectName,
       sources,
