@@ -121,7 +121,7 @@ export function createResourceLoader(options: { cwd?: string; repoRoot?: string 
 
   function loadConfiguration(reference: string, kind: ConfigurationKind, rootKind?: ResourceRootKind) {
     const location = rootKind ? directLocation(reference, rootKind, repoRoot) : markedLocation(reference, repoRoot)
-    if (active.includes(location.file) || (kind === 'project' && cache.has(`root:${location.file}`)))
+    if (active.includes(location.file) || (kind !== 'root' && cache.has(`root:${location.file}`)))
       throw new ResourceLoadError(
         reference,
         `configuration-reference cycle: ${[...active, location.file].join(' -> ')}`,
@@ -160,7 +160,7 @@ export function createResourceLoader(options: { cwd?: string; repoRoot?: string 
     },
     loadRepositoryConfiguration(file: string) {
       if (!repoRoot) throw new ResourceLoadError(file, 'no active checkout or worktree supplies <repo>.')
-      return loadConfiguration(file, 'project', 'repo') as {
+      return loadConfiguration(file, 'repository', 'repo') as {
         data: ProjectConfiguration
         source: ConfigurationSource
       }

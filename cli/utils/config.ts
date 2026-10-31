@@ -5,7 +5,8 @@ import * as v from 'valibot'
 
 import { CURRENT_SCHEMA_VERSION, projectConfigurationSchema, rootConfigurationSchema } from './schema.ts'
 
-export type ConfigurationKind = 'root' | 'project'
+// A repository configuration is a project document without metadata, because its checkout already selects it.
+export type ConfigurationKind = 'root' | 'project' | 'repository'
 
 export class ConfigurationVersionError extends Error {
   readonly actual: unknown
@@ -142,6 +143,11 @@ function assertDocumentKeys(value: Record<string, unknown>, kind: ConfigurationK
       if (isDictionary(entry)) assertMetadata(entry, key, source)
       continue
     }
+    if (kind === 'repository' && key === '$metadata')
+      throw new ConfigurationShapeError(
+        source,
+        '$metadata is not valid in repository configuration. The checkout selects it, so it takes no paths.',
+      )
     if (key.startsWith('$')) throw new ConfigurationShapeError(source, `${key} is not valid in ${kind} configuration.`)
     assertTokenName(key, key, source)
     assertTokenValue(entry, key, source)
@@ -149,7 +155,11 @@ function assertDocumentKeys(value: Record<string, unknown>, kind: ConfigurationK
 }
 
 export function validateConfigurationDocument(value: unknown, kind: 'root', source?: string): RootConfiguration
-export function validateConfigurationDocument(value: unknown, kind: 'project', source?: string): ProjectConfiguration
+export function validateConfigurationDocument(
+  value: unknown,
+  kind: 'project' | 'repository',
+  source?: string,
+): ProjectConfiguration
 export function validateConfigurationDocument(
   value: unknown,
   kind: ConfigurationKind,
@@ -177,7 +187,11 @@ export function validateConfigurationDocument(value: unknown, kind: Configuratio
 }
 
 export function parseConfigurationDocument(text: string, kind: 'root', source?: string): RootConfiguration
-export function parseConfigurationDocument(text: string, kind: 'project', source?: string): ProjectConfiguration
+export function parseConfigurationDocument(
+  text: string,
+  kind: 'project' | 'repository',
+  source?: string,
+): ProjectConfiguration
 export function parseConfigurationDocument(text: string, kind: ConfigurationKind, source = '<configuration>') {
   let value: unknown
   try {
@@ -191,7 +205,7 @@ export function parseConfigurationDocument(text: string, kind: ConfigurationKind
 }
 
 export function readConfigurationDocument(file: string, kind: 'root'): RootConfiguration
-export function readConfigurationDocument(file: string, kind: 'project'): ProjectConfiguration
+export function readConfigurationDocument(file: string, kind: 'project' | 'repository'): ProjectConfiguration
 export function readConfigurationDocument(file: string, kind: ConfigurationKind) {
   let text: string
   try {
