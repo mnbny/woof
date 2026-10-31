@@ -355,6 +355,39 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
   }
 }
 
+function assertProjectDestination(plan: ReturnType<typeof planImport>, projectFile: ProjectFile | undefined) {
+  if (!projectFile) return
+  const { path, data } = projectFile
+  const existing = plan.initialFiles.get(path)
+  const selected = plan.selected.file
+  if (selected?.path === path && isDeepStrictEqual(selected.data, data)) return
+  const finalBytes = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`)
+  if (existing && equalBytes(existing, finalBytes)) return
+  if (selected?.path !== path && existing)
+    throw new Error(
+      `Project configuration destination ${path} is occupied by unrelated local content. Choose a nonconflicting source project-config location and re-export, or keep the existing destination unchanged.`,
+    )
+
+  const targetPhysical = existing ? realpathSync(resolve(plan.home, path)) : undefined
+  for (const [name, definition] of Object.entries(plan.local.$projects ?? {})) {
+    if (name === plan.bundle.projectName || typeof definition !== 'string' || !definition.startsWith('<root>/'))
+      continue
+    const otherPath = definition.slice('<root>/'.length)
+    let otherPhysical: string | undefined
+    try {
+      safePath(otherPath)
+      if (readDestination(plan.home, otherPath)) otherPhysical = realpathSync(resolve(plan.home, otherPath))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    if (otherPath === path || (targetPhysical && otherPhysical === targetPhysical))
+      throw new Error(
+        `Project configuration destination ${path} is also used by registered project ${name}${otherPath === path ? '' : ` through ${otherPath}`}. Choose a nonconflicting source project-config location and re-export before changing it.`,
+      )
+  }
+}
+
 export function reviewImport(plan: ReturnType<typeof planImport>, choices: Readonly<Record<string, ImportChoice>>) {
   const conflictIds = new Set(plan.conflicts.map(item => item.id))
   for (const [id, choice] of Object.entries(choices)) {
@@ -408,6 +441,7 @@ export function reviewImport(plan: ReturnType<typeof planImport>, choices: Reado
     const existing = plan.initialFiles.get(path)
     files.set(path, item && choices[item.id] === 'keep' ? existing! : incoming)
   }
+  assertProjectDestination(plan, projectFile)
   const deferredRequirements = validateCandidate(
     configuration,
     plan.bundle.projectName,
