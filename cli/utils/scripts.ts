@@ -1,9 +1,11 @@
 import type { ResourceLocation } from './resources.ts'
 import type { ScriptResource } from './schema.ts'
 import type { TokenEvaluator } from './tokens.ts'
+import type { ChildProcess } from 'node:child_process'
 
 import { spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
+import { setTimeout } from 'node:timers/promises'
 
 import { detectCheckoutRoot } from './resources.ts'
 
@@ -38,6 +40,45 @@ function commandFor(kind: ScriptResource['$type'], source: string, location: Res
   }
 }
 
+async function groupExited(pid: number) {
+  try {
+    process.kill(-pid, 0)
+    return false
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true
+    throw error
+  }
+}
+
+async function waitForGroupExit(pid: number) {
+  const deadline = Date.now() + 200
+  while (Date.now() < deadline) {
+    if (await groupExited(pid)) return true
+    await setTimeout(10)
+  }
+  return groupExited(pid)
+}
+
+async function terminateOwnedProcessGroup(child: ChildProcess) {
+  const pid = child.pid
+  if (!pid) return
+  if (process.platform === 'win32') {
+    child.kill('SIGTERM')
+    return
+  }
+  const signal = (name: NodeJS.Signals) => {
+    try {
+      process.kill(-pid, name)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
+  }
+  signal('SIGTERM')
+  if (await waitForGroupExit(pid)) return
+  signal('SIGKILL')
+  if (!(await waitForGroupExit(pid))) throw new Error(`Process group ${pid} did not exit after bounded cleanup.`)
+}
+
 function execute(
   kind: ScriptResource['$type'],
   source: string,
@@ -58,6 +99,7 @@ function execute(
 
     const child = spawn(command, args, {
       cwd: options.cwd,
+      detached: process.platform !== 'win32',
       env: {
         ...options.env,
         CI: '1',
@@ -72,6 +114,7 @@ function execute(
     const stdout: Buffer[] = []
     let size = 0
     let settled = false
+    let cleaning = false
 
     function finish(error?: ScriptExecutionError, output?: string) {
       if (settled) return
@@ -81,9 +124,24 @@ function execute(
       else resolve(output!)
     }
 
+    function cleanup(error: ScriptExecutionError) {
+      if (cleaning) return
+      cleaning = true
+      void terminateOwnedProcessGroup(child)
+        .then(() => finish(error))
+        .catch((cause: unknown) => {
+          finish(
+            new ScriptExecutionError(`${error.message} Process cleanup was incomplete.`, {
+              cancelled: error.cancelled,
+              status: error.status,
+              cause,
+            }),
+          )
+        })
+    }
+
     function cancel() {
-      child.kill('SIGTERM')
-      finish(
+      cleanup(
         new ScriptExecutionError(`Cancelled ${display}. Prior script effects are not rolled back.`, {
           cancelled: true,
         }),
@@ -93,8 +151,7 @@ function execute(
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > OUTPUT_LIMIT) {
-        child.kill('SIGTERM')
-        finish(new ScriptExecutionError(`${display} exceeded the ${OUTPUT_LIMIT}-byte output limit.`))
+        cleanup(new ScriptExecutionError(`${display} exceeded the ${OUTPUT_LIMIT}-byte output limit.`))
         return
       }
       stdout.push(chunk)
@@ -104,6 +161,7 @@ function execute(
       finish(new ScriptExecutionError(`Could not start ${display}: ${error.message}`, { cause: error }))
     })
     child.on('close', (code, signal) => {
+      if (cleaning) return
       if (options.signal?.aborted) {
         cancel()
         return
@@ -120,6 +178,7 @@ function execute(
       finish(undefined, Buffer.concat(stdout).toString('utf8'))
     })
     options.signal?.addEventListener('abort', cancel, { once: true })
+    if (options.signal?.aborted) cancel()
   })
 }
 
