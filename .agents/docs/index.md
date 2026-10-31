@@ -66,6 +66,11 @@ Add each document using this format:
 - Description: Creation of repository configurations and registered projects, with handoffs for missing choices.
 - Tags: `init`, `scaffolding`
 
+#### [cli-command-add.md](./cli-command-add.md)
+
+- Description: Creation of one token, content handling, checks before the write, and the drafting handoff for agents.
+- Tags: `add`, `authoring`
+
 #### [cli-command-get.md](./cli-command-get.md)
 
 - Description: Exact lookup, discovery fallback, candidate output, and lookup exit status.
