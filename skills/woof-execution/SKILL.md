@@ -1,8 +1,8 @@
 ---
 name: woof-execution
-description: Retrieve Woof prompts and computed resources, discover candidates, select projects, add tokens, and complete explicit migration and import reviews. Use for exact token requests, discovery-only searches, project retries, computed output, new tokens such as a convention from the conversation, and archive decisions.
+description: Retrieve Woof prompts and computed resources, discover candidates, select projects, add and edit tokens, and complete explicit migration and import reviews. Use for exact token requests, discovery-only searches, project retries, computed output, new tokens such as a convention from the conversation, changes to existing tokens, and archive decisions.
 metadata:
-  version: 2
+  version: 3
 ---
 
 # Woof execution
@@ -49,7 +49,17 @@ When the user asks Woof to keep something, such as a convention that came out of
 woof add --agent
 ```
 
-Follow the drafting steps in the output: work out the token from the conversation, search for a similar token, and propose a path, type, target, description, and tags. Show the draft to the user and save only after the user approves. Run the exact command from the output, with the content on standard input. If the command reports problems, correct all of them and run it again. Woof does not edit or remove tokens; for those changes, edit the source configuration.
+Follow the drafting steps in the output: work out the token from the conversation, search for a similar token, and propose a path, type, target, description, and tags. Show the draft to the user and save only after the user approves. Run the exact command from the output, with the content on standard input. If the command reports problems, correct all of them and run it again. To change an existing token, use `woof edit`.
+
+## Edit a token
+
+When the user asks to change a token, start with its exact path:
+
+```sh
+woof edit 'conventions.commit' --agent
+```
+
+The output shows the current token and the exact command. Work out the change from the conversation, show the user the current and the new version, and apply it only after the user approves. Pass only the fields that change, with new content on standard input. For a shared token seen from a project, choose `--shared` to change it for every project or `--override` to change it only in that project; ask the user when the choice is unclear. Edit content in a script file directly. Woof does not rename, move, or remove tokens.
 
 ## Validate and migrate deliberately
 
