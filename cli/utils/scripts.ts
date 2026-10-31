@@ -12,7 +12,7 @@ import { detectCheckoutRoot } from './resources.ts'
 export const TSX_VERSION = '4.23.15'
 export const BUN_VERSION = '1.4.4'
 
-const OUTPUT_LIMIT = 10 * 1024 * 1024
+const OUTPUT_LIMIT = 256 * 1024 * 1024
 
 export class ScriptExecutionError extends Error {
   readonly cancelled: boolean
