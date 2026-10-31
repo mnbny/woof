@@ -5,6 +5,15 @@ import { splitProjectAddress } from './tokens.ts'
 type Option = { type: 'boolean' | 'string'; short?: string; multiple?: boolean }
 
 const commandOptions: Record<string, Record<string, Option>> = {
+  add: {
+    type: { type: 'string' },
+    content: { type: 'string' },
+    description: { type: 'string' },
+    tag: { type: 'string', multiple: true },
+    shared: { type: 'boolean' },
+    repo: { type: 'boolean' },
+    project: { type: 'string' },
+  },
   get: { project: { type: 'string' }, search: { type: 'boolean' } },
   explain: { project: { type: 'string' } },
   validate: { project: { type: 'string' } },
@@ -56,6 +65,7 @@ export function parseInvocation(rawArgs: string[]) {
     if ((command === 'projects' || command === 'export' || command === 'readme') && count !== 0)
       throw new Error(`${command} accepts no positional arguments.`)
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
+    if (command === 'add' && count > 1) throw new Error('add accepts at most one token path.')
     if (command === 'init' && count > ((parsed.values as Record<string, unknown>)['repo'] ? 1 : 0))
       throw new Error('init accepts one location, and only with --repo.')
     if (
