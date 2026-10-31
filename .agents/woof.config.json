@@ -1,0 +1,6 @@
+{
+  "$schemaVersion": 2,
+  "git": {
+    "commit": "{{git.commits.seven_rules}}"
+  }
+}
