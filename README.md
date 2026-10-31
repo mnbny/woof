@@ -11,7 +11,7 @@ Woof is a local CLI for reusable instructions, prompts, and computed resources. 
 | `woof explain TOKEN` | Show selected project, token provenance, references, and declared files without execution. |
 | `woof validate [TOKEN]` | Validate root, the selected merged catalog, or one reachable graph without execution. |
 | `woof export --project NAME` | Export a named registered project and required shared resources to a unique ZIP under home `exports`. |
-| `woof import ARCHIVE` | Review each conflict, then validate and apply the complete import. |
+| `woof import ARCHIVE` | Review incoming items, apply the import, then report validation findings. |
 
 Applicable context commands accept `--project NAME` and `--agent`. Import also accepts `--decisions FILE`. Every command provides `--help`. Use `--migrate` before or after any command, or run `woof --migrate` on its own, to apply pending supported configuration migrations before continuing.
 
@@ -71,13 +71,13 @@ Configuration documents require `$schemaVersion: 2`. A referenced project docume
 }
 ```
 
-A repository configuration is a versioned project object, not a root registry. Put its token definitions and optional `$metadata` directly beside `$schemaVersion`, without a `$projects` wrapper. Woof recognizes `woof.config.json`, `.agents/woof.config.json`, and `.claude/woof.config.json` at the checkout root.
+Home registry projects are inline objects or `<root>/` references to versioned project configuration files. A repository configuration is a versioned project object, not a root registry. Put its token definitions and optional `$metadata` directly beside `$schemaVersion`, without a `$projects` wrapper. Woof recognizes `woof.config.json`, `.agents/woof.config.json`, and `.claude/woof.config.json` at the checkout root.
 
 Ordinary token segments are case-sensitive ASCII letters, digits, underscores, and hyphens. Dots delimit namespaces. Values are strings, namespaces, or typed resource objects, not arbitrary scalars or generic arrays. Resource types are `prompt`, `bash`, `node`, `tsx`, and `bun`. Prompt `$exec` is one string; executable `$exec` is a string or a nonempty string array. Object resources can have optional `$description` and `$tags`; bare strings have no separate metadata fields. A project override replaces all metadata on the token. Unknown reserved keys fail. Prototype-sensitive names `__proto__`, `prototype`, and `constructor` are rejected explicitly instead of being silently dropped.
 
 A string token or prompt `$exec` can reference a file. Every referenced prompt payload is raw UTF-8 text, even with a `.json` suffix. `$projects` references are different: they load versioned JSON project configuration. Missing marked files fail; they are never treated as inline code.
 
-`<root>` always means the Woof home. `<repo>` means the detected checkout or worktree root, with no filesystem fallback. Shared root definitions cannot use `<repo>` resources. Project definitions can use both markers. Reads require regular files and containment; known configuration symlinks can point elsewhere without changing the declared root. Import writes remain strict and reject destination symlinks and escapes.
+`<root>` always means the Woof home. `<repo>` means the detected checkout or worktree root, with no filesystem fallback. Shared root definitions cannot use `<repo>` resources. Project definitions can use both markers. Reads require regular files and containment; known configuration symlinks can point elsewhere without changing the declared root. Import writes preserve existing in-home symlinks and reject destinations that escape the allowed root.
 
 ## Resolution and project selection
 
@@ -87,7 +87,7 @@ Global definitions must validate independently and cannot reference project-only
 
 Selection priority is explicit project, approved repository configuration, registered metadata match, calling-agent inference or clarification, then root alone. Repository candidates are `woof.config.json`, `.agents/woof.config.json`, and `.claude/woof.config.json`. Distinct files error; physical aliases count once. Config location never changes the checkout root. Repository discovery is skipped inside Woof home.
 
-Metadata matches the normalized caller directory and its ancestors, with descendant and worktree-glob matching. Nested matches return ambiguity instead of guessing. No selected project means root-only resolution, not an invented default. Choices are not persisted. During implicit discovery without a checkout, unavailable `<repo>` config pointers are excluded only from inference; explicit selection still fails loudly.
+Metadata matches the normalized caller directory and its ancestors, with descendant and worktree-glob matching. Nested matches return ambiguity instead of guessing. No selected project means root-only resolution, not an invented default. Choices are not persisted.
 
 `explain` reports selection and dependency provenance. `validate` preflights root alone or the selected merged view, or narrows to one reachable graph. Neither executes scripts.
 
@@ -110,46 +110,45 @@ Captured stdout is limited to 256 MiB per child process. Exceeding the limit is 
 
 Export requires explicit `--project NAME`; repository-defined projects cannot transfer. The ZIP has no manifest or separate bundle-version document. Its root `woof.config.json` contains shared definitions and exactly one selected `$projects` entry. Other project entries are pruned only in the payload, never in the source registry.
 
-Export retains inherited shared definitions, project overrides, metadata, and declared root-relative resource paths. It validates the independent root graph and selected merged graph without executing scripts. Shadowed shared files remain included. Referenced project JSON and raw payload bytes, including raw `.json` prompt files, are preserved. Application checkout contents and arbitrary script dependencies are not copied or inferred.
+Export retains inherited shared definitions, project overrides, metadata, and declared root-relative resource paths. It validates the independent root graph and selected merged graph without executing scripts. Shadowed shared files remain included. Referenced project JSON and raw payload bytes, including raw `.json` prompt files, are preserved.
 
-Project-owned `<repo>` prompt and script paths remain external requirements. Transfer validates marker syntax and all available inline/home content but does not open those files or invent them. Their bodies and internal references require normal `get` or `validate` in the target checkout. Repository-based project configuration pointers are also reported as deferred rather than inspected during transfer.
+Project-owned `<repo>` prompt and script files are copied into `<project>-repo-export/` in the archive. The exported project configuration points to those copies through `<root>`. For example, `<repo>/scripts/build.sh` in project `microsoft` becomes `<root>/microsoft-repo-export/scripts/build.sh`. Export requires the referenced checkout files to exist. It does not copy the checkout or discover script dependencies, and it does not change source files.
 
-Archives are bounded to 100 MiB input, 100 MiB expanded bytes, and 10,000 entries. Entry names must be portable root-relative paths. Traversal, absolute paths, backslashes, drive/alternate-stream forms, trailing dots/spaces, special devices, and special file types reject. Unicode-NFC and case-folded duplicates reject. Extra unreferenced files reject. Central/local names, sizes, CRC-32, and decompressed bytes must agree.
+Archives use root-relative destinations and reject path escapes, conflicting destinations, and ZIP integrity errors. Unreferenced entries do not become import writes. Central and local names, sizes, CRC-32, and decompressed bytes must agree. ZIP64 is not supported.
 
 Exports use exclusive unique names under home `exports` and report the full path; existing archives are never overwritten.
 
 ## Import review
 
-Import preserves unrelated local tokens and projects. Shared and selected-project leaves conflict per dotted token path; project storage and metadata are explicit choices. Referenced prompt and script payloads conflict as whole files. Identical data needs no choice.
+Import reviews every incoming item that differs from the existing definition, including additions. An identical definition at the same address is a no-op. Review presents one item at a time and offers the actions that apply:
 
-A changed external project configuration cannot silently replace an unrelated file or a config shared with another registered project, including physical aliases. Nonidentical raw payload destinations owned by registered project configuration reject for the same reason. Choose a nonconflicting source project-config location and re-export instead of relocating or overwriting implicitly. Unchanged selected data and byte-identical final JSON are true no-write exceptions.
+1. **Keep existing:** retain the local item. When no local item exists, decline the addition.
+2. **Take incoming:** add or replace the item. Replacing shared content affects its existing users.
+3. **Add as new:** provide an unused token address or file path. File-backed additions and rewritten prompt files need distinct storage.
+4. **Reuse existing:** select a compatible existing item with identical authored content. Its existing metadata stays in place.
 
-When shared definitions or existing resource bytes change, final validation also checks other available home/inline registered project views and names any project that breaks. Pure selected-project additions need no new traversal of unrelated catalogs. Repo-based views remain external and deferred. All sources used for parsing, comparison, and validation keep stable observed bytes and digests; later edits reject rather than bless stale data.
+Reuse compares type and authored content without executing scripts. Script matching also preserves runtime, inline or file execution, and array order. Imported references follow accepted renames; existing local references stay unchanged unless their own definitions are replaced. Project overrides remain bound to the corresponding shared token. Escaped prompt examples and script bodies are not rewritten. A file that is also a project configuration is identified during review before any explicit replacement.
 
-Human review shows one conflict and diff at a time. Only actual Clack cancellation exits 130. A non-TTY human or an agent receives an exit-1 decisions handoff instead. Partial choices never partially apply.
+Human review uses Clack. Only actual cancellation exits 130. A non-TTY human or an agent receives an exit-1 decisions handoff. No import files change until review is complete. Decisions bind the archive and observed source state. When a later mapping changes an earlier decision's context, Woof identifies that decision and asks for review again.
 
-A decisions document contains the archive digest, complete conflict metadata, accepted choices, and the next unresolved conflict:
+A handoff supplies `archive`, `sources`, `conflicts`, `choices`, and the next unresolved item. Add a value under that item's ID in `choices`:
 
 ```json
 {
-  "archive": "<archive-sha256>",
-  "choices": { "<accepted-conflict-id>": "take" },
-  "next": {
-    "id": "<next-conflict-id>",
-    "kind": "file",
-    "path": "payload.txt",
-    "existingDigest": "<existing-sha256>",
-    "incomingDigest": "<incoming-sha256>"
-  },
-  "conflicts": ["<complete reviewed conflict metadata>"]
+  "<next-id>": "keep",
+  "<another-id>": "take",
+  "<renamed-id>": { "action": "add", "address": "conventions.alternate" },
+  "<reused-id>": { "action": "reuse", "address": "conventions.existing" }
 }
 ```
 
-Choices use exact JSON values `keep` and `take`. Accepted earlier choices remain unchanged. The next conflict is identified by `next`, but its ID is deliberately absent from `choices`; an agent default is not consent. Add an explicit choice for it. Saving an unchanged handoff cannot apply, including on the last conflict. A completed startup migration is reported on stderr before import review begins.
+For file or project storage, `address` is a path under Woof home. Reuse candidates appear in the handoff. An unchanged handoff does not grant a choice, including on the last item. Keep the emitted metadata and prior choices when saving decisions.
 
-Complete choices trigger final validation, then staged application. Resources and project configuration replace before the root registry. Original bytes and permission modes support ordinary-failure rollback; later edits are not overwritten during rollback. Recovery artifacts are retained when restoration cannot finish. Multi-file crash atomicity is not promised.
+After every choice is resolved, Woof rechecks source state and applies staged changes. Resources and project configuration replace before the root registry. Original bytes and modes support rollback on write failure; later edits are not overwritten during rollback. Recovery artifacts remain when restoration cannot finish. Multi-file crash atomicity is not promised.
 
-Woof checks the home configuration, resolvable registered project configurations, and the current checkout configuration on every invocation. Registered `<repo>` configuration paths are deferred outside a checkout. The check does not read prompt or script payloads. Pending supported migrations require `--migrate`; current configurations ignore it. Migration completes before the requested command, so an incomplete or canceled import leaves import data unchanged from the post-migration state. Unsupported or unversioned input is never guessed or stamped with a new version. The known legacy root scaffold `{"schemaVersion":1}` is the supported legacy form.
+Woof validates after a successful save without running scripts. Import returns success even if validation finds missing files, broken references, cycles, or other project problems. Findings identify the affected paths and next steps; repair them without repeating the import. If a reviewed replacement makes a registered configuration unreadable, repair the named configuration file before running Woof again.
+
+Woof checks the home configuration, registered home project configurations, and the current checkout configuration on every invocation. The startup check does not read prompt or script payloads. Pending supported migrations require `--migrate`; current configurations ignore it. Migration completes before the requested command, so an incomplete or canceled import leaves import data unchanged from the post-migration state. Unsupported or unversioned input is never guessed or stamped with a new version. The known legacy root scaffold `{"schemaVersion":1}` is the supported legacy form.
 
 ## People and agents
 

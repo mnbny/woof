@@ -2,22 +2,22 @@
 
 ## Portable archives
 
-Export requires an explicitly registered home project; repository-defined projects cannot transfer. A standard ZIP has no manifest. Root `woof.config.json` identifies one selected project and the inherited shared definitions it needs. Other project entries are pruned only in the payload.
+Export requires an explicitly registered home project. Repository-defined projects use their repository for sharing. A standard ZIP contains one selected project and the shared definitions it needs. It has no manifest.
 
-Archives preserve project overrides, metadata, referenced JSON, and raw payload bytes at root-relative paths. Independent root and selected graphs validate without script execution. Application checkouts are not copied. Project `<repo>` requirements remain external and require normal target-checkout validation.
+Export copies declared checkout payload files into a project-specific directory and updates the exported references. It preserves source files, project overrides, metadata, aliases, and raw payload bytes. It does not execute scripts or copy an entire checkout.
 
-Archive input and expanded data are capped at 100 MiB each and 10,000 entries. Paths reject traversal, special devices, nonportable forms, and Unicode/case collisions. Extra files and central/local name, size, or CRC mismatches reject.
+Archive handling checks format integrity and destination containment. Unreferenced entries do not become import writes.
 
 ## Review and ownership
 
-Import merges root and selected-project leaves per dotted token path, with explicit metadata and storage choices. Raw prompt/script files conflict as whole files; identical bytes need no decision. Unrelated local tokens and projects remain.
+Import reviews incoming definitions and files one item at a time. Identical definitions at the same address need no decision. Other items, including additions, require an explicit choice to keep, take, add, or reuse where applicable.
 
-Occupied or shared project-config destinations and registered config paths used by raw payloads reject nonidentical changes, including physical aliases. Unchanged selected data and byte-identical final JSON are no-write exceptions. Relocation, deletion, and cross-project merging are not automatic.
-
-When shared definitions or existing resource bytes change, candidate validation also covers other available home/inline projects with source snapshots and named failures. Repo-based views remain deferred. Pure selected-project additions need no extra traversal.
+Taking shared content can affect existing users. Adding a token can require a distinct file destination. Reuse retains the selected existing definition and its metadata. Reference remapping applies only to imported content and preserves project overrides. Script bodies are not rewritten or executed.
 
 ## Decisions and recovery
 
-Review presents one conflict and diff at a time. Agents and non-TTY humans receive an exit-1 decisions handoff; actual Clack cancellation exits 130. Decisions JSON binds the archive digest and complete conflict metadata. Accepted `keep`/`take` choices persist while `next` identifies the unresolved conflict without preselecting it. Unchanged handoffs cannot apply, including on the last conflict.
+Human and agent review use the same choices. Decisions bind the archive and observed source state. A later mapping can require an earlier choice to be reviewed again. Incomplete review makes no import writes.
 
-Complete choices trigger final validation, source rechecks, staged application, and root-registry-last replacement. Explicit startup migration completes before import review. Import rollback restores the post-migration state. Original bytes and modes support ordinary-failure rollback and retained recovery artifacts; multi-file crash atomicity is not promised.
+Complete review triggers source rechecks and staged application. Explicit startup migration completes before import review. Import rollback restores the post-migration state after write failures. Original bytes and modes support rollback and retained recovery artifacts. Multi-file crash atomicity is not promised.
+
+Validation runs after a successful save. Missing resources, broken references, cycles, and other catalog findings are reported separately from import success. Validation does not execute scripts or roll back the import.

@@ -4,7 +4,7 @@
 
 Standard JSON stores root and project documents. Every document declares `$schemaVersion: 2`; inline projects inherit the containing version. Woof-owned fields use `$` prefixes. Token segments use case-sensitive ASCII letters, digits, underscores, and hyphens. Prototype-sensitive names are rejected explicitly.
 
-Values are strings, namespaces, or typed prompt/script resources. Optional descriptions and tags belong to the complete winning definition. Prompt payloads are raw text regardless of extension. `$projects` references instead load versioned JSON configuration.
+Values are strings, namespaces, or typed prompt/script resources. Optional descriptions and tags belong to the complete winning definition. Prompt payloads are raw text regardless of extension. Home `$projects` references load versioned JSON configuration from Woof home. Repository configurations are discovered separately.
 
 ## Resolution and scope
 

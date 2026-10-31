@@ -16,7 +16,7 @@ The home registry selects projects by name. A discovered repository configuratio
 
 Folder layout is unrestricted. Project resources can be kept together, split across directories, or stored inline. `<root>` always means Woof home, and `<repo>` always means the detected checkout, independently of the configuration file's directory. Resource reads and import writes enforce containment.
 
-Bundles share explicitly selected registered projects and required shared dependencies while excluding other project entries. Repository-defined projects use Git and cannot use project import or export. Import conflicts require explicit keep/take choices and final validation before replacement. Missing required tokens and circular references fail before computed side effects.
+Bundles share explicitly selected registered projects and required shared dependencies while excluding other project entries. Repository-defined projects use Git and cannot use project import or export. Import review requires explicit choices before application. Catalog validation follows a successful save. Missing required tokens and circular references fail before computed side effects.
 
 Convention over configuration guides the design. The first product delivery is the CLI plus one project-owned execution skill, not a provider installer or development-skill collection. Broader authoring interfaces remain deferred.
 
@@ -36,4 +36,4 @@ A **checkout** is a detected Git repository or linked worktree that can supply `
 
 The intended **project** identity groups related checkouts and worktrees under one resolution context. A **token** is a named resource that can supply stored content, references, or a computed value. The **root** is the shared base; one selected project overlays whole tokens before references resolve.
 
-**Migration** is an explicit startup transition that preserves original bytes for rollback. **Export** packages a registered project; **import** reviews and applies a complete candidate only after every conflict is resolved and final validation succeeds.
+**Migration** is an explicit startup transition that preserves original bytes for rollback. **Export** packages a registered project. **Import** applies a candidate after every item is reviewed, then reports validation findings separately.

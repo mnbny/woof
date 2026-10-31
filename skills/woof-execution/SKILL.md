@@ -49,14 +49,16 @@ Migration is explicit. Add `--migrate` only when the user authorized it or an ex
 
 ## Complete import review
 
-Export only an explicitly registered project. Import reviews present one conflict at a time. Keep existing or take incoming for every conflict before application; cancellation, incomplete review, stale choices, and invalid candidates do not authorize live changes.
+Export only an explicitly registered project. Export copies declared checkout payload files into the archive; it does not execute scripts or copy the checkout.
 
-Agent handoffs contain the archive digest, complete conflict metadata, accepted choices, and the next unresolved conflict. Preserve earlier keep/take choices, and add an explicit choice for the next conflict yourself. An unset next choice is not consent. Saving an unchanged handoff must not apply an import, including on the last conflict.
+Import presents one incoming item at a time, including additions. Choose keep, take, add as new, or reuse existing when the action applies. Add requires an unused address or path. Reuse requires an explicit compatible candidate and keeps its metadata. Explain when taking shared content affects other users. Do not infer consent from an unset choice.
+
+Agent handoffs bind the archive, source snapshots, accepted choices, and the next unresolved item. Preserve the supplied metadata and earlier choices. If a later mapping invalidates an earlier decision, review the reported item again. No import files change while review is incomplete.
 
 ```sh
 woof import '/path/to/project.woof.zip' --decisions '/path/to/decisions.json' --agent
 ```
 
-Continue using the emitted archive and decisions path. A completed startup migration remains in place if import review is canceled. Read application and recovery reports before retrying. Later edits, unsafe destinations, or incomplete recovery require renewed review, not a blanket overwrite. Agent mode grants no additional permission to modify files.
+Continue using the emitted archive and decisions path. A completed startup migration remains in place if import review is canceled. After import is saved, read any separate validation findings and repair the reported problems; do not repeat a successful import. Later edits, unsafe destinations, or incomplete recovery require renewed review. Agent mode grants no additional permission to modify files.
 
 Apply returned instructions in the current conversation, with the user's original request as the scope. Do not repeat computed work just to submit an answer.
