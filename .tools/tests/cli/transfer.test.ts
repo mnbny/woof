@@ -1,4 +1,6 @@
+import { strToU8, zipSync } from 'fflate'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import { chmod, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { syncBuiltinESMExports } from 'node:module'
@@ -288,4 +290,42 @@ test('restores completed resources with original modes when registry replacement
   expect((await lstat(payload)).mode & 0o777).toBe(0o664)
   expect(fs.existsSync(join(home, 'nested'))).toBe(false)
   expect((await readdir(home, { recursive: true })).filter(entry => entry.includes('woof-import-'))).toEqual([])
+})
+
+test('exports referenced checkout files without changing the source or running scripts', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'repo-export-home')
+  const checkout = join(directory, 'repo-export-checkout')
+  const marker = join(directory, 'repo-export-ran')
+  await mkdir(checkout, { recursive: true })
+  execFileSync('git', ['init', '-q', checkout])
+  const sourceProject = { $schemaVersion: 2, script: { $type: 'node', $exec: '<repo>/scripts/run.js' } }
+  await config(home, { $schemaVersion: 2, $projects: { demo: '<root>/project.json' } })
+  await put(join(home, 'project.json'), JSON.stringify(sourceProject))
+  await put(join(checkout, 'scripts/run.js'), `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`)
+  const result = await cli.run(process.execPath, [cli.entry, 'export', '--project', 'demo', '--agent'], checkout, {
+    WOOF_HOME: home,
+  })
+  expect(result.status).toBe(0)
+  const path = /^Archive: (.+)$/m.exec(result.stdout)?.[1]
+  assert(path)
+  const bundle = readBundleArchive(await readFile(path))
+  expect(bundle.project['script']).toEqual({ $type: 'node', $exec: '<root>/demo-repo-export/scripts/run.js' })
+  expect(Buffer.from(bundle.files.get('demo-repo-export/scripts/run.js')!).toString()).toContain(marker)
+  expect(JSON.parse(await readFile(join(home, 'project.json'), 'utf8'))).toEqual(sourceProject)
+  expect(fs.existsSync(marker)).toBe(false)
+})
+
+test('ignores unrelated archive entries without a fixed entry quota', ({ expect }) => {
+  const files: Record<string, Uint8Array> = {
+    'woof.config.json': strToU8(JSON.stringify({ $schemaVersion: 2, $projects: { demo: {} } })),
+    'CON.txt': strToU8('unrelated'),
+    Case: strToU8('one'),
+    case: strToU8('two'),
+  }
+  for (let index = 0; index < 10001; index += 1) files[`extra-${index}`] = new Uint8Array()
+  expect([...readBundleArchive(zipSync(files)).files.keys()]).toEqual(['woof.config.json'])
 })

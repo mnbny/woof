@@ -130,6 +130,11 @@ function assertDocumentKeys(value: Record<string, unknown>, kind: ConfigurationK
         for (const [name, project] of Object.entries(entry)) {
           const path = childPath('$projects', name)
           assertTokenName(name, path, source)
+          if (typeof project === 'string' && !project.startsWith('<root>/'))
+            throw new ConfigurationShapeError(
+              source,
+              `${path} must be inline or reference a <root>/ configuration file.`,
+            )
           if (isDictionary(project)) assertInlineProject(project, path, source)
         }
       continue

@@ -3,17 +3,11 @@ import type { Resource, RootConfiguration, TokenValue } from './schema.ts'
 import type { Zippable } from 'fflate'
 
 import { strToU8, Unzip, UnzipInflate, unzipSync, zipSync } from 'fflate'
-import { isAbsolute, win32 } from 'node:path'
+import { isAbsolute } from 'node:path'
 import { crc32 } from 'node:zlib'
 
 import { parseConfigurationDocument } from './config.ts'
 import { isMarkedResourceReference } from './resources.ts'
-
-export const BUNDLE_LIMITS = {
-  archiveBytes: 100 * 1024 * 1024,
-  expandedBytes: 100 * 1024 * 1024,
-  entries: 10_000,
-} as const
 
 export type BundleFile = { path: string; data: Uint8Array }
 export type WoofBundle = {
@@ -34,44 +28,19 @@ export class BundleError extends Error {
 function archivePath(path: string) {
   if (
     !path ||
-    path.includes('\\') ||
     path.includes('\0') ||
     isAbsolute(path) ||
-    win32.isAbsolute(path) ||
-    /^[A-Za-z]:/.test(path)
+    path.split('/').some(segment => !segment || segment === '.' || segment === '..')
   )
     throw new BundleError(`entry ${JSON.stringify(path)} is not a safe root-relative path.`)
-  const segments = path.split('/')
-  for (const segment of segments) {
-    if (!segment || segment === '.' || segment === '..' || segment.includes(':') || /[. ]$/.test(segment))
-      throw new BundleError(`entry ${JSON.stringify(path)} contains an unsafe destination component.`)
-    if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment))
-      throw new BundleError(`entry ${JSON.stringify(path)} names a reserved device.`)
-  }
   return path
-}
-
-function destinationKey(path: string) {
-  return path.normalize('NFC').toLowerCase()
 }
 
 function indexedFiles(files: Iterable<BundleFile>) {
   const indexed = new Map<string, Uint8Array>()
-  const destinations = new Set<string>()
-  let expandedBytes = 0
-  let entries = 0
   for (const file of files) {
-    entries += 1
-    if (entries > BUNDLE_LIMITS.entries)
-      throw new BundleError(`the archive exceeds the ${BUNDLE_LIMITS.entries}-entry limit.`)
     const path = archivePath(file.path)
-    const destination = destinationKey(path)
-    if (destinations.has(destination))
-      throw new BundleError(`multiple entries resolve to the destination ${JSON.stringify(path)}.`)
-    destinations.add(destination)
-    expandedBytes += file.data.byteLength
-    if (expandedBytes > BUNDLE_LIMITS.expandedBytes)
-      throw new BundleError(`expanded resources exceed the ${BUNDLE_LIMITS.expandedBytes}-byte limit.`)
+    if (indexed.has(path)) throw new BundleError(`multiple entries use the destination ${JSON.stringify(path)}.`)
     indexed.set(path, file.data)
   }
   return indexed
@@ -157,13 +126,10 @@ function validateBundle(files: ReadonlyMap<string, Uint8Array>): WoofBundle {
     const path = resourcePath(reference)
     if (!path) continue
     if (path === 'woof.config.json') throw new BundleError('a payload cannot replace the root configuration.')
-    if (!files.has(path)) throw new BundleError(`required resource ${path} is missing.`)
     required.add(path)
   }
-  for (const path of files.keys())
-    if (path !== 'woof.config.json' && !required.has(path))
-      throw new BundleError(`entry ${path} is not required by the selected project or shared definitions.`)
-  return { configuration, projectName, project, projectReference, files }
+  const selected = new Map([...files].filter(([path]) => path === 'woof.config.json' || required.has(path)))
+  return { configuration, projectName, project, projectReference, files: selected }
 }
 
 function decodeFailure(error: unknown): never {
@@ -179,6 +145,7 @@ type DirectoryEntry = {
   compressedSize: number
   crc: number
   size: number
+  special: boolean
 }
 
 function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
@@ -203,7 +170,7 @@ function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
   const size = view.getUint32(end + 12, true)
   const offset = view.getUint32(end + 16, true)
   if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff)
-    throw new BundleError('ZIP64 directory metadata is not supported for bounded bundles.')
+    throw new BundleError('ZIP64 directory metadata is not supported.')
   if (offset + size !== end) throw new BundleError('the central-directory range is inconsistent.')
   const entries: Omit<DirectoryEntry, 'name'>[] = []
   let cursor = offset
@@ -212,8 +179,6 @@ function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
       throw new BundleError(`central-directory entry ${index + 1} is missing or malformed.`)
     const external = view.getUint32(cursor + 38, true)
     const fileType = (external >>> 16) & 0o170000
-    if ((external & 0x10) !== 0 || (fileType !== 0 && fileType !== 0o100000))
-      throw new BundleError(`central-directory entry ${index + 1} is not a regular file.`)
     const localOffset = view.getUint32(cursor + 42, true)
     if (localOffset === 0xffffffff || localOffset >= offset)
       throw new BundleError(`central-directory entry ${index + 1} has an invalid local offset.`)
@@ -222,9 +187,10 @@ function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
       compressedSize: view.getUint32(cursor + 20, true),
       crc: view.getUint32(cursor + 16, true),
       size: view.getUint32(cursor + 24, true),
+      special: fileType !== 0 && fileType !== 0o100000 && fileType !== 0o040000,
     })
     if (entries.at(-1)!.compressedSize === 0xffffffff || entries.at(-1)!.size === 0xffffffff)
-      throw new BundleError('ZIP64 entry sizes are not supported for bounded bundles.')
+      throw new BundleError('ZIP64 entry sizes are not supported.')
     cursor +=
       46 + view.getUint16(cursor + 28, true) + view.getUint16(cursor + 30, true) + view.getUint16(cursor + 32, true)
   }
@@ -234,7 +200,6 @@ function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
 
 function validateDirectory(archive: Uint8Array) {
   const destinations = new Set<string>()
-  let declaredBytes = 0
   try {
     const expected = centralDirectory(archive)
     const entries: DirectoryEntry[] = []
@@ -248,16 +213,11 @@ function validateDirectory(archive: Uint8Array) {
           entry.compression !== file.compression
         )
           throw new BundleError(`central-directory metadata is inconsistent for ${file.name}.`)
-        archivePath(file.name)
-        const destination = destinationKey(file.name)
+        archivePath(file.name.endsWith('/') ? file.name.slice(0, -1) : file.name)
+        const destination = file.name
         if (destinations.has(destination))
           throw new BundleError(`multiple entries resolve to the destination ${JSON.stringify(file.name)}.`)
         destinations.add(destination)
-        if (destinations.size > BUNDLE_LIMITS.entries)
-          throw new BundleError(`the archive exceeds the ${BUNDLE_LIMITS.entries}-entry limit.`)
-        declaredBytes += file.originalSize
-        if (declaredBytes > BUNDLE_LIMITS.expandedBytes)
-          throw new BundleError(`expanded resources exceed the ${BUNDLE_LIMITS.expandedBytes}-byte limit.`)
         entries.push({ ...entry, name: file.name })
         return false
       },
@@ -271,12 +231,10 @@ function validateDirectory(archive: Uint8Array) {
 
 function unpack(archive: Uint8Array) {
   if (!archive.byteLength) throw new BundleError('the archive is empty.')
-  if (archive.byteLength > BUNDLE_LIMITS.archiveBytes)
-    throw new BundleError(`the archive exceeds the ${BUNDLE_LIMITS.archiveBytes}-byte input limit.`)
   const expected = validateDirectory(archive)
   const files: BundleFile[] = []
+  const special = new Set<string>()
   const destinations = new Set<string>()
-  let expandedBytes = 0
   let failure: unknown
   const unzip = new Unzip(file => {
     try {
@@ -289,13 +247,12 @@ function unpack(archive: Uint8Array) {
         (file.size !== undefined && file.size !== entry.compressedSize)
       )
         throw new BundleError(`local and central-directory metadata disagree for ${file.name}.`)
-      archivePath(file.name)
-      const destination = destinationKey(file.name)
+      archivePath(file.name.endsWith('/') ? file.name.slice(0, -1) : file.name)
+      const destination = file.name
       if (destinations.has(destination))
         throw new BundleError(`multiple entries resolve to the destination ${JSON.stringify(file.name)}.`)
       destinations.add(destination)
-      if (destinations.size > BUNDLE_LIMITS.entries)
-        throw new BundleError(`the archive exceeds the ${BUNDLE_LIMITS.entries}-entry limit.`)
+      if (entry.special) special.add(file.name)
       const chunks: Uint8Array[] = []
       let length = 0
       file.ondata = (error, chunk, final) => {
@@ -305,12 +262,6 @@ function unpack(archive: Uint8Array) {
           return
         }
         length += chunk.byteLength
-        expandedBytes += chunk.byteLength
-        if (expandedBytes > BUNDLE_LIMITS.expandedBytes) {
-          failure = new BundleError(`expanded resources exceed the ${BUNDLE_LIMITS.expandedBytes}-byte limit.`)
-          file.terminate()
-          return
-        }
         chunks.push(chunk.slice())
         if (final) {
           if (length !== entry.size) {
@@ -337,18 +288,23 @@ function unpack(archive: Uint8Array) {
   })
   unzip.register(UnzipInflate)
   try {
-    unzip.push(archive, true)
+    for (let offset = 0; offset < archive.byteLength; offset += 16_384)
+      unzip.push(archive.subarray(offset, offset + 16_384), offset + 16_384 >= archive.byteLength)
   } catch (error) {
     failure = error
   }
   if (failure) decodeFailure(failure)
   if (files.length !== expected.length)
     throw new BundleError(`decoded ${files.length} entries; the central directory declares ${expected.length}.`)
-  return files
+  return { files: files.filter(file => !file.path.endsWith('/')), special }
 }
 
 export function readBundleArchive(archive: Uint8Array) {
-  return validateBundle(indexedFiles(unpack(archive)))
+  const unpacked = unpack(archive)
+  const bundle = validateBundle(indexedFiles(unpacked.files))
+  for (const path of bundle.files.keys())
+    if (unpacked.special.has(path)) throw new BundleError(`required entry ${path} is not a regular file.`)
+  return bundle
 }
 
 export function createBundleArchive(configuration: RootConfiguration, resources: Iterable<BundleFile>) {
@@ -358,7 +314,5 @@ export function createBundleArchive(configuration: RootConfiguration, resources:
   ])
   validateBundle(files)
   const archive = zipSync(Object.fromEntries(files) as Zippable, { level: 6 })
-  if (archive.byteLength > BUNDLE_LIMITS.archiveBytes)
-    throw new BundleError(`the archive exceeds the ${BUNDLE_LIMITS.archiveBytes}-byte output limit.`)
   return archive
 }

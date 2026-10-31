@@ -85,19 +85,8 @@ function loadRegistered(root: LoadedRoot, loader: ResourceLoader, name: string):
   return { kind: 'registered', name, data: definition, source: root.source, inline: true }
 }
 
-export function loadRegisteredProjects(
-  root: LoadedRoot,
-  loader: ResourceLoader,
-  options: { metadataDiscovery?: boolean; checkoutRoot?: string | undefined } = {},
-) {
-  const projects = root.data.$projects ?? {}
-  return Object.keys(projects)
-    .filter(name => {
-      if (!options.metadataDiscovery || options.checkoutRoot) return true
-      const definition = projects[name]!
-      return typeof definition !== 'string' || !definition.startsWith('<repo>/')
-    })
-    .map(name => loadRegistered(root, loader, name))
+export function loadRegisteredProjects(root: LoadedRoot, loader: ResourceLoader) {
+  return Object.keys(root.data.$projects ?? {}).map(name => loadRegistered(root, loader, name))
 }
 
 function normalizedMetadataPath(value: string, project: string) {
@@ -207,9 +196,7 @@ export function selectProjectContext(
   }
 
   const candidatePath = realpathSync(cwd)
-  const candidates = loadRegisteredProjects(root, loader, { metadataDiscovery: true, checkoutRoot }).filter(project =>
-    metadataMatches(project, candidatePath),
-  )
+  const candidates = loadRegisteredProjects(root, loader).filter(project => metadataMatches(project, candidatePath))
   const inferred = options.inferredProject
   if (inferred && candidates.some(project => project.name === inferred))
     return {

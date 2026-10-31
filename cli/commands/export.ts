@@ -1,4 +1,6 @@
 import type { BundleFile } from '../utils/bundles.ts'
+import type { ProjectDefinition } from '../utils/projects.ts'
+import type { Resource, TokenValue } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -12,7 +14,7 @@ import { getWoofHome } from '../utils/paths.ts'
 import { presentError, presentResult } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, validateTokenGraphForTransfer } from '../utils/tokens.ts'
+import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
 
 function writeUniqueArchive(project: string, archive: Uint8Array) {
   const directory = getWoofHome('exports')
@@ -69,58 +71,84 @@ export default defineCommand({
       if (typeof definition === 'string' && !definition.startsWith('<root>/'))
         throw new Error('Repository-defined project configuration cannot be exported. Use a home-registered project.')
 
+      const originalConfiguration = validateConfigurationDocument(
+        { ...context.root.data, $projects: { [projectName]: definition } },
+        'root',
+        'export payload',
+      )
+      const originalContext = { ...context, root: { ...context.root, data: originalConfiguration } }
+      const rootOnlyContext = {
+        root: originalContext.root,
+        candidates: [],
+        checkoutRoot: originalContext.checkoutRoot,
+        selection: 'root' as const,
+      }
+      const validations = [
+        ...validateTokenGraph(createTokenGraph(rootOnlyContext)),
+        ...validateTokenGraph(createTokenGraph(originalContext)),
+      ]
+      const resources = new Map<string, BundleFile>()
+      function add(path: string, data: Uint8Array) {
+        const existing = resources.get(path)
+        if (existing && !Buffer.from(existing.data).equals(Buffer.from(data)))
+          throw new Error(`Export resources collide at ${path}. Choose distinct source paths.`)
+        resources.set(path, { path, data })
+      }
+      for (const validation of validations) {
+        for (const token of validation.tokens) {
+          for (const location of token.files) {
+            const path = location.markedPath.startsWith('<root>/')
+              ? location.markedPath.slice('<root>/'.length)
+              : `${projectName}-repo-export/${location.markedPath.slice('<repo>/'.length)}`
+            add(path, readFileSync(location.file))
+          }
+        }
+      }
+      function rewrite(value: TokenValue): TokenValue {
+        if (typeof value === 'string')
+          return value.startsWith('<repo>/')
+            ? `<root>/${projectName}-repo-export/${value.slice('<repo>/'.length)}`
+            : value
+        if ('$type' in value || '$exec' in value) {
+          const resource = value as Resource
+          const update = (part: string) =>
+            part.startsWith('<repo>/') ? `<root>/${projectName}-repo-export/${part.slice('<repo>/'.length)}` : part
+          return {
+            ...resource,
+            $exec: Array.isArray(resource.$exec) ? resource.$exec.map(update) : update(resource.$exec),
+          } as Resource
+        }
+        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, rewrite(child)]))
+      }
+      const exportedProject = Object.fromEntries(
+        Object.entries(project.data).map(([key, value]) => [
+          key,
+          key.startsWith('$') ? value : rewrite(value as TokenValue),
+        ]),
+      ) as ProjectDefinition
       const configuration = validateConfigurationDocument(
         {
           ...context.root.data,
-          $projects: { [projectName]: definition },
+          $projects: { [projectName]: typeof definition === 'string' ? definition : exportedProject },
         },
         'root',
         'export payload',
       )
-      const prunedContext = { ...context, root: { ...context.root, data: configuration } }
-      const rootOnlyContext = {
-        root: prunedContext.root,
-        candidates: [],
-        checkoutRoot: prunedContext.checkoutRoot,
-        selection: 'root' as const,
-      }
-      const validations = [
-        ...validateTokenGraphForTransfer(createTokenGraph(rootOnlyContext)),
-        ...validateTokenGraphForTransfer(createTokenGraph(prunedContext)),
-      ]
-      const resources = new Map<string, BundleFile>()
-      for (const validation of validations) {
-        for (const token of validation.tokens) {
-          for (const location of token.files) {
-            if (!location.markedPath.startsWith('<root>/')) continue
-            const path = location.markedPath.slice('<root>/'.length)
-            if (!resources.has(path)) resources.set(path, { path, data: readFileSync(location.file) })
-          }
-        }
-      }
       if (!project.inline && typeof definition === 'string') {
         const path = definition.slice('<root>/'.length)
-        resources.set(path, { path, data: readFileSync(project.source.file) })
+        const bytes =
+          JSON.stringify(exportedProject) === JSON.stringify(project.data)
+            ? readFileSync(project.source.file)
+            : Buffer.from(`${JSON.stringify(exportedProject, null, 2)}\n`)
+        add(path, bytes)
       }
 
       const archive = createBundleArchive(configuration, resources.values())
       const destination = writeUniqueArchive(projectName, archive)
-      const deferred = [
-        ...new Set(
-          validations
-            .flatMap(validation => validation.deferredRequirements ?? [])
-            .map(requirement => requirement.reference),
-        ),
-      ].sort()
       presentResult({
         summary: `Exported ${projectName} without executing scripts.`,
-        details: [
-          `Project: ${projectName}`,
-          `Archive: ${destination}`,
-          `Resources: ${resources.size}`,
-          `Checkout requirements: ${deferred.length ? deferred.join(', ') : 'None'}`,
-        ].join('\n'),
-        recovery: `${deferred.length ? `Checkout resources require normal validation in the target checkout: woof validate --project ${shellQuote(projectName)}. ` : ''}Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
+        details: [`Project: ${projectName}`, `Archive: ${destination}`, `Resources: ${resources.size}`].join('\n'),
+        recovery: `Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
       })
     } catch (error) {
       presentError({

@@ -133,11 +133,10 @@ function mergeMetadata(
 function safePath(path: string) {
   if (
     !path ||
-    path.includes('\\') ||
+    (sep === '\\' && path.includes('\\')) ||
     path.includes('\0') ||
     isAbsolute(path) ||
-    win32.isAbsolute(path) ||
-    /^[A-Za-z]:/.test(path) ||
+    (sep === '\\' && win32.isAbsolute(path)) ||
     path.split('/').some(segment => !segment || segment === '.' || segment === '..')
   )
     throw new Error(`Unsafe home resource destination: ${path}`)

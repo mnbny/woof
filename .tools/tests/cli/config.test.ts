@@ -108,3 +108,14 @@ test('checks registered configuration globally without reading payloads', async 
   await put(project, '{"$schemaVersion":2}\n')
   expect((await run(cli, home, ['--help'])).status).toBe(0)
 })
+
+test('rejects checkout-relative registered project configuration on startup', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'registered-checkout-config')
+  const root = join(home, 'woof.config.json')
+  const original = JSON.stringify({ $schemaVersion: 2, $projects: { demo: '<repo>/project.json' } })
+  await put(root, original)
+  const result = await run(cli, home, ['--help'])
+  expect(result.status).toBe(1)
+  expect(result.stdout).toContain('must be inline or reference a <root>/ configuration file')
+  expect(await readFile(root, 'utf8')).toBe(original)
+})

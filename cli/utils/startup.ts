@@ -47,7 +47,6 @@ export async function prepareStartup(options: { migrate: boolean; passive: boole
   if (root && '$projects' in root && root.$projects) {
     for (const reference of Object.values(root.$projects)) {
       if (typeof reference !== 'string') continue
-      if (reference.startsWith('<repo>/') && !checkout) continue
       add(resolveResourceLocation(reference, checkout ? { repoRoot: checkout } : {}).file)
     }
   }

@@ -81,10 +81,10 @@ function markedLocation(reference: string, repoRoot: string | undefined): Resour
   const markedPath = reference.slice(rootKind === 'root' ? '<root>/'.length : '<repo>/'.length)
   if (
     !markedPath ||
-    markedPath.includes('\\') ||
+    (sep === '\\' && markedPath.includes('\\')) ||
     markedPath.includes('\0') ||
     isAbsolute(markedPath) ||
-    win32.isAbsolute(markedPath) ||
+    (sep === '\\' && win32.isAbsolute(markedPath)) ||
     markedPath.split('/').some(segment => !segment || segment === '.' || segment === '..')
   )
     throw new ResourceLoadError(
@@ -125,8 +125,8 @@ export function createResourceLoader(options: { cwd?: string; repoRoot?: string 
   const active: string[] = []
 
   function loadConfiguration(reference: string, kind: ConfigurationKind, rootKind?: ResourceRootKind) {
-    if (kind === 'project' && !rootKind && !isMarkedResourceReference(reference))
-      throw new ResourceLoadError(reference, 'registered project references must begin with <root>/ or <repo>/.')
+    if (kind === 'project' && !rootKind && !reference.startsWith('<root>/'))
+      throw new ResourceLoadError(reference, 'registered project references must begin with <root>/.')
     const location = rootKind ? directLocation(reference, rootKind, repoRoot) : markedLocation(reference, repoRoot)
     if (active.includes(location.file) || (kind === 'project' && cache.has(`root:${location.file}`)))
       throw new ResourceLoadError(

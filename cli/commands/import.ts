@@ -9,7 +9,6 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { BUNDLE_LIMITS } from '../utils/bundles.ts'
 import { shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
 import { planImport, reviewImport } from '../utils/import-plan.ts'
@@ -159,8 +158,6 @@ export default defineCommand({
       const decisionsPath = values.decisions ? resolve(cwd, values.decisions) : undefined
       const agent = values.agent === true || Boolean(isAgent())
       const migration = values.migrate === true ? ' --migrate' : ''
-      if (statSync(archivePath).size > BUNDLE_LIMITS.archiveBytes)
-        throw new Error(`Archive exceeds the ${BUNDLE_LIMITS.archiveBytes}-byte input limit.`)
       const archive = readFileSync(archivePath)
       assertImportContext(cwd)
 
