@@ -115,7 +115,7 @@ export default defineCommand({
             summary: 'Multiple projects match this lookup. Select one explicitly.',
             details: candidates
               .map(candidate => {
-                const retry = `woof get ${query ? shellQuote(query) : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
+                const retry = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
                 return `${candidate.name}\n  ${retry}`
               })
               .join('\n'),
@@ -139,7 +139,7 @@ export default defineCommand({
         return
       }
 
-      const candidates = discoverResources(graph, query)
+      const candidates = discoverResources(graph, exactPath)
       const project = context.project?.kind === 'registered' ? context.project : undefined
       const details = candidateText(candidates, project, agent)
       if (search || !query || agent || !process.stdout.isTTY || candidates.length === 0) {
@@ -178,7 +178,7 @@ export default defineCommand({
         presentError({
           summary: 'Woof lookup was cancelled.',
           details: error instanceof Error ? error.message : String(error),
-          recovery: 'Owned child cleanup has finished. Earlier completed effects are not rolled back.',
+          recovery: 'Earlier completed effects are not rolled back.',
         })
         process.exitCode = 130
       } else {
