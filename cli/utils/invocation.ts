@@ -11,6 +11,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
   projects: {},
   export: { project: { type: 'string' } },
   import: { decisions: { type: 'string' } },
+  readme: {},
 }
 
 export function parseInvocation(rawArgs: string[]) {
@@ -32,7 +33,7 @@ export function parseInvocation(rawArgs: string[]) {
     const validShell = args.length === 1 && ['zsh', 'bash', 'fish', 'powershell', 'fig'].includes(args[0]!)
     if (!(validHelp || validShell || (args.length === 0 && terminator >= 0)))
       throw new Error('Completion requires a supported shell or -- followed by completion arguments.')
-    return { migrate, passive: true, args: normalized }
+    return { migrate, passive: true, command, args: normalized }
   }
   const preceding = commandIndex < 0 ? [...before, ...after] : before.slice(0, commandIndex)
   const following = commandIndex < 0 ? [] : [...before.slice(commandIndex + 1), ...after]
@@ -58,7 +59,7 @@ export function parseInvocation(rawArgs: string[]) {
     const count = parsed.positionals.length
     if ((command === 'explain' || command === 'import') && count !== 1)
       throw new Error(`${command} requires exactly one argument.`)
-    if ((command === 'projects' || command === 'export') && count !== 0)
+    if ((command === 'projects' || command === 'export' || command === 'readme') && count !== 0)
       throw new Error(`${command} accepts no positional arguments.`)
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
     if (
@@ -76,5 +77,5 @@ export function parseInvocation(rawArgs: string[]) {
     if (command === 'export' && !(parsed.values as Record<string, unknown>)['project'])
       throw new Error('export requires --project NAME.')
   }
-  return { migrate, passive, args: normalized }
+  return { migrate, passive, command, args: normalized }
 }

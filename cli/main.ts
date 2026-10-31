@@ -9,6 +9,7 @@ import exportProject from './commands/export.ts'
 import get from './commands/get.ts'
 import importProject from './commands/import.ts'
 import projects from './commands/projects.ts'
+import readme from './commands/readme.ts'
 import validate from './commands/validate.ts'
 import { parseInvocation } from './utils/invocation.ts'
 import { getWoofHome } from './utils/paths.ts'
@@ -19,7 +20,15 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
 })
 
-const subCommands: SubCommandsDef = { explain, export: exportProject, get, import: importProject, projects, validate }
+const subCommands: SubCommandsDef = {
+  explain,
+  export: exportProject,
+  get,
+  import: importProject,
+  projects,
+  readme,
+  validate,
+}
 
 const main = defineCommand({
   args: {
@@ -44,7 +53,9 @@ if (completion && typeof completion === 'object' && 'meta' in completion) {
 
 try {
   const invocation = parseInvocation(process.argv.slice(2))
-  await prepareStartup({ migrate: invocation.migrate, passive: invocation.passive, cwd: process.cwd() })
+  // The guide must stay readable when configuration is broken, which is when an agent needs it most.
+  if (invocation.command !== 'readme' || invocation.migrate)
+    await prepareStartup({ migrate: invocation.migrate, passive: invocation.passive, cwd: process.cwd() })
   const rootVersion =
     invocation.args.some(arg => arg === '--version' || arg === '-v') &&
     invocation.args.every(arg => ['--agent', '--version', '-v'].includes(arg))
