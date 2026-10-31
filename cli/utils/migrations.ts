@@ -2,7 +2,7 @@ import type { ConfigurationKind } from './config.ts'
 import type { ProjectConfiguration, RootConfiguration } from './schema.ts'
 
 import { randomUUID } from 'node:crypto'
-import { readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
@@ -165,11 +165,13 @@ function restoreDocument(document: PreparedConfigurationMigration['documents'][n
     if (readFileSync(document.target, 'utf8') !== serialized(document))
       throw new Error('The migrated destination changed again before rollback.')
     writeFileSync(rollback, document.source, { flag: 'wx', mode: document.mode })
+    chmodSync(rollback, document.mode & 0o7777)
     renameSync(rollback, document.target)
   } catch (error) {
     const recovery = join(dirname(document.target), `.${basename(document.target)}.${randomUUID()}.recovery.json`)
     try {
       writeFileSync(recovery, document.source, { flag: 'wx', mode: document.mode })
+      chmodSync(recovery, document.mode & 0o7777)
     } catch (recoveryError) {
       throw new Error(`Could not restore ${document.target} or retain ${recovery}: ${String(recoveryError)}`, {
         cause: recoveryError,
@@ -199,8 +201,10 @@ export async function applyConfigurationMigration(plan: PreparedConfigurationMig
       }
 
       try {
-        for (const document of staged)
+        for (const document of staged) {
           writeFileSync(document.staging, serialized(document), { flag: 'wx', mode: document.mode })
+          chmodSync(document.staging, document.mode & 0o7777)
+        }
         for (const document of plan.documents) assertUnchanged(document)
       } catch (error) {
         cleanup()
