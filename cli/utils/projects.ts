@@ -89,7 +89,7 @@ export function loadRegisteredProjects(root: LoadedRoot, loader: ResourceLoader)
   return Object.keys(root.data.$projects ?? {}).map(name => loadRegistered(root, loader, name))
 }
 
-function normalizedMetadataPath(value: string, project: string) {
+export function normalizedMetadataPath(value: string, project: string) {
   const expanded = value === '~' ? homedir() : value.startsWith('~/') ? resolve(homedir(), value.slice(2)) : value
   if (!isAbsolute(expanded) && !win32.isAbsolute(expanded))
     throw new ProjectSelectionError(`Project ${project} metadata path must be absolute or begin with ~/: ${value}`)

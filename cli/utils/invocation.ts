@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util'
 
 import { splitProjectAddress } from './tokens.ts'
 
-type Option = { type: 'boolean' | 'string'; short?: string }
+type Option = { type: 'boolean' | 'string'; short?: string; multiple?: boolean }
 
 const commandOptions: Record<string, Record<string, Option>> = {
   get: { project: { type: 'string' }, search: { type: 'boolean' } },
@@ -11,6 +11,12 @@ const commandOptions: Record<string, Record<string, Option>> = {
   projects: {},
   export: { project: { type: 'string' } },
   import: { decisions: { type: 'string' } },
+  init: {
+    repo: { type: 'boolean' },
+    name: { type: 'string' },
+    'base-path': { type: 'string', multiple: true },
+    'worktree-path': { type: 'string', multiple: true },
+  },
   readme: {},
 }
 
@@ -50,6 +56,8 @@ export function parseInvocation(rawArgs: string[]) {
     if ((command === 'projects' || command === 'export' || command === 'readme') && count !== 0)
       throw new Error(`${command} accepts no positional arguments.`)
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
+    if (command === 'init' && count > ((parsed.values as Record<string, unknown>)['repo'] ? 1 : 0))
+      throw new Error('init accepts one location, and only with --repo.')
     if (
       ['get', 'explain', 'validate'].includes(command) &&
       count === 1 &&

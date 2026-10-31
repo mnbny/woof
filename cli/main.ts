@@ -7,6 +7,7 @@ import explain from './commands/explain.ts'
 import exportProject from './commands/export.ts'
 import get from './commands/get.ts'
 import importProject from './commands/import.ts'
+import init from './commands/init.ts'
 import projects from './commands/projects.ts'
 import readme from './commands/readme.ts'
 import validate from './commands/validate.ts'
@@ -30,6 +31,7 @@ const subCommands: SubCommandsDef = {
   export: exportProject,
   get,
   import: importProject,
+  init,
   projects,
   readme,
   validate,
