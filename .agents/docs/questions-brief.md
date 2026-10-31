@@ -48,4 +48,4 @@ General lookup reaches every resource. No familiar shortcuts exist, such as a di
 
 ### Authoring interfaces
 
-No browser editor, hosted service, provider tooling, semantic search, or new authoring system exists. Their scope and priority are owner decisions. These decisions include which authoring operations go through Woof and which operations edit source files directly.
+Woof creates empty project configurations. Authors edit tokens directly in the source files. No browser editor, hosted service, provider tooling, semantic search, or new authoring system exists. Their scope and priority are owner decisions. These decisions include which other authoring operations go through Woof.

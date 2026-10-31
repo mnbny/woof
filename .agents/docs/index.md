@@ -61,6 +61,11 @@ Add each document using this format:
 - Description: User-guide output for people and agents who want to learn what Woof does.
 - Tags: `readme`
 
+#### [cli-command-init.md](./cli-command-init.md)
+
+- Description: Creation of repository configurations and registered projects, with handoffs for missing choices.
+- Tags: `init`, `scaffolding`
+
 #### [cli-command-get.md](./cli-command-get.md)
 
 - Description: Exact lookup, discovery fallback, candidate output, and lookup exit status.

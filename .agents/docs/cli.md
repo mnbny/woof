@@ -6,7 +6,7 @@ The CLI owns argument parsing, startup order, command dispatch, and shared prese
 
 ## Commands
 
-The commands are readme, get, projects, explain, validate, export, and import. Each command has a brief.
+The commands are readme, init, get, projects, explain, validate, export, and import. Each command has a brief.
 
 Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified address that names a project has the same effect as that option. If the address and the option select different projects, the command fails.
 
