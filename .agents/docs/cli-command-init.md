@@ -23,4 +23,4 @@ The repository option cannot be combined with the name option or the path option
 
 ## Output and exit status
 
-On success, init reports the created file. For a registered project, init also reports the paths and how woof selects the project. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.
+On success, init reports the created file and the add command for the new project. For a registered project, init also reports the paths and how woof selects the project. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.

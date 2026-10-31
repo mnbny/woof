@@ -167,10 +167,9 @@ export default defineCommand({
           {
             summary: 'Created a repository configuration.',
             details: `File: ${file}`,
-            recovery:
-              'Add project tokens beside $schemaVersion. Git shares the file with everyone who uses the checkout.',
+            recovery: `Git shares the file with everyone who uses the checkout. To add a token, run woof add --repo${suffix}.`,
           },
-          { template: 'init-repository', values: { file } },
+          { template: 'init-repository', values: { file, add: `woof add --repo${suffix}` } },
         )
         return
       }
@@ -215,13 +214,14 @@ export default defineCommand({
       })
       const checkouts = basePaths.join(', ') || 'none'
       const worktrees = worktreePaths.join(', ') || 'none'
+      const add = `woof add --project ${shellQuote(name)}${suffix}`
       presentResult(
         {
           summary: `Registered project ${name}.`,
           details: `Configuration: ${file}\nCheckout base paths: ${checkouts}\nWorktree patterns: ${worktrees}`,
-          recovery: `Add project tokens under $projects.${name}. woof selects the project in directories that match its paths. Without paths, select it with --project ${name}.`,
+          recovery: `woof selects the project in directories that match its paths. Without paths, select it with --project ${name}. To add a token, run ${add}.`,
         },
-        { template: 'init-registered', values: { name, file, checkouts, worktrees } },
+        { template: 'init-registered', values: { name, file, checkouts, worktrees, add } },
       )
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)
