@@ -12,11 +12,17 @@ import readme from './commands/readme.ts'
 import validate from './commands/validate.ts'
 import { parseInvocation } from './utils/invocation.ts'
 import { getWoofHome } from './utils/paths.ts'
-import { presentError } from './utils/presentation.ts'
+import { agentPresentation, presentError } from './utils/presentation.ts'
+import { recommendExecutionSkill } from './utils/skill.ts'
 import { prepareStartup } from './utils/startup.ts'
 
 process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
+})
+
+// Help and parse failures exit inside citty, so only an exit hook reaches every agent run.
+process.once('exit', () => {
+  if (agentPresentation()) recommendExecutionSkill()
 })
 
 const subCommands: SubCommandsDef = {
