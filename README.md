@@ -104,7 +104,7 @@ Scripts run as child processes, not inside Woof. Working directory is the detect
 
 Cold `tsx` and Bun acquisition can require registry access because `npx` fetches the pinned runtime packages themselves. A warm npm cache can avoid those downloads. `node` and `tsx` do not automatically fetch arbitrary packages imported by script source; those imports must already resolve in the script's runtime environment. Bun may fetch missing script dependencies through its native resolver. Woof has no separate dependency installer. Acquisition time depends on the environment and is not a fixed startup-latency guarantee.
 
-Captured stdout is limited to 10 MiB per child process. Exceeding the limit is an explicit error, never silent truncation, and triggers the same owned-process cleanup as cancellation. There is no default execution timeout or public output-limit flag. On POSIX, cancellation terminates only the owned detached process group, escalates within a bounded period, and waits for descendants. Windows has parent-only termination; equivalent process-tree behavior is not claimed.
+Captured stdout is limited to 256 MiB per child process. Exceeding the limit is an explicit error, never silent truncation, and triggers the same owned-process cleanup as cancellation. There is no default execution timeout or public output-limit flag. On POSIX, cancellation terminates only the owned detached process group, escalates within a bounded period, and waits for descendants. Windows has parent-only termination; equivalent process-tree behavior is not claimed.
 
 ## Export and transfer
 

@@ -18,4 +18,4 @@ Explicit selection, repository configuration, metadata matching, and calling-age
 
 Exact get resolves a token or falls back to metadata discovery. Forced `--search` always discovers and never executes a match. Search uses normalized path, description, and joined tags across the selected effective view, not bodies or generated output.
 
-Scripts preflight every reachable token and declared file before execution. bash, node, tsx, and bun run as independent child processes, sequentially for arrays, with literal output and no cross-invocation cache. Captured stdout is limited to 10 MiB per child. Owned-process cleanup handles cancellation and overflow without a default timeout or universal process-tree claim.
+Scripts preflight every reachable token and declared file before execution. bash, node, tsx, and bun run as independent child processes, sequentially for arrays, with literal output and no cross-invocation cache. Captured stdout is limited to 256 MiB per child. Owned-process cleanup handles cancellation and overflow without a default timeout or universal process-tree claim.

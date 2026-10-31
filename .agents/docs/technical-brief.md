@@ -29,7 +29,7 @@ Dependencies and the package manager use exact versions. Compiler and linting co
 
 Computed scripts use the running Node executable, available bash, pinned npx tsx, and pinned npx Bun. Cold runtime acquisition can require network; a warm cache can avoid it. Bun-native package resolution may fetch script dependencies. Woof does not implement a dependency installer or typecheck scripts.
 
-Captured stdout is limited to 10 MiB per child and fails explicitly instead of truncating. POSIX cancellation cleans only the owned process group and waits for descendants. Windows has parent-only termination and no equivalent process-tree claim. Archive input and expanded data are capped at 100 MiB each and 10,000 entries, with portable path and integrity checks.
+Captured stdout is limited to 256 MiB per child and fails explicitly instead of truncating. POSIX cancellation cleans only the owned process group and waits for descendants. Windows has parent-only termination and no equivalent process-tree claim. Archive input and expanded data are capped at 100 MiB each and 10,000 entries, with portable path and integrity checks.
 
 ## Validation and tests
 
