@@ -22,6 +22,7 @@
     "change-case": "5.4.4",
     "citty": "0.2.2",
     "tsx": "4.23.15",
+    "valibot": "1.5.0",
     "yaml": "2.9.1"
   },
   "devDependencies": {
