@@ -1,4 +1,4 @@
-Woof could not export the project.
+woof could not export the project.
 
 {{details}}
 

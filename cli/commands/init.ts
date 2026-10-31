@@ -75,7 +75,7 @@ export default defineCommand({
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
     repo: { description: 'Create a repository configuration in this checkout', type: 'boolean' },
     location: { description: 'Repository configuration file in the checkout', type: 'positional', required: false },
-    name: { description: 'Register a project in Woof home under this name', type: 'string' },
+    name: { description: 'Register a project in woof home under this name', type: 'string' },
     'base-path': { description: 'Checkout base path of the registered project (repeatable)', type: 'string' },
     'worktree-path': { description: 'Worktree pattern of the registered project (repeatable)', type: 'string' },
   },
@@ -118,7 +118,7 @@ export default defineCommand({
           const repository = LOCATIONS.map(path => `woof init --repo ${path}${suffix}`).join('\n')
           return handoff(
             'Choose where to create the project configuration.',
-            `Repository configuration in ${checkout}:\n${repository}\n\nRegistered project in Woof home:\n${homeCommand}`,
+            `Repository configuration in ${checkout}:\n${repository}\n\nRegistered project in woof home:\n${homeCommand}`,
             'init-target',
             { checkout: checkout!, repository, home: homeCommand },
           )
@@ -127,7 +127,7 @@ export default defineCommand({
           message: 'Where should the project configuration live?',
           options: [
             { value: 'repo', label: 'This repository', hint: checkout! },
-            { value: 'home', label: 'Woof home', hint: 'a registered project, selected by its paths' },
+            { value: 'home', label: 'woof home', hint: 'a registered project, selected by its paths' },
           ],
         })
         if (!selected) {
@@ -139,9 +139,9 @@ export default defineCommand({
 
       if (target === 'repo') {
         if (insideWoofHome(cwd))
-          throw new Error('Woof ignores repository configuration inside Woof home. Run init from a project checkout.')
+          throw new Error('woof ignores repository configuration inside woof home. Run init from a project checkout.')
         if (!checkout)
-          throw new Error('init --repo needs a Git checkout. Register a Woof home project with --name instead.')
+          throw new Error('init --repo needs a Git checkout. Register a woof home project with --name instead.')
         if (location === undefined) {
           if (!interactive) {
             const commands = LOCATIONS.map(path => `woof init --repo ${path}${suffix}`).join('\n')
@@ -219,7 +219,7 @@ export default defineCommand({
         {
           summary: `Registered project ${name}.`,
           details: `Configuration: ${file}\nCheckout base paths: ${checkouts}\nWorktree patterns: ${worktrees}`,
-          recovery: `Add project tokens under $projects.${name}. Woof selects the project in directories that match its paths. Without paths, select it with --project ${name}.`,
+          recovery: `Add project tokens under $projects.${name}. woof selects the project in directories that match its paths. Without paths, select it with --project ${name}.`,
         },
         { template: 'init-registered', values: { name, file, checkouts, worktrees } },
       )
@@ -227,7 +227,7 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof could not create the project configuration.',
+          summary: 'woof could not create the project configuration.',
           details,
           recovery: 'Correct the reported problem, then retry. Existing configuration was not changed.',
         },

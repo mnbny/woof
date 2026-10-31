@@ -1,4 +1,4 @@
-Woof could not complete the lookup.
+woof could not complete the lookup.
 
 {{details}}
 

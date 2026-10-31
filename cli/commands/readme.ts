@@ -9,7 +9,7 @@ export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
   },
-  meta: { description: 'Print the user guide. Agents: run this first to learn what Woof can do', name: 'readme' },
+  meta: { description: 'Print the user guide. Agents: run this first to learn what woof can do', name: 'readme' },
   run({ rawArgs }) {
     try {
       const { positionals } = parseArgs({
@@ -23,10 +23,10 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof could not print its user guide.',
+          summary: 'woof could not print its user guide.',
           details,
           recovery:
-            'Run Woof from its checkout or an installed package; a standalone bundle copied elsewhere has no guide.',
+            'Run woof from its checkout or an installed package; a standalone bundle copied elsewhere has no guide.',
         },
         { template: 'readme-error', values: { details } },
       )

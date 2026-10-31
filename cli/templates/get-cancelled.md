@@ -1,4 +1,4 @@
-Woof lookup was cancelled.
+woof lookup was cancelled.
 
 {{details}}
 

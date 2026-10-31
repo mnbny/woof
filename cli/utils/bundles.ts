@@ -20,7 +20,7 @@ export type WoofBundle = {
 
 export class BundleError extends Error {
   constructor(message: string, options?: ErrorOptions) {
-    super(`Invalid Woof bundle: ${message}`, options)
+    super(`Invalid woof bundle: ${message}`, options)
     this.name = 'BundleError'
   }
 }
@@ -318,7 +318,7 @@ export function createBundleArchive(configuration: RootConfiguration, resources:
   return archive
 }
 
-// A backup mirrors Woof home paths, so extracting it over Woof home restores those files.
+// A backup mirrors woof home paths, so extracting it over woof home restores those files.
 export function createBackupArchive(files: Iterable<BundleFile>) {
   return zipSync(Object.fromEntries(indexedFiles(files)) as Zippable, { level: 6 })
 }

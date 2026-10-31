@@ -1,6 +1,6 @@
-Woof execution skill: not installed
+woof execution skill: not installed
 
-Tell the user that the woof-execution skill is not installed, and recommend that they install it. The skill shows agents how to use Woof: exact lookups, discovery, project selection, and import reviews. Install it only after the user approves.
+Tell the user that the woof-execution skill is not installed, and recommend that they install it. The skill shows agents how to use woof: exact lookups, discovery, project selection, and import reviews. Install it only after the user approves.
 
 To install, copy this directory:
 {{source}}

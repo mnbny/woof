@@ -1,4 +1,4 @@
-Woof could not complete the import.
+woof could not complete the import.
 
 {{details}}{{report}}
 

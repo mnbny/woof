@@ -158,7 +158,7 @@ export default defineCommand({
           ].join(' ')
           presentSelection(
             {
-              summary: `Woof needs more input to add a token: ${missing.join(', ')}.`,
+              summary: `woof needs more input to add a token: ${missing.join(', ')}.`,
               details: `${command}\n\nTargets:\n${targetList}\n\nExisting namespaces:\n${namespaces}`,
               recovery: 'Retry with the complete command. Nothing was written.',
             },
@@ -280,7 +280,7 @@ export default defineCommand({
       const details = message(error)
       presentError(
         {
-          summary: 'Woof could not add the token.',
+          summary: 'woof could not add the token.',
           details,
           recovery: 'Correct the reported problems, then retry. No configuration was changed.',
         },

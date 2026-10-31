@@ -179,7 +179,7 @@ export default defineCommand({
       if (controller.signal.aborted) {
         presentError(
           {
-            summary: 'Woof lookup was cancelled.',
+            summary: 'woof lookup was cancelled.',
             details,
             recovery: 'Earlier completed effects are not rolled back.',
           },
@@ -189,7 +189,7 @@ export default defineCommand({
       } else {
         presentError(
           {
-            summary: 'Woof could not complete the lookup.',
+            summary: 'woof could not complete the lookup.',
             details,
             recovery:
               'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',

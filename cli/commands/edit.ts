@@ -239,7 +239,7 @@ export default defineCommand({
       const details = message(error)
       presentError(
         {
-          summary: 'Woof could not edit the token.',
+          summary: 'woof could not edit the token.',
           details,
           recovery: 'Correct the reported problem, then retry. No configuration was changed.',
         },

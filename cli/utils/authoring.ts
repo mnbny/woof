@@ -114,7 +114,7 @@ export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>): TokenVal
   return resourceValue(draft.type, draft.content.exec, draft.description, draft.tags)
 }
 
-// A copied file does not exist in Woof home until the save, so checks read the source instead. A prompt file and
+// A copied file does not exist in woof home until the save, so checks read the source instead. A prompt file and
 // inline text resolve references the same way, and script files are only checked for existence.
 function checkedValue(draft: Omit<TokenDraft, 'target' | 'path'>) {
   if (!draft.content.copy) return tokenValue(draft)
@@ -130,8 +130,8 @@ export function assertTokenPath(path: string) {
     )
 }
 
-// A single line that names an existing file becomes a file reference. Woof home files and, for project tokens,
-// checkout files keep their place. Other files are copied into Woof home, because a reference must stay inside a root.
+// A single line that names an existing file becomes a file reference. woof home files and, for project tokens,
+// checkout files keep their place. Other files are copied into woof home, because a reference must stay inside a root.
 export function readTokenContent(content: string, options: { cwd: string; target: TokenTarget; path: string }) {
   if (!content.trim()) throw new Error('The token content is empty.')
   if (content.includes('\n') || isMarkedResourceReference(content)) return { exec: content }
@@ -151,7 +151,7 @@ export function readTokenContent(content: string, options: { cwd: string; target
   const copy = `resources/${options.path.replaceAll('.', '/')}${extname(file)}`
   try {
     statSync(join(home, copy))
-    throw new Error(`Woof home already has a file at ${copy}. Move the file into Woof home, or paste its content.`)
+    throw new Error(`woof home already has a file at ${copy}. Move the file into woof home, or paste its content.`)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
@@ -276,7 +276,7 @@ function projectTarget(project: RegisteredProject | RepositoryProject): TokenTar
 }
 
 // Finds the definition behind the token that the caller sees. A prompt file is edited in place. A script file is
-// edited outside Woof, so its content is fixed here.
+// edited outside woof, so its content is fixed here.
 export function describeToken(address: string, options: { cwd: string; project?: string | undefined }) {
   const loader = createResourceLoader({ cwd: options.cwd })
   const context = selectProjectContext({

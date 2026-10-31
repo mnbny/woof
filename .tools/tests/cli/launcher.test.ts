@@ -47,9 +47,9 @@ test('agent runs recommend the execution skill until a current copy is installed
   const run = async () => (await cli.run(process.execPath, [cli.entry, '--help', '--agent'])).stderr
   const installed = join(cli.taskHome, '.agents', 'skills', 'woof-execution', 'SKILL.md')
 
-  expect(await run()).toContain('Woof execution skill: not installed')
+  expect(await run()).toContain('woof execution skill: not installed')
   await put(installed, '---\nname: woof-execution\n---\n')
-  expect(await run()).toContain('Woof execution skill: update available')
+  expect(await run()).toContain('woof execution skill: update available')
   await put(installed, await readFile(new URL('../../../skills/woof-execution/SKILL.md', import.meta.url), 'utf8'))
   expect(await run()).toBe('')
 })

@@ -161,7 +161,7 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof could not export the project.',
+          summary: 'woof could not export the project.',
           details,
           recovery:
             'Select an explicit registered project, correct any missing resources or invalid references, then retry. Source configuration was not changed.',

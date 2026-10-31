@@ -93,7 +93,7 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof validation failed.',
+          summary: 'woof validation failed.',
           details,
           recovery: 'Review the reported data, source or reference failure. Correct it, then retry.',
         },

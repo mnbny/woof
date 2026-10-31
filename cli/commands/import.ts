@@ -180,7 +180,7 @@ function outcome(report: ImportApplyReport) {
 
 function presentBackup(backup: string | undefined) {
   if (!backup) return
-  presentCode('Backup of Woof home before this import', backup, {
+  presentCode('Backup of woof home before this import', backup, {
     template: 'import-backup',
     values: { backup, backupArgument: shellQuote(backup), homeArgument: shellQuote(getWoofHome()) },
   })
@@ -320,7 +320,7 @@ export default defineCommand({
           const address = await enterText(
             item.kind === 'token' || (item.kind === 'project-token' && item.path !== '$metadata')
               ? 'Enter an unused token address'
-              : 'Enter an unused path under Woof home',
+              : 'Enter an unused path under woof home',
           )
           if (!address) {
             process.exitCode = 130
@@ -421,7 +421,7 @@ export default defineCommand({
       const report = error instanceof ImportApplyError ? `\n${outcome(error.report)}` : ''
       presentError(
         {
-          summary: 'Woof could not complete the import.',
+          summary: 'woof could not complete the import.',
           details: `${message}${report}`,
           recovery:
             'Review the archive and destination state, then retry with explicit choices. Incomplete review changes nothing; retained recovery artifacts remain available when reported.',

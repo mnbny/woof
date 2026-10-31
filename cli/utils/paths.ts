@@ -12,7 +12,7 @@ export function getWoofHome(...segments: string[]) {
 let root: string | undefined
 
 // The source entry and the bundle sit at different depths, so search upward. Only a directory with
-// Woof's own manifest counts, so a copied bundle never reads another project's files.
+// woof's own manifest counts, so a copied bundle never reads another project's files.
 function findWoofRoot() {
   let directory = dirname(fileURLToPath(import.meta.url))
   for (;;) {
@@ -24,7 +24,7 @@ function findWoofRoot() {
     }
     const parent = dirname(directory)
     if (parent === directory)
-      throw new Error('Woof could not find its package root above the running entry. Reinstall or relink Woof.')
+      throw new Error('woof could not find its package root above the running entry. Reinstall or relink woof.')
     directory = parent
   }
 }

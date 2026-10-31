@@ -16,7 +16,7 @@ function skillVersion(file: string) {
   }
 }
 
-// Agents use Woof well only with the execution skill, so agent runs end by recommending it when the
+// Agents use woof well only with the execution skill, so agent runs end by recommending it when the
 // user's home has no copy or only an older one.
 export function recommendExecutionSkill() {
   const source = getWoofRoot('skills', SKILL)

@@ -1,4 +1,4 @@
-Woof validation failed.
+woof validation failed.
 
 {{details}}
 

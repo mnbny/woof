@@ -75,7 +75,7 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof could not list projects.',
+          summary: 'woof could not list projects.',
           details,
           recovery:
             'Review the configuration paths and selection information, then retry. No project selection was persisted.',

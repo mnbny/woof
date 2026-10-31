@@ -1,4 +1,4 @@
-Woof could not list projects.
+woof could not list projects.
 
 {{details}}
 

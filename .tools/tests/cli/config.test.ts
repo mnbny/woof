@@ -156,7 +156,7 @@ test('adds a token only when the whole configuration still works', async ({ cli,
   expect(added.$projects).toEqual({ acme: { agents: { local: 'acme agents' } } })
 })
 
-test('copies a file from outside Woof home so that the new token resolves', async ({ cli, directory, expect }) => {
+test('copies a file from outside woof home so that the new token resolves', async ({ cli, directory, expect }) => {
   const home = join(directory, 'add-copy-home')
   const source = join(directory, 'outside', 'rule.md')
   await put(join(home, 'woof.config.json'), JSON.stringify({ $schemaVersion: 2, base: 'seven rules' }))

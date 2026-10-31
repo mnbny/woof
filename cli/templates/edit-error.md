@@ -1,4 +1,4 @@
-Woof could not edit the token.
+woof could not edit the token.
 
 {{details}}
 

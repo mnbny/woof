@@ -38,7 +38,7 @@ function unavailableMigration(file: string, version: number) {
   if (version > CURRENT_SCHEMA_VERSION)
     return new ConfigurationMigrationError(
       file,
-      `$schemaVersion:${version} is newer than this CLI supports. Install a compatible Woof release; no downgrade or guessed migration was attempted.`,
+      `$schemaVersion:${version} is newer than this CLI supports. Install a compatible woof release; no downgrade or guessed migration was attempted.`,
     )
   return new ConfigurationMigrationError(
     file,

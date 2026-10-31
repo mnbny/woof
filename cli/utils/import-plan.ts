@@ -108,7 +108,7 @@ function readDestination(home: string, path: string): Uint8Array | undefined {
   const file = resolve(home, path)
   try {
     if (path !== 'woof.config.json' && !contained(realpathSync(home), realpathSync(file)))
-      throw new Error(`Import destination escapes the Woof home: ${path}`)
+      throw new Error(`Import destination escapes the woof home: ${path}`)
     if (!statSync(file).isFile()) throw new Error(`Import destination is not a regular file: ${path}`)
     return readFileSync(file)
   } catch (error) {
@@ -280,7 +280,7 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
   const bundle = readBundleArchive(archive)
   const rootSource = sourceState(home, 'woof.config.json')
   if (!rootSource.data)
-    throw new Error('The local root configuration is missing; initialize Woof before import planning.')
+    throw new Error('The local root configuration is missing; initialize woof before import planning.')
   const local = parseConfigurationDocument(
     new TextDecoder().decode(rootSource.data),
     'root',
@@ -595,7 +595,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
         })
         .map(([name]) => name)
       if (owners.length)
-        item.notice = `This file is registered as configuration for ${owners.join(', ')}. Taking raw bytes may prevent Woof from starting. ${item.notice ?? ''}`
+        item.notice = `This file is registered as configuration for ${owners.join(', ')}. Taking raw bytes may prevent woof from starting. ${item.notice ?? ''}`
     }
     const originalPhysical = reference.startsWith('<root>/') ? snapshot(plan, originalPath).physical : null
     item.candidates =

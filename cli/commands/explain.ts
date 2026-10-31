@@ -109,7 +109,7 @@ export default defineCommand({
       const details = error instanceof Error ? error.message : String(error)
       presentError(
         {
-          summary: 'Woof could not explain the resolution.',
+          summary: 'woof could not explain the resolution.',
           details,
           recovery:
             'Review the reported source chain, missing reference or cycle, then retry with an exact token address and project.',

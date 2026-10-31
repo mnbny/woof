@@ -86,7 +86,7 @@ function readCurrent(home: string, path: string): Uint8Array | undefined {
   const file = resolve(home, path)
   try {
     if (path !== 'woof.config.json' && !contained(realpathSync(home), realpathSync(file)))
-      throw new Error(`Import destination escapes the Woof home: ${path}`)
+      throw new Error(`Import destination escapes the woof home: ${path}`)
     if (!statSync(file).isFile()) throw new Error(`Import destination is not a regular file: ${path}`)
     return readFileSync(file)
   } catch (error) {
@@ -121,7 +121,7 @@ export function inspectWriteDestination(home: string, path: string) {
           throw new Error(`Import destination has an unresolved symbolic link: ${current}`, { cause: error })
         }
         if (!(path === 'woof.config.json' && index === segments.length - 1) && !contained(physicalHome, current))
-          throw new Error(`Import destination escapes the Woof home: ${path}`)
+          throw new Error(`Import destination escapes the woof home: ${path}`)
       }
       const resolved = statSync(current)
       if (index === segments.length - 1 && !resolved.isFile())
@@ -132,12 +132,12 @@ export function inspectWriteDestination(home: string, path: string) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       const target = resolve(current, ...segments.slice(index + 1))
       if (!contained(physicalHome, target))
-        throw new Error(`Import destination escapes the Woof home: ${path}`, { cause: error })
+        throw new Error(`Import destination escapes the woof home: ${path}`, { cause: error })
       return { target, mode: 0o600 }
     }
   }
   if (path !== 'woof.config.json' && !contained(physicalHome, current))
-    throw new Error(`Import destination escapes the Woof home: ${path}`)
+    throw new Error(`Import destination escapes the woof home: ${path}`)
   return { target: current, mode: statSync(logical).mode & 0o7777 }
 }
 
@@ -218,7 +218,7 @@ function parentDirectories(home: string, path: string) {
   const missing: string[] = []
   let current = parent
   while (current !== physicalHome) {
-    if (!contained(physicalHome, current)) throw new Error(`Import parent escapes the Woof home: ${path}`)
+    if (!contained(physicalHome, current)) throw new Error(`Import parent escapes the woof home: ${path}`)
     try {
       if (!statSync(current).isDirectory()) throw new Error(`Import parent is not a directory: ${current}`)
       break

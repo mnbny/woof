@@ -1,4 +1,4 @@
-Woof could not explain the resolution.
+woof could not explain the resolution.
 
 {{details}}
 

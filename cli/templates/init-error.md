@@ -1,4 +1,4 @@
-Woof could not create the project configuration.
+woof could not create the project configuration.
 
 {{details}}
 
