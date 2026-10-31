@@ -199,11 +199,16 @@ function metadata(token: EffectiveToken) {
   return { description: token.value.$description, tags: token.value.$tags }
 }
 
+// A string whose whole value is one reference is an alias.
+export function aliasTarget(value: string) {
+  const parts = contentParts(value)
+  const first = parts[0]
+  return parts.length === 1 && first?.kind === 'reference' ? first.path : undefined
+}
+
 export function enumerateEffectiveTokens(graph: TokenGraph) {
   return [...graph.tokens.values()].map(token => {
-    const wholeAlias = typeof token.value === 'string' ? contentParts(token.value) : []
-    const first = wholeAlias[0]
-    const alias = wholeAlias.length === 1 && first?.kind === 'reference' ? first.path : undefined
+    const alias = typeof token.value === 'string' ? aliasTarget(token.value) : undefined
     return {
       path: token.path,
       kind: alias ? 'alias' : typeof token.value === 'string' ? 'prompt' : token.value.$type,

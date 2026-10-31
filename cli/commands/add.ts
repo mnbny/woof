@@ -26,7 +26,7 @@ import {
 import { insideWoofHome, repositoryConfiguration, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader, detectCheckoutRoot } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
-import { createTokenGraph } from '../utils/tokens.ts'
+import { aliasTarget, createTokenGraph } from '../utils/tokens.ts'
 
 const TYPE_HINTS: Record<TokenType, string> = {
   prompt: 'instructions or other text',
@@ -299,6 +299,12 @@ export default defineCommand({
       const description = draft.description ?? 'none'
       const tags = draft.tags.join(', ') || 'none'
       const override = overrides ? 'yes' : 'no'
+      // Only a prompt without metadata is saved as a plain string, which is the form of an alias.
+      const target =
+        draft.type === 'prompt' && !draft.content.file && !draft.description && !draft.tags.length
+          ? aliasTarget(draft.content.exec)
+          : undefined
+      const type = target ? `alias of ${target}` : draft.type
       const project = draft.target.kind === 'project' ? ` --project ${shellQuote(draft.target.name)}` : ''
       const command = `woof get ${shellQuote(draft.path)}${project}`
       presentResult(
@@ -306,7 +312,7 @@ export default defineCommand({
           summary: `Added ${draft.path}.`,
           details: [
             `Configuration: ${file}`,
-            `Type: ${draft.type}`,
+            `Type: ${type}`,
             `Content: ${content}`,
             `Description: ${description}`,
             `Tags: ${tags}`,
@@ -319,7 +325,7 @@ export default defineCommand({
           values: {
             path: draft.path,
             file,
-            type: draft.type,
+            type,
             content,
             description,
             tags,

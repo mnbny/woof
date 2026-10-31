@@ -16,8 +16,9 @@ export function discoverResources(graph: TokenGraph, query = '') {
     path: token.path,
     description: token.description ?? '',
     tags: (token.tags ?? []).join(' '),
+    target: token.target ?? '',
   }))
-  return picoSearch(records, normalized, ['path', 'description', 'tags'], { threshold: 0.3 }).map(
+  return picoSearch(records, normalized, ['path', 'description', 'tags', 'target'], { threshold: 0.3 }).map(
     record => record.token,
   )
 }

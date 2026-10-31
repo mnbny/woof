@@ -41,4 +41,4 @@ A project token at the path of a shared token is an override. Add reports it.
 
 ## Output and exit status
 
-On success, add reports the configuration file, the type, how the content was saved, the description, the tags, whether the token is an override, and a command to check the token. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.
+On success, add reports the configuration file, the type or the target of an alias, how the content was saved, the description, the tags, whether the token is an override, and a command to check the token. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.

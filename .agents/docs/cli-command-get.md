@@ -22,7 +22,7 @@ Get is the main way to use a token. It resolves an exact address into its payloa
 
 - Get writes the payload to standard output exactly as resolved, without decoration, in both modes.
 - If the tokens of a repository project depend on woof home tokens or files, get writes one warning to standard error.
-- Each candidate shows its path, kind, description, tags, and an exact follow-up command. The follow-up command keeps the project and agent mode.
+- Each candidate shows its path, kind, description, tags, and an exact follow-up command. An alias shows its target in place of the kind. The follow-up command keeps the project and agent mode.
 - Forced search and an empty query succeed, even with no matches. An exact miss without an interactive choice exits with status 1.
 - An interrupt cancels the active scripts and exits with status 130. woof does not roll back completed script effects.
 - Other failures exit with status 1. The guidance recommends discovery, or an exact address with an explicit project.

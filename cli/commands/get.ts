@@ -32,7 +32,7 @@ function candidateText(
   return candidates
     .map(candidate => {
       const metadata = [
-        candidate.kind,
+        candidate.target ? `alias of ${candidate.target}` : candidate.kind,
         candidate.description,
         candidate.tags?.length ? `tags: ${candidate.tags.join(', ')}` : undefined,
       ]
@@ -159,7 +159,11 @@ export default defineCommand({
         options: candidates.map(candidate => ({
           value: candidate.path,
           label: candidate.path,
-          ...(candidate.description ? { hint: candidate.description } : {}),
+          ...(candidate.target
+            ? { hint: `alias of ${candidate.target}` }
+            : candidate.description
+              ? { hint: candidate.description }
+              : {}),
         })),
       })
       if (!selected) {
