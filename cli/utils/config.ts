@@ -3,7 +3,6 @@ import type { ProjectConfiguration, RootConfiguration } from './schema.ts'
 import { readFileSync } from 'node:fs'
 import * as v from 'valibot'
 
-import { getWoofHome } from './paths.ts'
 import { CURRENT_SCHEMA_VERSION, projectConfigurationSchema, rootConfigurationSchema } from './schema.ts'
 
 export type ConfigurationKind = 'root' | 'project'
@@ -203,8 +202,4 @@ export function readConfigurationDocument(file: string, kind: ConfigurationKind)
     throw new ConfigurationReadError(file, options)
   }
   return kind === 'root' ? parseConfigurationDocument(text, kind, file) : parseConfigurationDocument(text, kind, file)
-}
-
-export function readRootConfiguration(file = getWoofHome('woof.config.json')) {
-  return readConfigurationDocument(file, 'root')
 }

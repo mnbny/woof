@@ -42,6 +42,6 @@ These items are outside the product: provider installers, hosted services, publi
 - **Alias:** a string token whose whole value is one reference to another token.
 - **Effective view:** the root tokens, with the tokens of the selected project on top.
 - **Discovery:** a search over metadata only, in the effective view.
-- **Migration:** an explicit startup change to a supported legacy configuration. Migration keeps the original bytes for rollback.
+- **Migration:** an explicit startup upgrade of configuration documents to the current schema version. Migration keeps the original bytes for rollback.
 - **Export and import:** export packages a registered project as a portable archive. Import applies an archive after a review of every item.
 - **Handoff:** plain output that returns a pending decision to the caller. A handoff replaces a terminal question.

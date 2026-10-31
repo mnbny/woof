@@ -11,7 +11,6 @@ import { createTokenGraph, explainToken, splitProjectAddress } from '../utils/to
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
     project: { description: 'Select a registered project', type: 'string' },
     token: { description: 'Token address to explain', type: 'positional', required: true },
   },
@@ -23,7 +22,6 @@ export default defineCommand({
         allowPositionals: true,
         options: {
           agent: { type: 'boolean' },
-          migrate: { type: 'boolean' },
           project: { type: 'string' },
         },
       })

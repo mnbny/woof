@@ -8,7 +8,6 @@ Import applies a portable project archive to the local Woof home after an explic
 
 - One archive path.
 - An optional decisions document from an earlier handoff.
-- The migration flag, if a startup migration must run first.
 
 Inside a checkout that defines a repository project, import refuses to run.
 
@@ -16,7 +15,7 @@ Inside a checkout that defines a repository project, import refuses to run.
 
 - Import plans the archive against the local home. It applies the saved choices. It drops each choice whose context changed.
 - Human review shows a diff for each pending item, with the actions that apply. For Add as new, import asks for an address or path. For Reuse existing, import offers the matching candidates. If a choice is not valid, import reports the problem and asks again. Cancellation exits with status 130 and writes nothing.
-- Agents and callers without a terminal receive the next item and the decision document. The output includes a retry command that keeps the decisions path, the migration flag, and the agent flag. The command exits with status 1. The caller saves the document with the new choice and runs import again. If no decisions path exists yet, the retry command suggests a decisions file next to the archive.
+- Agents and callers without a terminal receive the next item and the decision document. The output includes a retry command that keeps the decisions path and the agent flag. The command exits with status 1. The caller saves the document with the new choice and runs import again. If no decisions path exists yet, the retry command suggests a decisions file next to the archive.
 
 ## Application report
 

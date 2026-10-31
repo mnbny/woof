@@ -1,7 +1,6 @@
 import * as v from 'valibot'
 
 export const CURRENT_SCHEMA_VERSION = 2
-export const LEGACY_SCHEMA_VERSION = 1
 
 export type PromptResource = {
   $type: 'prompt'

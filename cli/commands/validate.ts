@@ -11,7 +11,6 @@ import { createTokenGraph, splitProjectAddress, validateTokenGraph } from '../ut
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
     project: { description: 'Select a registered project', type: 'string' },
     token: { description: 'Optional token graph to validate', type: 'positional', required: false },
   },
@@ -23,7 +22,6 @@ export default defineCommand({
         allowPositionals: true,
         options: {
           agent: { type: 'boolean' },
-          migrate: { type: 'boolean' },
           project: { type: 'string' },
         },
       })
@@ -86,8 +84,7 @@ export default defineCommand({
       presentError({
         summary: 'Woof validation failed.',
         details: error instanceof Error ? error.message : String(error),
-        recovery:
-          'Review the reported data, source or reference failure. Correct it or use --migrate for a supported legacy configuration, then retry.',
+        recovery: 'Review the reported data, source or reference failure. Correct it, then retry.',
       })
       process.exitCode = 1
     }

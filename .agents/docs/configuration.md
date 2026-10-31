@@ -48,6 +48,6 @@ These checks parse and validate the documents only. They do not read prompt or s
 
 If a version is missing, newer, malformed, or mismatched, the document fails with guidance for that source. Woof never guesses or stamps a version.
 
-Migration is explicit. With the migration flag, Woof migrates supported pending documents before the requested command runs. Current documents ignore the flag. The only supported legacy form is the original minimal root scaffold.
+Migration is explicit. With the migration flag, Woof migrates supported pending documents before the requested command runs. Current documents ignore the flag. Each migration upgrades a document from one schema version to the next version. No migrations exist yet.
 
 During migration, Woof locks each target and stages the replacements. Woof checks again for concurrent changes and keeps the physical targets and modes. After an ordinary failure, Woof restores the originals. If restoration fails, recovery copies keep the original bytes. Woof reports completed migrations on standard error.

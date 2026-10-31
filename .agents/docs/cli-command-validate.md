@@ -17,4 +17,4 @@ Validate takes an optional token address. It also takes an optional registered p
 
 ## Output and exit status
 
-On success, validate reports the number of inspected definitions, the selection, the project, and the scope. Validation stops at the first failure. Validate reports the source or the reference chain of the failure and exits with status 1. For a configuration failure, the guidance recommends a correction or an explicit migration.
+On success, validate reports the number of inspected definitions, the selection, the project, and the scope. Validation stops at the first failure. Validate reports the source or the reference chain of the failure and exits with status 1. For a configuration failure, the guidance recommends a correction.

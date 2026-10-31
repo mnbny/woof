@@ -50,7 +50,6 @@ function candidateText(
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
     project: { description: 'Select a registered project', type: 'string' },
     query: { description: 'Exact token address or discovery terms', type: 'positional', required: false },
     search: { description: 'Discover metadata without executing a match', type: 'boolean' },
@@ -65,7 +64,6 @@ export default defineCommand({
         allowPositionals: true,
         options: {
           agent: { type: 'boolean' },
-          migrate: { type: 'boolean' },
           project: { type: 'string' },
           search: { type: 'boolean' },
         },

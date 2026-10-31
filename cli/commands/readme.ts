@@ -38,7 +38,6 @@ function findReadme() {
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
   },
   meta: { description: 'Print the user guide. Agents: run this first to learn what Woof can do', name: 'readme' },
   run({ rawArgs }) {
@@ -46,7 +45,7 @@ export default defineCommand({
       const { positionals } = parseArgs({
         args: rawArgs,
         allowPositionals: true,
-        options: { agent: { type: 'boolean' }, migrate: { type: 'boolean' } },
+        options: { agent: { type: 'boolean' } },
       })
       if (positionals.length) throw new Error('Readme does not accept positional arguments.')
       const readme = findReadme()

@@ -8,7 +8,6 @@ import { basename, dirname, join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 
 import { validateConfigurationDocument } from './config.ts'
-import { getWoofHome } from './paths.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
 
 export class ConfigurationMigrationError extends Error {
@@ -21,42 +20,29 @@ export class ConfigurationMigrationError extends Error {
 export type ConfigurationMigrationInput = { file: string; kind?: ConfigurationKind }
 export type PreparedConfigurationMigration = ReturnType<typeof prepareConfigurationMigration>
 
-const MIGRATIONS: Record<string, (config: Record<string, unknown>) => Record<string, unknown>> = {
-  'legacy:1': config => {
-    if (Object.keys(config).length !== 1 || config['schemaVersion'] !== 1)
-      throw new Error('The legacy scaffold must contain only schemaVersion:1; its content was not guessed or migrated.')
-    return { $schemaVersion: CURRENT_SCHEMA_VERSION }
-  },
-}
+// Each key upgrades that schema version to the next.
+const MIGRATIONS: Record<number, (config: Record<string, unknown>) => Record<string, unknown>> = {}
 
 function isDictionary(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function identifyVersion(config: Record<string, unknown>) {
-  const product = Object.prototype.hasOwnProperty.call(config, '$schemaVersion')
-  const legacy = Object.prototype.hasOwnProperty.call(config, 'schemaVersion')
-  if (product === legacy)
-    throw new Error(
-      'Configuration must have exactly one recognized version field; no source version was inferred for migration.',
-    )
-  const family = product ? 'product' : 'legacy'
-  const field = product ? '$schemaVersion' : 'schemaVersion'
-  const version = config[field]
+function readVersion(config: Record<string, unknown>) {
+  const version = config['$schemaVersion']
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1)
-    throw new Error(`${field} must be a positive integer; no source version was inferred for migration.`)
-  return { family, field, version }
+    throw new Error('$schemaVersion must be a positive integer; no source version was inferred for migration.')
+  return version
 }
 
-function unavailableMigration(file: string, field: string, version: number) {
+function unavailableMigration(file: string, version: number) {
   if (version > CURRENT_SCHEMA_VERSION)
     return new ConfigurationMigrationError(
       file,
-      `${field}:${version} is newer than this CLI supports. Install a compatible Woof release; no downgrade or guessed migration was attempted.`,
+      `$schemaVersion:${version} is newer than this CLI supports. Install a compatible Woof release; no downgrade or guessed migration was attempted.`,
     )
   return new ConfigurationMigrationError(
     file,
-    `No migration is available from ${field}:${version} to $schemaVersion:${CURRENT_SCHEMA_VERSION}. Use a compatible release or restore a supported configuration.`,
+    `No migration is available from $schemaVersion:${version} to $schemaVersion:${CURRENT_SCHEMA_VERSION}. Use a compatible release or restore a supported configuration.`,
   )
 }
 
@@ -102,17 +88,14 @@ function prepareDocument({ file, kind = 'root' }: ConfigurationMigrationInput) {
     }
     if (!isDictionary(parsed)) throw new ConfigurationMigrationError(target, 'Configuration must be an object.')
 
-    const initial = identifyVersion(parsed)
-    if (initial.family === 'legacy' && kind !== 'root')
-      throw unavailableMigration(target, initial.field, initial.version)
-
+    const initial = readVersion(parsed)
     let config = parsed
     let current = initial
-    while (current.family !== 'product' || current.version !== CURRENT_SCHEMA_VERSION) {
-      const migrate = MIGRATIONS[`${current.family}:${current.version}`]
-      if (!migrate) throw unavailableMigration(target, current.field, current.version)
+    while (current !== CURRENT_SCHEMA_VERSION) {
+      const migrate = MIGRATIONS[current]
+      if (!migrate) throw unavailableMigration(target, current)
       config = migrate(config)
-      current = identifyVersion(config)
+      current = readVersion(config)
     }
 
     const migrated: RootConfiguration | ProjectConfiguration = validateConfigurationDocument(config, kind, target)
@@ -122,8 +105,8 @@ function prepareDocument({ file, kind = 'root' }: ConfigurationMigrationInput) {
       kind,
       source,
       mode: statSync(target).mode,
-      from: `${initial.field}:${initial.version}`,
-      changed: initial.family !== 'product' || initial.version !== CURRENT_SCHEMA_VERSION,
+      from: `$schemaVersion:${initial}`,
+      changed: initial !== CURRENT_SCHEMA_VERSION,
       migrated,
     }
   } catch (error) {
@@ -252,16 +235,4 @@ export async function applyConfigurationMigration(plan: PreparedConfigurationMig
       }))
     },
   )
-}
-
-export async function migrateConfigurationDocuments(documents: ConfigurationMigrationInput[]) {
-  return applyConfigurationMigration(prepareConfigurationMigration(documents))
-}
-
-export async function migrateConfigurationDocument(
-  file = getWoofHome('woof.config.json'),
-  kind: ConfigurationKind = 'root',
-) {
-  const [migrated] = await migrateConfigurationDocuments([{ file, kind }])
-  return migrated
 }

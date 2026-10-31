@@ -178,7 +178,6 @@ export default defineCommand({
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
     archive: { description: 'Project ZIP archive to import', type: 'positional', required: true },
     decisions: { description: 'Reviewed import choices JSON', type: 'string' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
   },
   meta: { description: 'Review and import a portable project archive', name: 'import' },
   async run({ rawArgs }) {
@@ -189,7 +188,6 @@ export default defineCommand({
         options: {
           agent: { type: 'boolean' },
           decisions: { type: 'string' },
-          migrate: { type: 'boolean' },
         },
       })
       if (positionals.length !== 1) throw new Error('Import requires exactly one ARCHIVE path.')
@@ -197,7 +195,6 @@ export default defineCommand({
       const archivePath = resolve(cwd, positionals[0]!)
       const decisionsPath = values.decisions ? resolve(cwd, values.decisions) : undefined
       const agent = values.agent === true || Boolean(isAgent())
-      const migration = values.migrate === true ? ' --migrate' : ''
       const archive = readFileSync(archivePath)
       assertImportContext(cwd)
 
@@ -254,7 +251,7 @@ export default defineCommand({
           presentConflict({
             summary: 'Import requires an explicit decision for the next item.',
             details: JSON.stringify(decisionDocument(plan, choices, reviewed.issues, item, invalidated), null, 2),
-            recovery: `Set choices[next.id] to "keep", "take", {"action":"add","address":"..."}, or {"action":"reuse","address":"..."} as applicable. Save the file and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration}${agent ? ' --agent' : ''}.`,
+            recovery: `Set choices[next.id] to "keep", "take", {"action":"add","address":"..."}, or {"action":"reuse","address":"..."} as applicable. Save the file and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${agent ? ' --agent' : ''}.`,
           })
           process.exitCode = 1
           return

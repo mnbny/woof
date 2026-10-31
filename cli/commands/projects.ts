@@ -16,7 +16,6 @@ function metadataPaths(paths: string[] | undefined) {
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
   },
   meta: { description: 'List registered projects and their paths', name: 'projects' },
   async run({ rawArgs }) {
@@ -24,7 +23,7 @@ export default defineCommand({
       const { positionals } = parseArgs({
         args: rawArgs,
         allowPositionals: true,
-        options: { agent: { type: 'boolean' }, migrate: { type: 'boolean' } },
+        options: { agent: { type: 'boolean' } },
       })
       if (positionals.length) throw new Error('Projects does not accept positional arguments.')
 
