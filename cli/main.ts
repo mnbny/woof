@@ -4,6 +4,7 @@ import { defineCommand, runMain } from 'citty'
 
 import manifest from '../package.json' with { type: 'json' }
 import add from './commands/add.ts'
+import edit from './commands/edit.ts'
 import explain from './commands/explain.ts'
 import exportProject from './commands/export.ts'
 import get from './commands/get.ts'
@@ -29,6 +30,7 @@ process.once('exit', () => {
 
 const subCommands: SubCommandsDef = {
   add,
+  edit,
   explain,
   export: exportProject,
   get,
