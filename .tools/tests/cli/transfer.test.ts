@@ -699,3 +699,63 @@ test('reopens reuse when another choice replaces the reused token', async ({ cli
   expect(await run(cli, home, ['get', 'use', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
   expect(await run(cli, home, ['get', 'matching', '--agent'])).toMatchObject({ status: 0, stdout: 'B' })
 })
+
+test('uses a distinct missing destination for an added file-backed token', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'missing-add-home')
+  await config(home, { $schemaVersion: 2, prompt: 'local', $projects: {} })
+  await put(join(home, 'original.md'), 'existing unrelated content')
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, prompt: '<root>/original.md', $projects: { demo: {} } }),
+    [],
+  )
+  const path = join(directory, 'missing-add.zip')
+  await writeFile(path, archive)
+  let retried = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'missing-add-decisions.json'), item => {
+    if (item.kind === 'token' && item.path === 'prompt') return { action: 'add', address: 'prompt_variant' }
+    if (item.kind === 'file') {
+      expect(item.requiredNewPath).toBe(true)
+      expect(item.notice).toContain('unavailable')
+      if (!retried) {
+        retried = true
+        return { action: 'add', address: 'original.md' }
+      }
+      return { action: 'add', address: 'missing/new.md' }
+    }
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8')).prompt_variant).toBe(
+    '<root>/missing/new.md',
+  )
+  expect(await readFile(join(home, 'original.md'), 'utf8')).toBe('existing unrelated content')
+  expect(fs.existsSync(join(home, 'missing/new.md'))).toBe(false)
+  expect(result.stderr).toContain('missing/new.md')
+})
+
+test('saves a reused project alias when its source cycle already existed', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'existing-reuse-cycle-home')
+  await config(home, { $schemaVersion: 2, matchroot: 'A', matchproject: '{{matchroot}}', $projects: { demo: {} } })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, x: 'A', agents: '{{x}}', $projects: { demo: { x: '{{x}}' } } }),
+    [],
+  )
+  const path = join(directory, 'existing-reuse-cycle.zip')
+  await writeFile(path, archive)
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'existing-reuse-cycle-decisions.json'),
+    item => {
+      if (item.kind === 'token' && item.path === 'x') return { action: 'reuse', address: 'matchroot' }
+      if (item.kind === 'project-token' && item.path === 'x') return { action: 'reuse', address: 'matchproject' }
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(result.stdout).toContain('Imported demo')
+  expect(result.stderr).toContain('Circular token reference')
+  expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
+  expect((await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).status).toBe(1)
+})

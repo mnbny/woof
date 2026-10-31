@@ -569,7 +569,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       }
     }
     const existing = reference.startsWith('<root>/') ? snapshot(plan, originalPath).data : undefined
-    const forcedNew = Boolean(bytes && (rewritten || requirement.added))
+    const forcedNew = requirement.added || Boolean(bytes && rewritten)
     if (bytes && existing && equalBytes(bytes, existing) && !forcedNew) {
       paths.set(key, reference)
       continue
@@ -578,7 +578,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     item.path = originalPath
     item.requiredNewPath = forcedNew
     if (!bytes)
-      item.notice = `Incoming file ${reference} is unavailable; keeping the reference may produce a validation finding.`
+      item.notice = `Incoming file ${reference} is unavailable; ${forcedNew ? 'choose a distinct destination' : 'keeping the reference'} will produce a validation finding.`
     else if (forcedNew) item.notice = 'Choose a distinct destination for the imported file.'
     if (existing)
       item.notice = `${item.notice ? `${item.notice} ` : ''}Taking replaces this file for every existing token that uses it.`
@@ -630,13 +630,22 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       paths.set(key, reference)
       continue
     }
-    if (!bytes) throw new Error(`File ${reference} is unavailable and cannot be taken or reused.`)
+    if (!bytes) {
+      if (forcedNew && choice && typeof choice === 'object' && choice.action === 'add') {
+        const target = safePath(choice.address.replace(/^<root>\//, ''))
+        if (target === originalPath || snapshot(plan, target).data)
+          throw new Error(`Choose a distinct unused file destination instead of ${target}.`)
+        paths.set(key, `<root>/${target}`)
+        continue
+      }
+      throw new Error(`File ${reference} is unavailable and cannot be taken or reused.`)
+    }
     let target = originalPath
     if (choice && typeof choice === 'object') {
       target = safePath(choice.address.startsWith('<root>/') ? choice.address.slice('<root>/'.length) : choice.address)
       const destination = snapshot(plan, target).data
-      if (choice.action === 'add' && destination)
-        throw new Error(`File destination ${target} is occupied; choose another path.`)
+      if (choice.action === 'add' && (destination || (forcedNew && target === originalPath)))
+        throw new Error(`Choose a distinct unused file destination instead of ${target}.`)
       if (choice.action === 'reuse' && (!destination || !equalBytes(destination, bytes)))
         throw new Error(`File ${target} is no longer identical; review reuse again.`)
       if (choice.action === 'reuse') {
@@ -686,6 +695,24 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       }
       return original.data
     }
+    const sourceRoot = flattenImportTokens(plan.bundle.configuration)
+    const sourceProject = flattenImportTokens(plan.bundle.project)
+    const sourceHasCycle = (start: string) => {
+      const seen = new Set<string>()
+      const visit = (path: string): boolean => {
+        if (path === start && seen.size) return true
+        if (seen.has(path)) return false
+        seen.add(path)
+        const value = sourceProject.get(path) ?? sourceRoot.get(path)
+        if (!value || (typeof value !== 'string' && value.$type !== 'prompt')) return false
+        const source = typeof value === 'string' ? value : value.$exec
+        const file = source.startsWith('<root>/') || source.startsWith('<repo>/')
+        const bytes = file ? readIncoming(plan, source) : undefined
+        if (file && !bytes) return false
+        return tokenReferencePaths(bytes ? new TextDecoder().decode(bytes) : source).some(visit)
+      }
+      return visit(start)
+    }
     for (const check of described.tokenChecks) {
       const expected = importTokenFingerprint(check.value, ref => readIncoming(plan, ref), described.mappings)
       check.item.candidates = [...check.candidates.entries()]
@@ -730,7 +757,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
           const content = bytes ? new TextDecoder().decode(bytes) : source
           return tokenReferencePaths(content).some(reachesBinding)
         }
-        if (reachesBinding(reuse.address)) {
+        if (reachesBinding(reuse.address) && !sourceHasCycle(reuse.sourcePath)) {
           reuse.item.invalid = true
           reuse.item.notice = `Reuse would make the project binding ${reuse.binding} reference itself; choose a different mapping.`
           const base = issues.find(item => item.id === conflict('token', reuse.sourcePath!, undefined, undefined).id)

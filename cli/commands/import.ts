@@ -266,7 +266,7 @@ export default defineCommand({
                 ...(item.incoming !== undefined ? [{ value: 'take', label: 'Take incoming' }] : []),
               ]
             : []),
-          ...(item.incoming !== undefined && item.path !== '$metadata' && !item.keepTakeOnly
+          ...((item.incoming !== undefined || item.requiredNewPath) && item.path !== '$metadata' && !item.keepTakeOnly
             ? [{ value: 'add', label: 'Add as new' }]
             : []),
           ...(item.candidates?.length && !item.keepTakeOnly ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
