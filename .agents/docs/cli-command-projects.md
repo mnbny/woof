@@ -12,8 +12,8 @@ Projects takes no arguments other than the global flags. It does not accept a pr
 
 Projects reports these items:
 
-- The selection kind for the current directory, the current scope, and the matching candidates. Projects marks an unnamed repository scope as not exportable.
+- The selection kind for the current directory, the current scope, and the matching candidates. Projects marks an unnamed repository scope as not exportable. For a repository scope, projects also reports the repository configuration file. Projects reports these items also when no registered projects exist.
 - For each registered project: inline or referenced storage, the configuration file, the resource root, checkout paths with the home directory expanded, and worktree patterns.
-- If no registered projects exist, guidance to register a project in the home registry or to define a repository project.
+- If no registered projects exist, guidance to create a project with init.
 
 Projects lists ambiguous matches without a prompt. It persists no selection. If a configuration cannot load, projects exits with status 1.

@@ -37,6 +37,12 @@ export default defineCommand({
           : context.project.name
         : 'root only'
       const candidates = context.candidates.map(candidate => candidate.name).join(', ') || 'none'
+      const current = [
+        `Selection: ${context.selection}`,
+        `Current scope: ${scope}`,
+        ...(context.project?.kind === 'repository' ? [`Repository configuration: ${context.project.source.file}`] : []),
+        `Matching candidates: ${candidates}`,
+      ].join('\n')
       const list = projects
         .flatMap(project => [
           `${project.name} [${project.inline ? 'inline' : 'referenced'}]`,
@@ -51,25 +57,16 @@ export default defineCommand({
       presentResult(
         {
           summary: projects.length ? `${projects.length} registered ${projectsNoun}` : 'No registered projects',
-          details: projects.length
-            ? `Selection: ${context.selection}\nCurrent scope: ${scope}\nMatching candidates: ${candidates}\n\n${list}`
-            : 'Add a registered project to the home registry or define an unnamed project in a repository configuration.',
+          details: projects.length ? `${current}\n\n${list}` : `${current}\n\nTo create a project, run woof init.`,
           recovery:
             'Selection is not persisted. Unnamed repository scope is distinct from named, exportable registry entries.',
         },
         projects.length
           ? {
               template: 'projects-result',
-              values: {
-                count: projects.length,
-                projects: projectsNoun,
-                selection: context.selection,
-                scope,
-                candidates,
-                list,
-              },
+              values: { count: projects.length, projects: projectsNoun, current, list },
             }
-          : { template: 'projects-empty' },
+          : { template: 'projects-empty', values: { current } },
       )
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)

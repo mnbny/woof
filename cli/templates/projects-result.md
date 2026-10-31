@@ -1,8 +1,6 @@
 {{count}} registered {{projects}}
 
-Selection: {{selection}}
-Current scope: {{scope}}
-Matching candidates: {{candidates}}
+{{current}}
 
 {{list}}
 

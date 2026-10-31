@@ -1,6 +1,8 @@
 No registered projects
 
-Add a registered project to the home registry or define an unnamed project in a repository configuration.
+{{current}}
+
+To create a project, run woof init --agent.
 
 Use only the result relevant to the current request. Preserve the user's task and scope.
 
