@@ -131,7 +131,7 @@ function contentParts(content: string): ContentPart[] {
 }
 
 export function splitProjectAddress(address: string) {
-  if (!address.startsWith('projects.')) {
+  if (!address.startsWith('$projects.')) {
     if (!ADDRESS.test(address)) throw new TokenResolutionError(`Invalid token address: ${address}`)
     return { path: address }
   }
