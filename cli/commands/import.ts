@@ -11,10 +11,20 @@ import { parseArgs } from 'node:util'
 import { isAgent } from '../utils/agent.ts'
 import { shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
-import { planImport, reviewImport } from '../utils/import-plan.ts'
-import { chooseOption, presentConflict, presentError, presentResult } from '../utils/presentation.ts'
-import { detectCheckoutRoot } from '../utils/resources.ts'
+import { importReviewSources, planImport, reviewImport, verifyImportReviewSources } from '../utils/import-plan.ts'
+import { getWoofHome } from '../utils/paths.ts'
+import {
+  chooseOption,
+  enterText,
+  presentConflict,
+  presentError,
+  presentResult,
+  presentWarning,
+} from '../utils/presentation.ts'
+import { selectProjectContext } from '../utils/projects.ts'
+import { createResourceLoader, detectCheckoutRoot } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
+import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`
@@ -49,64 +59,93 @@ function conflictDiff(conflict: ImportConflict) {
   })
 }
 
+type DecisionDocument = {
+  archive: string
+  choices: Record<string, ImportChoice>
+  next?: { id: string }
+  conflicts: Pick<ImportConflict, 'id' | 'kind' | 'path' | 'existingDigest' | 'incomingDigest'>[]
+  sources: ReturnType<typeof importReviewSources>
+}
+
 function decisionDocument(
   plan: ReturnType<typeof planImport>,
   choices: Readonly<Record<string, ImportChoice>>,
+  issues: ImportConflict[],
   next?: ImportConflict,
+  invalidated: string[] = [],
 ) {
+  const metadata = (item: ImportConflict) => ({
+    id: item.id,
+    kind: item.kind,
+    path: item.path,
+    existingDigest: item.existingDigest,
+    incomingDigest: item.incomingDigest,
+    ...(item.notice ? { notice: item.notice } : {}),
+    ...(item.candidates?.length ? { candidates: item.candidates, candidateDetails: item.candidateDetails } : {}),
+    ...(item.requiredNewPath ? { requiredNewPath: true } : {}),
+  })
   return {
     archive: plan.archiveDigest,
+    sources: importReviewSources(plan),
     choices: { ...choices },
-    next: next
-      ? {
-          id: next.id,
-          kind: next.kind,
-          path: next.path,
-          existingDigest: next.existingDigest,
-          incomingDigest: next.incomingDigest,
-        }
-      : undefined,
-    conflicts: plan.conflicts.map(conflict => ({
-      id: conflict.id,
-      kind: conflict.kind,
-      path: conflict.path,
-      existingDigest: conflict.existingDigest,
-      incomingDigest: conflict.incomingDigest,
-    })),
+    next: next ? metadata(next) : undefined,
+    conflicts: issues.map(metadata),
+    ...(invalidated.length ? { invalidated } : {}),
   }
 }
 
-function readDecisions(file: string, plan: ReturnType<typeof planImport>) {
+function readDecisions(file: string, plan: ReturnType<typeof planImport>): DecisionDocument {
   const value: unknown = JSON.parse(readFileSync(file, 'utf8'))
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Decisions must be a JSON object.')
-  const document = value as Record<string, unknown>
-  if (document['archive'] !== plan.archiveDigest)
+  const document = value as DecisionDocument
+  if (document.archive !== plan.archiveDigest)
     throw new Error('Decisions belong to a different archive; review this archive again.')
-  if (!Array.isArray(document['conflicts'])) throw new Error('Decisions are missing reviewed conflict metadata.')
-  const reviewed = document['conflicts']
-  if (reviewed.length !== plan.conflicts.length)
-    throw new Error('Decisions contain a different conflict set; review this archive again.')
-  for (let index = 0; index < plan.conflicts.length; index += 1) {
-    const expected = plan.conflicts[index]!
-    const actual: unknown = reviewed[index]
-    if (!actual || typeof actual !== 'object' || Array.isArray(actual))
-      throw new Error('Reviewed conflict entries must be objects.')
-    const entry = actual as Record<string, unknown>
-    if (
-      entry['id'] !== expected.id ||
-      entry['kind'] !== expected.kind ||
-      entry['path'] !== expected.path ||
-      entry['existingDigest'] !== expected.existingDigest ||
-      entry['incomingDigest'] !== expected.incomingDigest
-    )
-      throw new Error(`Reviewed conflict ${expected.path} is stale; review this archive again.`)
+  if (
+    !Array.isArray(document.conflicts) ||
+    !document.choices ||
+    typeof document.choices !== 'object' ||
+    Array.isArray(document.choices)
+  )
+    throw new Error('Decisions require reviewed conflicts and a choices object.')
+  verifyImportReviewSources(plan, document.sources)
+  const reviewed = new Set(document.conflicts.map(item => item.id))
+  for (const id of Object.keys(document.choices))
+    if (!reviewed.has(id)) throw new Error(`Decision ${id} was not in the reviewed conflict list.`)
+  return document
+}
+
+function validateImportedCatalog(cwd: string) {
+  const findings: string[] = []
+  const loader = createResourceLoader({ cwd })
+  let root: ReturnType<typeof loader.loadRootConfiguration>
+  try {
+    root = loader.loadRootConfiguration()
+  } catch (error) {
+    return [
+      `Could not read ${getWoofHome('woof.config.json')}: ${String(error)}. Repair this configuration before running Woof again.`,
+    ]
   }
-  const choices = document['choices']
-  if (!choices || typeof choices !== 'object' || Array.isArray(choices))
-    throw new Error('Decisions require a choices object containing keep/take values.')
-  for (const choice of Object.values(choices))
-    if (choice !== 'keep' && choice !== 'take') throw new Error('Every import choice must be keep or take.')
-  return choices as Record<string, ImportChoice>
+  const inspect = (name?: string) => {
+    const label = name ? `project ${name}` : 'shared tokens'
+    try {
+      const context = name
+        ? selectProjectContext({ project: name, cwd, loader })
+        : { root, candidates: [], checkoutRoot: loader.repoRoot, selection: 'root' as const }
+      const graph = createTokenGraph(context)
+      for (const path of graph.tokens.keys()) {
+        try {
+          validateTokenGraph(graph, path)
+        } catch (error) {
+          findings.push(`${label}, ${path}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+    } catch (error) {
+      findings.push(`${label}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  inspect()
+  for (const name of Object.keys(root.data.$projects ?? {})) inspect(name)
+  return findings
 }
 
 function assertImportContext(cwd: string) {
@@ -162,66 +201,157 @@ export default defineCommand({
       assertImportContext(cwd)
 
       const plan = planImport(archive, { cwd })
-      let choices: Record<string, ImportChoice> = {}
-      if (decisionsPath) choices = readDecisions(decisionsPath, plan)
-      for (const conflict of plan.conflicts) {
-        if (decisionsPath) break
+      const prior = decisionsPath ? readDecisions(decisionsPath, plan) : undefined
+      const choices: Record<string, ImportChoice> = { ...(prior?.choices ?? {}) }
+      let recorded = prior?.conflicts ?? []
+      const invalidated: string[] = []
+      let reviewed: ReturnType<typeof reviewImport>
+      try {
+        reviewed = reviewImport(plan, choices)
+      } catch (error) {
+        const id = prior?.next?.id
+        if (!id || !choices[id]) throw error
+        delete choices[id]
+        invalidated.push(
+          `${recorded.find(item => item.id === id)?.path ?? id}: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        reviewed = reviewImport(plan, choices)
+      }
+      for (;;) {
+        const changed = Object.keys(choices).filter(id => {
+          const before = recorded.find(item => item.id === id)
+          const now = reviewed.issues.find(item => item.id === id)
+          if (now?.invalid) return true
+          if (id === prior?.next?.id) return false
+          return (
+            !before ||
+            !now ||
+            before.path !== now.path ||
+            before.existingDigest !== now.existingDigest ||
+            before.incomingDigest !== now.incomingDigest
+          )
+        })
+        if (!changed.length) break
+        for (const id of changed) {
+          invalidated.push(recorded.find(item => item.id === id)?.path ?? id)
+          delete choices[id]
+        }
+        reviewed = reviewImport(plan, choices)
+      }
+      for (;;) {
+        if (reviewed.status === 'ready') break
+        const item = reviewed.next
         presentConflict({
-          summary: `Review ${conflict.kind} ${conflict.path} (${plan.conflicts.indexOf(conflict) + 1}/${plan.conflicts.length})`,
-          details: conflictDiff(conflict),
-          recovery: 'Choose keep-existing or take-incoming. No files change until every conflict is resolved.',
+          summary: `Review ${item.kind} ${item.path}`,
+          details: `${conflictDiff(item)}${item.notice ? `\n${item.notice}` : ''}${item.candidates?.length ? `\nReusable (existing metadata is retained): ${JSON.stringify(item.candidateDetails ?? item.candidates)}` : ''}${invalidated.length ? `\nEarlier decisions need review: ${invalidated.join(', ')}` : ''}`,
+          recovery: 'Choose explicitly. No import files change until every item is reviewed.',
         })
         if (agent || !isTTY()) {
           const suggested = decisionsPath ?? `${archivePath}.decisions.json`
           presentConflict({
-            summary:
-              'Import requires an explicit decisions handoff; add keep-existing or take-incoming for the next conflict.',
-            details: JSON.stringify(decisionDocument(plan, choices, conflict), null, 2),
-            recovery: `Save the reviewed choices and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration}${agent ? ' --agent' : ''}.`,
+            summary: 'Import requires an explicit decision for the next item.',
+            details: JSON.stringify(decisionDocument(plan, choices, reviewed.issues, item, invalidated), null, 2),
+            recovery: `Set choices[next.id] to "keep", "take", {"action":"add","address":"..."}, or {"action":"reuse","address":"..."} as applicable. Save the file and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration}${agent ? ' --agent' : ''}.`,
           })
           process.exitCode = 1
           return
         }
-        const selected = await chooseOption({
-          message: `${conflict.path}: choose the value to retain`,
-          options: [
-            { value: 'keep', label: 'Keep existing' },
-            { value: 'take', label: 'Take incoming' },
-          ],
-        })
+        const options = [
+          ...(!item.requiredNewPath
+            ? [
+                { value: 'keep', label: 'Keep existing' },
+                ...(item.incoming !== undefined ? [{ value: 'take', label: 'Take incoming' }] : []),
+              ]
+            : []),
+          ...(item.incoming !== undefined && item.path !== '$metadata' ? [{ value: 'add', label: 'Add as new' }] : []),
+          ...(item.candidates?.length && !item.requiredNewPath ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
+        ]
+        const selected = await chooseOption({ message: `${item.path}: choose an action`, options })
         if (!selected) {
           process.exitCode = 130
           return
         }
-        if (selected !== 'keep' && selected !== 'take') throw new Error(`Unsupported import choice: ${selected}`)
-        choices[conflict.id] = selected
-      }
-
-      const reviewed = reviewImport(plan, choices)
-      if (reviewed.status === 'incomplete') {
-        presentConflict({
-          summary: `Import review is incomplete; ${reviewed.remaining} conflict(s) remain.`,
-          details: `${conflictDiff(reviewed.next)}\n${JSON.stringify(decisionDocument(plan, choices, reviewed.next), null, 2)}`,
-          recovery: `Complete every choice and rerun woof import ${shellQuote(archivePath)}${decisionsPath ? ` --decisions ${shellQuote(decisionsPath)}` : ''}${migration}${agent ? ' --agent' : ''}. No import was applied.`,
+        let choice: ImportChoice
+        if (selected === 'keep' || selected === 'take') choice = selected
+        else if (selected === 'add') {
+          const address = await enterText(
+            item.kind === 'token' || (item.kind === 'project-token' && item.path !== '$metadata')
+              ? 'Enter an unused token address'
+              : 'Enter an unused path under Woof home',
+          )
+          if (!address) {
+            process.exitCode = 130
+            return
+          }
+          choice = { action: 'add', address }
+        } else if (selected === 'reuse') {
+          const address = await chooseOption({
+            message: 'Select the identical existing item',
+            options: (item.candidates ?? []).map(value => ({ value, label: value })),
+          })
+          if (!address) {
+            process.exitCode = 130
+            return
+          }
+          choice = { action: 'reuse', address }
+        } else throw new Error(`Unsupported import choice: ${selected}`)
+        recorded = reviewed.issues
+        choices[item.id] = choice
+        try {
+          reviewed = reviewImport(plan, choices)
+        } catch (error) {
+          delete choices[item.id]
+          presentWarning(error instanceof Error ? error.message : String(error))
+          reviewed = reviewImport(plan, choices)
+          continue
+        }
+        const changed = Object.keys(choices).filter(id => {
+          const before = recorded.find(entry => entry.id === id)
+          const now = reviewed.issues.find(entry => entry.id === id)
+          if (now?.invalid) return true
+          if (id === item.id) return false
+          return (
+            !before ||
+            !now ||
+            before.path !== now.path ||
+            before.existingDigest !== now.existingDigest ||
+            before.incomingDigest !== now.incomingDigest
+          )
         })
-        process.exitCode = 1
-        return
+        for (const id of changed) {
+          invalidated.push(recorded.find(entry => entry.id === id)?.path ?? id)
+          delete choices[id]
+        }
+        if (changed.length) reviewed = reviewImport(plan, choices)
       }
 
       const result = applyImport(reviewed.candidate)
-      const deferred = [
-        ...result.deferredRequirements,
-        ...result.deferredProjects.map(name => `project configuration ${name}`),
-      ]
+      let findings: string[]
+      try {
+        findings = validateImportedCatalog(cwd)
+      } catch (error) {
+        findings = [`Validation could not finish: ${error instanceof Error ? error.message : String(error)}`]
+      }
       presentResult({
         summary: result.completed.length
           ? `Imported ${plan.bundle.projectName} without executing scripts.`
           : 'Import review passed; no files needed changes.',
-        details: outcome(result),
-        recovery: deferred.length
-          ? `Checkout resources require normal validation in the target checkout: woof validate --project ${shellQuote(plan.bundle.projectName)}. Deferred: ${deferred.join(', ')}`
-          : 'All selected configuration and resources passed final validation before application.',
+        details: `${outcome(result)}${invalidated.length ? `\nRechecked decisions that no longer required a choice: ${invalidated.join(', ')}` : ''}`,
+        recovery: findings.length
+          ? 'Import completed. Review the separate validation findings; do not repeat the import.'
+          : 'The imported catalog passed post-import validation.',
       })
+      if (findings.length) {
+        const configurationBroken = findings.some(finding =>
+          /Could not parse configuration|Invalid configuration|Could not read configuration|requires an explicit \$schemaVersion|unsupported \$schemaVersion/.test(
+            finding,
+          ),
+        )
+        const recovery = configurationBroken
+          ? 'Repair the configuration files named above before running Woof again.'
+          : `Review the reported tokens or run woof validate --project ${shellQuote(plan.bundle.projectName)}.`
+        presentWarning(`Import completed, but validation found:\n${findings.join('\n')}\n${recovery}`)
+      }
     } catch (error) {
       presentError({
         summary: 'Woof could not complete the import.',

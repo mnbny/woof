@@ -25,6 +25,7 @@ type Cli = {
 }
 
 function run(cli: Cli, home: string, args: string[]) {
+  assert(home.includes('woof-test-'), 'WOOF_HOME must belong to the test fixture')
   return cli.run(process.execPath, [cli.entry, ...args], cli.project, {
     WOOF_HOME: home,
     NO_COLOR: '1',
@@ -45,17 +46,65 @@ function handoff(output: string) {
   assert(match, output)
   return JSON.parse(match[0]) as {
     archive: string
-    choices: Record<string, 'keep' | 'take'>
-    next?: { id: string }
+    choices: Record<string, 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }>
+    next?: { id: string; kind: string; path: string; notice?: string; requiredNewPath?: boolean; candidates?: string[] }
+    invalidated?: string[]
     conflicts: { id: string; kind: string; path: string }[]
   }
 }
 
 function ready(home: string, archive: Uint8Array, cwd: string) {
   const plan = planImport(archive, { home, cwd })
-  const reviewed = reviewImport(plan, Object.fromEntries(plan.conflicts.map(item => [item.id, 'take' as const])))
-  assert(reviewed.status === 'ready')
-  return reviewed.candidate
+  const choices: Record<string, 'take'> = {}
+  for (let count = 0; count < 100; count += 1) {
+    const reviewed = reviewImport(plan, choices)
+    if (reviewed.status === 'ready') return reviewed.candidate
+    choices[reviewed.next.id] = 'take'
+  }
+  throw new Error('Import review did not finish.')
+}
+
+async function finishAgentImport(cli: Cli, home: string, archive: string, decisions: string) {
+  for (let count = 0; count < 100; count += 1) {
+    const result = await run(cli, home, [
+      'import',
+      archive,
+      ...(fs.existsSync(decisions) ? ['--decisions', decisions] : []),
+      '--agent',
+    ])
+    if (result.status === 0) return result
+    const document = handoff(result.stdout)
+    assert(document.next)
+    document.choices[document.next.id] = document.next.path === 'b' ? 'keep' : 'take'
+    await writeFile(decisions, JSON.stringify(document))
+  }
+  throw new Error('Agent import review did not finish.')
+}
+
+async function reviewAgentImport(
+  cli: Cli,
+  home: string,
+  archive: string,
+  decisions: string,
+  choose: (
+    item: NonNullable<ReturnType<typeof handoff>['next']>,
+    document: ReturnType<typeof handoff>,
+  ) => 'keep' | 'take' | { action: 'add' | 'reuse'; address: string },
+) {
+  for (let count = 0; count < 100; count += 1) {
+    const result = await run(cli, home, [
+      'import',
+      archive,
+      ...(fs.existsSync(decisions) ? ['--decisions', decisions] : []),
+      '--agent',
+    ])
+    if (result.status === 0) return result
+    const document = handoff(result.stdout)
+    assert(document.next)
+    document.choices[document.next.id] = choose(document.next, document)
+    await writeFile(decisions, JSON.stringify(document))
+  }
+  throw new Error('Agent import review did not finish.')
 }
 
 test('round trips shared definitions and raw files without executing project scripts', async ({
@@ -94,7 +143,7 @@ test('round trips shared definitions and raw files without executing project scr
   expect(fs.existsSync(marker)).toBe(false)
 
   await config(destination, { $schemaVersion: 2, $projects: { local: { agents: 'local project' } } })
-  const imported = await run(cli, destination, ['import', archivePath, '--agent'])
+  const imported = await finishAgentImport(cli, destination, archivePath, join(directory, 'roundtrip-decisions.json'))
   expect(imported.status).toBe(0)
   expect(await readFile(join(destination, 'shared/commit.md'))).toEqual(raw)
   expect(await run(cli, destination, ['get', 'agents', '--project', 'demo'])).toMatchObject({
@@ -149,43 +198,22 @@ test('preserves mixed review choices and rejects stale state without partial app
   expect(await readFile(root)).toEqual(original)
   const decisions = handoff(initial.stdout)
   const decisionPath = join(directory, 'decisions.json')
-  const [a, b, project, file] = decisions.conflicts
-  assert(a && b && project && file)
+  assert(decisions.next)
+  const first = decisions.next
+  expect(first.path).toBe('a')
   expect(decisions.choices).toEqual({})
-
-  decisions.choices[a.id] = 'take'
+  decisions.choices[first.id] = 'take'
   await writeFile(decisionPath, JSON.stringify(decisions))
   const second = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
   expect(second.status).toBe(1)
   const secondDocument = handoff(second.stdout)
-  expect(secondDocument.choices[a.id]).toBe('take')
-  expect(secondDocument.choices[b.id]).toBeUndefined()
-  expect(secondDocument.next?.id).toBe(b.id)
+  expect(secondDocument.choices[first.id]).toBe('take')
+  expect(secondDocument.next?.path).toBe('b')
   expect(await readFile(root)).toEqual(original)
-
-  secondDocument.choices[b.id] = 'keep'
-  await writeFile(decisionPath, JSON.stringify(secondDocument))
-  const third = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
-  expect(third.status).toBe(1)
-  const thirdDocument = handoff(third.stdout)
-  expect(thirdDocument.choices[a.id]).toBe('take')
-  expect(thirdDocument.choices[b.id]).toBe('keep')
-  expect(thirdDocument.choices[project.id]).toBeUndefined()
-
-  thirdDocument.choices[project.id] = 'take'
-  await writeFile(decisionPath, JSON.stringify(thirdDocument))
-  const fourth = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
-  expect(fourth.status).toBe(1)
-  const fourthDocument = handoff(fourth.stdout)
-  expect(fourthDocument.choices[file.id]).toBeUndefined()
-  expect(fourthDocument.next?.id).toBe(file.id)
-
   const unchanged = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
   expect(unchanged.status).toBe(1)
   expect(await readFile(root)).toEqual(original)
-  fourthDocument.choices[file.id] = 'take'
-  await writeFile(decisionPath, JSON.stringify(fourthDocument))
-  const completed = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
+  const completed = await finishAgentImport(cli, home, archivePath, decisionPath)
   expect(completed.status).toBe(0)
   const merged = JSON.parse(await readFile(root, 'utf8'))
   expect(merged.a).toBe('new a')
@@ -198,12 +226,15 @@ test('preserves mixed review choices and rejects stale state without partial app
   await writeFile(join(home, 'payload.txt'), 'changed after review')
   const stale = await run(cli, home, ['import', archivePath, '--decisions', decisionPath, '--agent'])
   expect(stale.status).toBe(1)
-  expect(stale.stdout).toContain('different conflict set')
+  expect(stale.stdout).toContain('changed after review')
   expect(await readFile(join(home, 'payload.txt'), 'utf8')).toBe('changed after review')
   expect(JSON.parse(await readFile(root, 'utf8'))).toEqual(merged)
 })
 
-test('rejects config takeover and stale import sources before changing source data', async ({ directory, expect }) => {
+test('reviews config takeover and rejects stale import sources before changing source data', async ({
+  directory,
+  expect,
+}) => {
   const ownedHome = join(directory, 'owned-home')
   const ownedFile = join(ownedHome, 'acme/project.json')
   const originalProject = '{"$schemaVersion":2,"agents":"local acme"}\n'
@@ -217,7 +248,15 @@ test('rejects config takeover and stale import sources before changing source da
     }),
     [{ path: 'acme/project.json', data: new TextEncoder().encode('{"$schemaVersion":2,"agents":"takeover"}') }],
   )
-  expect(() => planImport(takeover, { home: ownedHome, cwd: directory })).toThrow(/Raw payload destination/)
+  const takeoverPlan = planImport(takeover, { home: ownedHome, cwd: directory })
+  const takeoverChoices: Record<string, 'take'> = {}
+  let takeoverReview = reviewImport(takeoverPlan, takeoverChoices)
+  while (takeoverReview.status === 'incomplete' && takeoverReview.next.kind !== 'file') {
+    takeoverChoices[takeoverReview.next.id] = 'take'
+    takeoverReview = reviewImport(takeoverPlan, takeoverChoices)
+  }
+  assert(takeoverReview.status === 'incomplete')
+  expect(takeoverReview.next.notice).toContain('configuration for acme')
   expect(await readFile(ownedFile, 'utf8')).toBe(originalProject)
 
   const staleHome = join(directory, 'stale-import-home')
@@ -225,7 +264,7 @@ test('rejects config takeover and stale import sources before changing source da
   await config(staleHome, { $schemaVersion: 2 })
   const archive = createBundleArchive(rootConfiguration({ $schemaVersion: 2, $projects: { demo: {} } }), [])
   const plan = planImport(archive, { home: staleHome, cwd: directory })
-  const review = reviewImport(plan, {})
+  const review = reviewImport(plan, Object.fromEntries(plan.conflicts.map(item => [item.id, 'take' as const])))
   assert(review.status === 'ready')
   const concurrent = '{"$schemaVersion":2,"localOnly":"preserve concurrent edit"}\n'
   await writeFile(staleRoot, concurrent)
@@ -304,8 +343,11 @@ test('exports referenced checkout files without changing the source or running s
   execFileSync('git', ['init', '-q', checkout])
   const sourceProject = { $schemaVersion: 2, script: { $type: 'node', $exec: '<repo>/scripts/run.js' } }
   await config(home, { $schemaVersion: 2, $projects: { demo: '<root>/project.json' } })
-  await put(join(home, 'project.json'), JSON.stringify(sourceProject))
-  await put(join(checkout, 'scripts/run.js'), `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`)
+  const sourceProjectBytes = Buffer.from(`${JSON.stringify(sourceProject, null, 2)}\r\n`)
+  const sourceScriptBytes = Buffer.from(`require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\r\n`)
+  await put(join(home, 'project.json'), sourceProjectBytes.toString())
+  await put(join(checkout, 'scripts/run.js'), sourceScriptBytes.toString())
+  assert(home.includes('woof-test-'), 'WOOF_HOME must belong to the test fixture')
   const result = await cli.run(process.execPath, [cli.entry, 'export', '--project', 'demo', '--agent'], checkout, {
     WOOF_HOME: home,
   })
@@ -314,8 +356,8 @@ test('exports referenced checkout files without changing the source or running s
   assert(path)
   const bundle = readBundleArchive(await readFile(path))
   expect(bundle.project['script']).toEqual({ $type: 'node', $exec: '<root>/demo-repo-export/scripts/run.js' })
-  expect(Buffer.from(bundle.files.get('demo-repo-export/scripts/run.js')!).toString()).toContain(marker)
-  expect(JSON.parse(await readFile(join(home, 'project.json'), 'utf8'))).toEqual(sourceProject)
+  expect(Buffer.from(bundle.files.get('demo-repo-export/scripts/run.js')!)).toEqual(sourceScriptBytes)
+  expect(await readFile(join(home, 'project.json'))).toEqual(sourceProjectBytes)
   expect(fs.existsSync(marker)).toBe(false)
 })
 
@@ -328,4 +370,140 @@ test('ignores unrelated archive entries without a fixed entry quota', ({ expect 
   }
   for (let index = 0; index < 10001; index += 1) files[`extra-${index}`] = new Uint8Array()
   expect([...readBundleArchive(zipSync(files)).files.keys()]).toEqual(['woof.config.json'])
+})
+
+test('remaps imported prompt files and project overrides without changing local references', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'mapping-home')
+  await config(home, {
+    $schemaVersion: 2,
+    agents: 'local {{conventions.commit}}',
+    conventions: { commit: 'local' },
+    $projects: {},
+  })
+  await put(join(home, 'prompt.md'), 'local file')
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      agents: 'incoming {{conventions.commit}}',
+      conventions: { commit: 'incoming' },
+      prompt: '<root>/prompt.md',
+      $projects: { demo: { conventions: { commit: 'project' }, agents: 'project {{conventions.commit}}' } },
+    }),
+    [
+      {
+        path: 'prompt.md',
+        data: Buffer.concat([
+          Buffer.from([0xef, 0xbb, 0xbf]),
+          strToU8('incoming {{conventions.commit}} {{{{conventions.commit}}}}\r\n'),
+        ]),
+      },
+    ],
+  )
+  const path = join(directory, 'mapping.zip')
+  await writeFile(path, archive)
+  let invalidated = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'mapping-decisions.json'), (item, doc) => {
+    invalidated ||= Boolean(doc.invalidated?.includes('agents'))
+    if (item.kind === 'token' && item.path === 'agents') return 'keep'
+    if (item.kind === 'token' && item.path === 'conventions.commit')
+      return { action: 'add', address: 'conventions.alternate' }
+    if (item.kind === 'file' && item.requiredNewPath) return { action: 'add', address: 'copies/prompt.md' }
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(invalidated).toBe(true)
+  expect(await readFile(join(home, 'prompt.md'), 'utf8')).toBe('local file')
+  expect(await readFile(join(home, 'copies/prompt.md'))).toEqual(
+    Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      strToU8('incoming {{conventions.alternate}} {{{{conventions.commit}}}}\r\n'),
+    ]),
+  )
+  expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'local local' })
+  expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'project project',
+  })
+})
+
+test('keeps reused metadata and reopens reuse after a later mapping changes the content', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'reuse-home')
+  await config(home, {
+    $schemaVersion: 2,
+    matching: { $type: 'prompt', $exec: '{{source}}', $description: 'local metadata' },
+    source: 'local',
+    $projects: {},
+  })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, alias: '{{source}}', source: 'incoming', $projects: { demo: {} } }),
+    [],
+  )
+  const path = join(directory, 'reuse.zip')
+  await writeFile(path, archive)
+  let rechecked = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'reuse-decisions.json'), (item, doc) => {
+    if (item.path === 'alias' && !rechecked) {
+      if (doc.invalidated?.includes('alias')) {
+        rechecked = true
+        return 'take'
+      }
+      expect(item.candidates).toContain('matching')
+      return { action: 'reuse', address: 'matching' }
+    }
+    if (item.path === 'source') return { action: 'add', address: 'newsource' }
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(rechecked).toBe(true)
+  const root = JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8'))
+  expect(root.matching.$description).toBe('local metadata')
+  expect(root.alias).toBe('{{newsource}}')
+})
+
+test('reports post-import validation without undoing an explicit shared-file replacement', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'post-validation-home')
+  await config(home, { $schemaVersion: 2, broken: '{{missing}}', $projects: { other: '<root>/other.json' } })
+  await put(join(home, 'other.json'), '{"$schemaVersion":2}')
+  await fs.promises.symlink('other.json', join(home, 'alias.json'))
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      payload: '<root>/alias.json',
+      missingFile: '<root>/missing.md',
+      $projects: { demo: {} },
+    }),
+    [{ path: 'alias.json', data: strToU8('not JSON') }],
+  )
+  const path = join(directory, 'post-validation.zip')
+  await writeFile(path, archive)
+  let sawOwnership = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'post-validation-decisions.json'), item => {
+    if (item.kind === 'file') {
+      sawOwnership ||= Boolean(item.notice?.includes('configuration for other'))
+      if (item.notice?.includes('unavailable')) return 'keep'
+    }
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(sawOwnership).toBe(true)
+  expect((await lstat(join(home, 'alias.json'))).isSymbolicLink()).toBe(true)
+  expect(await readFile(join(home, 'other.json'), 'utf8')).toBe('not JSON')
+  expect(result.stdout).toContain('Imported demo')
+  expect(result.stderr).toContain('other.json')
+  expect(result.stderr).toContain('missing')
+  expect(result.stderr).toContain('missing.md')
+  expect(fs.existsSync(join(home, 'missing.md'))).toBe(false)
+  expect(result.stderr).toContain('Repair the configuration files')
 })

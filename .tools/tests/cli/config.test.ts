@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { chmod, lstat, mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -16,6 +17,7 @@ type Cli = {
 }
 
 function run(cli: Cli, home: string, args: string[]) {
+  assert(home.includes('woof-test-'), 'WOOF_HOME must belong to the test fixture')
   return cli.run(process.execPath, [cli.entry, ...args], cli.project, {
     WOOF_HOME: home,
     NO_COLOR: '1',

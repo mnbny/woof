@@ -132,6 +132,43 @@ function contentParts(content: string): ContentPart[] {
   return parts
 }
 
+export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<string, string>) {
+  let output = ''
+  let index = 0
+  while (index < content.length) {
+    if (content.startsWith('{{{{', index)) {
+      const close = content.indexOf('}}}}', index + 4)
+      if (close !== -1) {
+        const path = content.slice(index + 4, close)
+        if (ADDRESS.test(path) && content[close + 4] !== '}') {
+          output += content.slice(index, close + 4)
+          index = close + 4
+          continue
+        }
+      }
+    }
+    if (content.startsWith('{{', index)) {
+      const close = content.indexOf('}}', index + 2)
+      if (close !== -1) {
+        const path = content.slice(index + 2, close)
+        if (
+          ADDRESS.test(path) &&
+          content[index - 1] !== '$' &&
+          content[index - 1] !== '{' &&
+          content[close + 2] !== '}'
+        ) {
+          output += `{{${mappings.get(path) ?? path}}}`
+          index = close + 2
+          continue
+        }
+      }
+    }
+    output += content[index]!
+    index += 1
+  }
+  return output
+}
+
 export function splitProjectAddress(address: string) {
   if (!address.startsWith('$projects.')) {
     if (!ADDRESS.test(address)) throw new TokenResolutionError(`Invalid token address: ${address}`)

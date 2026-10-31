@@ -43,6 +43,7 @@ type Change = {
   originalDigest: string | null
   mode: number
   kind: 'resource' | 'project' | 'registry'
+  target: string
 }
 
 type StagedChange = Change & {
@@ -92,7 +93,8 @@ function readCurrent(home: string, path: string): Uint8Array | undefined {
 function currentDigest(home: string, source: ImportSourceState) {
   const data = readCurrent(home, source.path)
   const actual = data ? digest(data) : null
-  if (actual !== source.digest)
+  const physical = data ? realpathSync(resolve(home, source.path)) : null
+  if (actual !== source.digest || physical !== source.physical)
     throw new Error(`Import destination ${source.path} changed after review; stale decisions were not applied.`)
   return data
 }
@@ -100,28 +102,38 @@ function currentDigest(home: string, source: ImportSourceState) {
 function inspectWriteDestination(home: string, path: string) {
   safePath(path)
   const physicalHome = realpathSync(home)
-  const target = resolve(physicalHome, path)
-  if (!contained(physicalHome, target)) throw new Error(`Import destination escapes the Woof home: ${path}`)
-  const segments = path.split('/')
+  const logical = resolve(physicalHome, path)
   let current = physicalHome
+  const segments = path.split('/')
   for (let index = 0; index < segments.length; index += 1) {
     current = join(current, segments[index]!)
     try {
       const stat = lstatSync(current)
-      if (stat.isSymbolicLink()) throw new Error(`Import destination contains a symbolic link: ${current}`)
-      if (index === segments.length - 1 && !stat.isFile())
-        throw new Error(`Import destination is not a regular file: ${current}`)
-      if (index < segments.length - 1 && !stat.isDirectory())
-        throw new Error(`Import destination parent is not a directory: ${current}`)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        if (index < segments.length - 1) continue
-        return { target, mode: 0o600 }
+      if (stat.isSymbolicLink()) {
+        try {
+          current = realpathSync(current)
+        } catch (error) {
+          throw new Error(`Import destination has an unresolved symbolic link: ${current}`, { cause: error })
+        }
+        if (!(path === 'woof.config.json' && index === segments.length - 1) && !contained(physicalHome, current))
+          throw new Error(`Import destination escapes the Woof home: ${path}`)
       }
-      throw error
+      const resolved = statSync(current)
+      if (index === segments.length - 1 && !resolved.isFile())
+        throw new Error(`Import destination is not a regular file: ${path}`)
+      if (index < segments.length - 1 && !resolved.isDirectory())
+        throw new Error(`Import destination parent is not a directory: ${path}`)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      const target = resolve(current, ...segments.slice(index + 1))
+      if (!contained(physicalHome, target))
+        throw new Error(`Import destination escapes the Woof home: ${path}`, { cause: error })
+      return { target, mode: 0o600 }
     }
   }
-  return { target, mode: statSync(target).mode & 0o7777 }
+  if (path !== 'woof.config.json' && !contained(physicalHome, current))
+    throw new Error(`Import destination escapes the Woof home: ${path}`)
+  return { target: current, mode: statSync(logical).mode & 0o7777 }
 }
 
 function serialized(value: unknown) {
@@ -136,7 +148,15 @@ function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string
     const original = current.get(path)
     if (original && equalBytes(original, data)) continue
     const destination = inspectWriteDestination(candidate.home, path)
-    changes.push({ path, data, original, originalDigest: source.digest, mode: destination.mode, kind: 'resource' })
+    changes.push({
+      path,
+      data,
+      original,
+      originalDigest: source.digest,
+      mode: destination.mode,
+      target: destination.target,
+      kind: 'resource',
+    })
   }
   if (candidate.projectFile) {
     const { path, data } = candidate.projectFile
@@ -155,6 +175,7 @@ function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string
         original,
         originalDigest: source.digest,
         mode: destination.mode,
+        target: destination.target,
         kind: 'project',
       })
     }
@@ -171,10 +192,18 @@ function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string
       original,
       originalDigest: source.digest,
       mode: destination.mode,
+      target: destination.target,
       kind: 'registry',
     })
   }
-  return changes
+  const unique = new Map<string, Change>()
+  for (const change of changes) {
+    const previous = unique.get(change.target)
+    if (previous && !equalBytes(previous.data, change.data))
+      throw new Error(`Import paths ${previous.path} and ${change.path} require conflicting writes to the same file.`)
+    if (!previous) unique.set(change.target, change)
+  }
+  return [...unique.values()]
 }
 
 function parentDirectories(home: string, path: string) {
@@ -232,8 +261,7 @@ function cleanupDirectories(directories: string[]) {
   return warnings
 }
 
-function temporaryArtifacts(home: string, path: string, kind: 'stage' | 'backup') {
-  const target = resolve(home, path)
+function temporaryArtifacts(target: string, kind: 'stage' | 'backup') {
   return join(dirname(target), `.${basename(target)}.woof-import-${kind}-${randomUUID()}.tmp`)
 }
 
@@ -250,6 +278,9 @@ function report(
 export function applyImport(candidate: ReviewedImportCandidate) {
   const current = new Map<string, Uint8Array | undefined>()
   for (const source of candidate.sources) current.set(source.path, currentDigest(candidate.home, source))
+  for (const source of candidate.externalSources)
+    if (digest(readFileSync(source.path)) !== source.digest)
+      throw new Error(`Reuse source ${source.path} changed after review.`)
   const planned = changes(candidate, current)
   if (!planned.length)
     return {
@@ -266,17 +297,20 @@ export function applyImport(candidate: ReviewedImportCandidate) {
         mkdirSync(directory)
         createdDirectories.push(directory)
       }
-      const staging = temporaryArtifacts(candidate.home, change.path, 'stage')
+      const staging = temporaryArtifacts(change.target, 'stage')
       const stagedChange: StagedChange = { ...change, staging, backup: undefined }
       staged.push(stagedChange)
       writeExact(staging, change.data, change.mode)
       if (change.original) {
-        const backup = temporaryArtifacts(candidate.home, change.path, 'backup')
+        const backup = temporaryArtifacts(change.target, 'backup')
         stagedChange.backup = backup
         writeExact(backup, change.original, change.mode)
       }
     }
     for (const source of candidate.sources) currentDigest(candidate.home, source)
+    for (const source of candidate.externalSources)
+      if (digest(readFileSync(source.path)) !== source.digest)
+        throw new Error(`Reuse source ${source.path} changed after review.`)
   } catch (error) {
     const warnings = [
       ...cleanupPaths(staged.flatMap(change => [change.staging, ...(change.backup ? [change.backup] : [])])),
@@ -304,8 +338,9 @@ export function applyImport(candidate: ReviewedImportCandidate) {
         throw new Error(
           `Import destination ${change.path} changed before replacement; stale decisions were not applied.`,
         )
-      inspectWriteDestination(candidate.home, change.path)
-      renameSync(change.staging, resolve(candidate.home, change.path))
+      if (inspectWriteDestination(candidate.home, change.path).target !== change.target)
+        throw new Error(`Import destination ${change.path} changed location before replacement.`)
+      renameSync(change.staging, change.target)
       completed.push(change)
     }
   } catch (error) {
@@ -314,8 +349,9 @@ export function applyImport(candidate: ReviewedImportCandidate) {
     const rollbackErrors: string[] = []
     for (const change of [...completed].reverse()) {
       try {
-        const target = resolve(candidate.home, change.path)
-        inspectWriteDestination(candidate.home, change.path)
+        const target = change.target
+        if (inspectWriteDestination(candidate.home, change.path).target !== target)
+          throw new Error(`Import destination ${change.path} changed location before rollback.`, { cause: error })
         const actual = readCurrent(candidate.home, change.path)
         if (!actual || !equalBytes(actual, change.data)) {
           if (change.backup) recovery.push(change.backup)

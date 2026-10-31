@@ -1,4 +1,4 @@
-import { isCancel, log, select } from '@clack/prompts'
+import { isCancel, log, select, text } from '@clack/prompts'
 
 import prompts from '../prompts/agent.json' with { type: 'json' }
 import { isAgent } from './agent.ts'
@@ -120,4 +120,10 @@ export function presentWarning(summary: string) {
 
 export function writePayload(payload: string) {
   process.stdout.write(payload)
+}
+
+export async function enterText(message: string) {
+  if (agentPresentation() || !isTTY()) return undefined
+  const value = await text({ message, validate: input => (input?.trim() ? undefined : 'Enter a value.') })
+  return isCancel(value) ? undefined : value.trim()
 }

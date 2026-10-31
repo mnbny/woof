@@ -1,21 +1,30 @@
 import type { WoofBundle } from './bundles.ts'
-import type { ProjectDefinition } from './projects.ts'
-import type { InlineProject, ProjectConfiguration, Resource, RootConfiguration, TokenValue } from './schema.ts'
+import type { ImportLeaf } from './import-tokens.ts'
+import type { InlineProject, ProjectConfiguration, RootConfiguration, TokenValue } from './schema.ts'
 
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { readBundleArchive } from './bundles.ts'
 import { parseConfigurationDocument, validateConfigurationDocument } from './config.ts'
+import {
+  assertImportAddress,
+  flattenImportTokens,
+  importTokenFiles,
+  importTokenFingerprint,
+  importValueAt,
+  isImportLeaf,
+  putImportValue,
+  replaceImportTokenFiles,
+  rewriteImportPromptBytes,
+  rewriteImportToken,
+} from './import-tokens.ts'
 import { getWoofHome } from './paths.ts'
-import { selectProjectContext } from './projects.ts'
-import { createResourceLoader, detectCheckoutRoot } from './resources.ts'
-import { createTokenGraph, validateTokenGraph, validateTokenGraphForTransfer } from './tokens.ts'
+import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 
-export type ImportChoice = 'keep' | 'take'
+export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
 export type ImportConflict = {
   id: string
   kind: 'token' | 'project' | 'project-token' | 'file'
@@ -24,8 +33,13 @@ export type ImportConflict = {
   incoming: unknown
   existingDigest: string
   incomingDigest: string
+  candidates?: string[]
+  candidateDetails?: { address: string; description?: string; tags?: string[] }[]
+  requiredNewPath?: boolean
+  invalid?: boolean
+  notice?: string
 }
-export type ImportSourceState = { path: string; digest: string | null }
+export type ImportSourceState = { path: string; digest: string | null; physical: string | null }
 
 type ProjectFile = { path: string; data: ProjectConfiguration }
 type ImportPlanOptions = {
@@ -38,14 +52,14 @@ function digest(data: Uint8Array | string) {
 }
 
 function valueDigest(value: unknown) {
-  return value instanceof Uint8Array ? digest(value) : digest(JSON.stringify(value))
+  return value instanceof Uint8Array ? digest(value) : digest(JSON.stringify(value) ?? 'undefined')
 }
 
 function conflict(kind: ImportConflict['kind'], path: string, existing: unknown, incoming: unknown): ImportConflict {
   const existingDigest = valueDigest(existing)
   const incomingDigest = valueDigest(incoming)
   return {
-    id: digest(`${kind}\0${path}\0${existingDigest}\0${incomingDigest}`).slice(0, 32),
+    id: digest(`${kind}\0${path}`).slice(0, 32),
     kind,
     path,
     existing,
@@ -55,79 +69,12 @@ function conflict(kind: ImportConflict['kind'], path: string, existing: unknown,
   }
 }
 
-function namespace(value: unknown): value is Record<string, TokenValue> {
-  return (
-    typeof value === 'object' && value !== null && !Array.isArray(value) && !('$type' in value) && !('$exec' in value)
-  )
-}
-
 function sourceEntries(value: object, project: boolean) {
   return Object.fromEntries(
     Object.entries(value).filter(
       ([key]) => key !== '$schemaVersion' && key !== '$projects' && (!project || key !== '$metadata'),
     ),
   ) as Record<string, TokenValue>
-}
-
-function mergeTokens(
-  local: Record<string, TokenValue>,
-  incoming: Record<string, TokenValue>,
-  kind: 'token' | 'project-token',
-  choices: Readonly<Record<string, ImportChoice>>,
-  conflicts: ImportConflict[],
-  prefix = '',
-): Record<string, TokenValue> {
-  const result = structuredClone(local)
-  for (const key of Object.keys(incoming).sort()) {
-    const incomingValue = incoming[key]!
-    if (!Object.prototype.hasOwnProperty.call(local, key)) {
-      result[key] = structuredClone(incomingValue)
-      continue
-    }
-    const localValue = local[key]!
-    if (isDeepStrictEqual(localValue, incomingValue)) continue
-    const path = prefix ? `${prefix}.${key}` : key
-    if (namespace(localValue) && namespace(incomingValue)) {
-      result[key] = mergeTokens(localValue, incomingValue, kind, choices, conflicts, path)
-      continue
-    }
-    const item = conflict(kind, path, localValue, incomingValue)
-    conflicts.push(item)
-    result[key] = structuredClone(choices[item.id] === 'keep' ? localValue : incomingValue)
-  }
-  return result
-}
-
-function mergeDefinition(
-  local: object,
-  incoming: object,
-  kind: 'token' | 'project-token',
-  choices: Readonly<Record<string, ImportChoice>>,
-  conflicts: ImportConflict[],
-) {
-  return mergeTokens(
-    sourceEntries(local, kind === 'project-token'),
-    sourceEntries(incoming, kind === 'project-token'),
-    kind,
-    choices,
-    conflicts,
-  )
-}
-
-function mergeMetadata(
-  local: ProjectDefinition | undefined,
-  incoming: ProjectDefinition,
-  choices: Readonly<Record<string, ImportChoice>>,
-  conflicts: ImportConflict[],
-) {
-  const existing = local?.$metadata
-  const incomingMetadata = incoming.$metadata
-  if (isDeepStrictEqual(existing, incomingMetadata)) return structuredClone(existing)
-  if (existing === undefined) return structuredClone(incomingMetadata)
-  if (incomingMetadata === undefined) return structuredClone(existing)
-  const item = conflict('project-token', '$metadata', existing, incomingMetadata)
-  conflicts.push(item)
-  return structuredClone(choices[item.id] === 'keep' ? existing : incomingMetadata)
 }
 
 function safePath(path: string) {
@@ -168,7 +115,12 @@ function readDestination(home: string, path: string): Uint8Array | undefined {
 
 function sourceState(home: string, path: string): ImportSourceState & { data?: Uint8Array } {
   const data = readDestination(home, path)
-  return { path, digest: data ? digest(data) : null, ...(data ? { data } : {}) }
+  return {
+    path,
+    digest: data ? digest(data) : null,
+    physical: data ? realpathSync(resolve(home, path)) : null,
+    ...(data ? { data } : {}),
+  }
 }
 
 function assertRepositoryImportAllowed(cwd: string) {
@@ -207,193 +159,119 @@ function localProject(local: RootConfiguration, bundle: WoofBundle, home: string
   return { definition, data: definition, file: undefined, source: undefined }
 }
 
-function definitionChoice(
-  local: RootConfiguration,
-  bundle: WoofBundle,
-  choices: Readonly<Record<string, ImportChoice>>,
-  conflicts: ImportConflict[],
-) {
-  const existing = local.$projects?.[bundle.projectName]
-  const incoming = bundle.configuration.$projects![bundle.projectName]!
-  if (existing === undefined || isDeepStrictEqual(existing, incoming)) return incoming
-  if (typeof existing === 'object' && typeof incoming === 'object') return incoming
-  const item = conflict('project', `$projects.${bundle.projectName}`, existing, incoming)
-  conflicts.push(item)
-  return choices[item.id] === 'keep' ? existing : incoming
+type Snapshot = ImportSourceState & { data?: Uint8Array }
+type ImportPlan = {
+  archiveDigest: string
+  bundle: WoofBundle
+  cwd: string
+  home: string
+  local: RootConfiguration
+  selected: ReturnType<typeof localProject>
+  snapshots: Map<string, Snapshot>
+  external: Map<string, string>
+  conflicts: ImportConflict[]
 }
 
-function collectHomeReferences(value: TokenValue, references: Set<string>) {
-  if (typeof value === 'string') {
-    if (value.startsWith('<root>/')) references.add(value.slice('<root>/'.length))
-    return
+function snapshot(plan: ImportPlan, path: string) {
+  let value = plan.snapshots.get(path)
+  if (!value) {
+    value = sourceState(plan.home, path)
+    plan.snapshots.set(path, value)
   }
-  if ('$type' in value || '$exec' in value) {
-    const resource = value as Resource
-    if (resource.$type === 'prompt') {
-      if (resource.$exec.startsWith('<root>/')) references.add(resource.$exec.slice('<root>/'.length))
-    } else {
-      for (const exec of Array.isArray(resource.$exec) ? resource.$exec : [resource.$exec])
-        if (exec.startsWith('<root>/')) references.add(exec.slice('<root>/'.length))
-    }
-    return
-  }
-  for (const child of Object.values(value)) collectHomeReferences(child, references)
+  return value
 }
 
-function writeStaged(stage: string, path: string, data: Uint8Array | string) {
-  safePath(path)
-  const destination = resolve(stage, path)
-  if (!contained(stage, destination)) throw new Error(`Staged resource escapes its temporary home: ${path}`)
-  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
-  try {
-    if (equalBytes(readFileSync(destination), bytes)) return
-    throw new Error(`Staged path ${path} has inconsistent contents.`)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-  mkdirSync(dirname(destination), { recursive: true })
-  writeFileSync(destination, bytes, { flag: 'wx', mode: 0o600 })
-}
-
-function stageOtherProjects(
-  configuration: RootConfiguration,
-  selectedName: string,
-  home: string,
-  stage: string,
-  references: Set<string>,
-  sources: Map<string, ImportSourceState>,
-) {
-  const projects = new Map<string, ProjectDefinition>()
-  const deferred: string[] = []
-  for (const [name, definition] of Object.entries(configuration.$projects ?? {})) {
-    if (name === selectedName) continue
-    let data: ProjectDefinition
-    if (typeof definition === 'string') {
-      if (!definition.startsWith('<root>/')) {
-        deferred.push(name)
-        continue
-      }
-      const path = definition.slice('<root>/'.length)
-      const source = sourceState(home, path)
-      if (!source.data) throw new Error(`Candidate validation cannot read home project ${name} configuration ${path}.`)
-      sources.set(path, { path, digest: source.digest })
-      data = parseConfigurationDocument(new TextDecoder().decode(source.data), 'project', path)
-      writeStaged(stage, path, source.data)
-    } else data = definition
-    projects.set(name, data)
-    for (const [key, value] of Object.entries(data))
-      if (key !== '$schemaVersion' && key !== '$metadata') collectHomeReferences(value as TokenValue, references)
-  }
-  return { projects, deferred }
-}
-
-function validateCandidate(
-  configuration: RootConfiguration,
-  projectName: string,
-  projectFile: ProjectFile | undefined,
-  files: ReadonlyMap<string, Uint8Array>,
-  home: string,
-  cwd: string,
-  preserveOthers: boolean,
-) {
-  const stage = mkdtempSync(join(tmpdir(), 'woof-import-plan-'))
-  const previousHome = process.env['WOOF_HOME']
-  const sources = new Map<string, ImportSourceState>()
-  const requirements = new Set<string>()
-  try {
-    writeStaged(stage, 'woof.config.json', `${JSON.stringify(configuration, null, 2)}\n`)
-    if (projectFile) writeStaged(stage, projectFile.path, `${JSON.stringify(projectFile.data, null, 2)}\n`)
-    const references = new Set<string>()
-    for (const [key, value] of Object.entries(configuration))
-      if (key !== '$schemaVersion' && key !== '$projects') collectHomeReferences(value as TokenValue, references)
-    const project = configuration.$projects![projectName]!
-    if (typeof project === 'object')
-      for (const [key, value] of Object.entries(project))
-        if (key !== '$metadata') collectHomeReferences(value as TokenValue, references)
-    if (projectFile)
-      for (const [key, value] of Object.entries(projectFile.data))
-        if (key !== '$schemaVersion' && key !== '$metadata') collectHomeReferences(value as TokenValue, references)
-    const other = preserveOthers
-      ? stageOtherProjects(configuration, projectName, home, stage, references, sources)
-      : { projects: new Map<string, ProjectDefinition>(), deferred: [] }
-    for (const path of references) {
-      const incoming = files.get(path)
-      const data = incoming ?? readDestination(home, path)
-      if (!data) throw new Error(`Candidate resource is missing: ${path}`)
-      if (!incoming) sources.set(path, { path, digest: digest(data) })
-      writeStaged(stage, path, data)
-    }
-    process.env['WOOF_HOME'] = stage
-    const context = selectProjectContext({
-      project: projectName,
-      loader: createResourceLoader({ cwd }),
-      cwd,
-    })
-    const rootOnlyContext = {
-      root: context.root,
-      candidates: [],
-      checkoutRoot: context.checkoutRoot,
-      selection: 'root' as const,
-    }
-    validateTokenGraph(createTokenGraph(rootOnlyContext))
-    const validations = validateTokenGraphForTransfer(createTokenGraph(context))
-    for (const validation of validations)
-      for (const requirement of validation.deferredRequirements ?? []) requirements.add(requirement.reference)
-    for (const name of other.projects.keys()) {
-      try {
-        const otherContext = selectProjectContext({
-          project: name,
-          loader: createResourceLoader({ cwd }),
-          cwd,
-        })
-        const otherValidations = validateTokenGraphForTransfer(createTokenGraph(otherContext))
-        for (const validation of otherValidations)
-          for (const requirement of validation.deferredRequirements ?? []) requirements.add(requirement.reference)
-      } catch (error) {
-        throw new Error(
-          `Candidate changes break registered project ${name}: ${error instanceof Error ? error.message : String(error)}`,
-          { cause: error },
-        )
-      }
-    }
-    return {
-      requirements: [...requirements].sort(),
-      deferredProjects: other.deferred.sort(),
-      sources: [...sources.values()],
-    }
-  } finally {
-    if (previousHome === undefined) delete process.env['WOOF_HOME']
-    else process.env['WOOF_HOME'] = previousHome
-    rmSync(stage, { recursive: true, force: true })
-  }
-}
-
-function assertRawDestinationIsNotConfiguration(
-  local: RootConfiguration,
-  home: string,
-  path: string,
-  existing: Uint8Array | undefined,
-) {
-  const physical = existing ? realpathSync(resolve(home, path)) : undefined
-  for (const [name, definition] of Object.entries(local.$projects ?? {})) {
-    if (typeof definition !== 'string' || !definition.startsWith('<root>/')) continue
-    const configPath = definition.slice('<root>/'.length)
-    let configPhysical: string | undefined
+function readLocal(plan: ImportPlan, reference: string) {
+  if (reference.startsWith('<root>/')) {
     try {
-      safePath(configPath)
-      if (readDestination(home, configPath)) configPhysical = realpathSync(resolve(home, configPath))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
-      throw error
+      return snapshot(plan, reference.slice('<root>/'.length)).data
+    } catch {
+      return undefined
     }
-    if (configPath === path || (physical && configPhysical === physical))
-      throw new Error(
-        `Raw payload destination ${path} belongs to registered project ${name}'s configuration. Choose a nonconflicting resource path or keep existing content; raw text must not replace project JSON.`,
-      )
+  }
+  if (!reference.startsWith('<repo>/')) return undefined
+  try {
+    const file = resolveResourceLocation(reference, { cwd: plan.cwd }).file
+    const bytes = readFileSync(file)
+    const actual = digest(bytes)
+    const prior = plan.external.get(file)
+    if (prior && prior !== actual) throw new Error(`Reuse source changed during review: ${file}`)
+    plan.external.set(file, actual)
+    return bytes
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (error instanceof Error && error.message.startsWith('Reuse source changed')) throw error
+    return undefined
   }
 }
 
-export function planImport(archive: Uint8Array, options: ImportPlanOptions = {}) {
+function readIncoming(plan: ImportPlan, reference: string) {
+  return reference.startsWith('<root>/') ? plan.bundle.files.get(reference.slice('<root>/'.length)) : undefined
+}
+
+function decisionAction(choice: ImportChoice | undefined) {
+  return typeof choice === 'string' ? choice : choice?.action
+}
+
+function normalizedChoices(choices: Readonly<Record<string, ImportChoice>>) {
+  for (const [id, choice] of Object.entries(choices)) {
+    if (choice === 'keep' || choice === 'take') continue
+    if (
+      !choice ||
+      typeof choice !== 'object' ||
+      !['add', 'reuse'].includes(choice.action) ||
+      typeof choice.address !== 'string'
+    )
+      throw new Error(`Import decision ${id} must be keep, take, or an add/reuse choice with an address.`)
+  }
+}
+
+function tokenIssue(
+  plan: ImportPlan,
+  kind: 'token' | 'project-token',
+  path: string,
+  destination: string,
+  existing: unknown,
+  incoming: ImportLeaf,
+  mappings: ReadonlyMap<string, string>,
+  candidates: Map<string, ImportLeaf>,
+) {
+  const rewritten = rewriteImportToken(incoming, mappings)
+  const item = conflict(kind, path, existing, rewritten)
+  const signature = importTokenFingerprint(incoming, ref => readIncoming(plan, ref), mappings)
+  item.incomingDigest = digest(`${item.incomingDigest}\0${signature ?? 'missing content'}`)
+  item.existingDigest = digest(
+    `${item.existingDigest}\0${isImportLeaf(existing as TokenValue) ? (importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) ?? 'missing content') : ''}`,
+  )
+  item.candidates = [...candidates.entries()]
+    .filter(
+      ([, candidate]) =>
+        signature !== undefined && importTokenFingerprint(candidate, ref => readLocal(plan, ref)) === signature,
+    )
+    .map(([address]) => address)
+    .sort()
+  item.candidateDetails = item.candidates.map(address => {
+    const value = candidates.get(address)!
+    return typeof value === 'string'
+      ? { address }
+      : {
+          address,
+          ...(value.$description !== undefined ? { description: value.$description } : {}),
+          ...(value.$tags !== undefined ? { tags: value.$tags } : {}),
+        }
+  })
+  if (kind === 'token' && existing !== undefined) {
+    const projects = Object.keys(plan.local.$projects ?? {})
+    if (projects.length) item.notice = `Taking this shared token may affect existing projects: ${projects.join(', ')}.`
+  }
+  if (signature === undefined)
+    item.notice = `${item.notice ? `${item.notice} ` : ''}Incoming file content is unavailable; it cannot be matched for reuse.`
+  if (destination !== path)
+    item.notice = `${item.notice ? `${item.notice} ` : ''}Imported address maps to ${destination}.`
+  return item
+}
+
+export function planImport(archive: Uint8Array, options: ImportPlanOptions = {}): ImportPlan {
   const cwd = options.cwd ?? process.cwd()
   const home = realpathSync(options.home ?? getWoofHome())
   assertRepositoryImportAllowed(cwd)
@@ -407,174 +285,482 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
     getWoofHome('woof.config.json'),
   )
   const selected = localProject(local, bundle, home)
-  const conflicts: ImportConflict[] = []
-  mergeDefinition(local, bundle.configuration, 'token', {}, conflicts)
-  definitionChoice(local, bundle, {}, conflicts)
-  mergeDefinition(selected.data ?? {}, bundle.project, 'project-token', {}, conflicts)
-  mergeMetadata(selected.data, bundle.project, {}, conflicts)
-
-  const initialFiles = new Map<string, Uint8Array | undefined>()
-  const incomingProjectPath = bundle.projectReference?.slice('<root>/'.length)
-  for (const [path, data] of bundle.files) {
-    if (path === 'woof.config.json' || path === incomingProjectPath) continue
-    const existing = readDestination(home, path)
-    initialFiles.set(path, existing)
-    if (!existing || !equalBytes(existing, data)) assertRawDestinationIsNotConfiguration(local, home, path, existing)
-    if (existing && !equalBytes(existing, data)) conflicts.push(conflict('file', path, existing, data))
-  }
-  if (incomingProjectPath && !initialFiles.has(incomingProjectPath))
-    initialFiles.set(incomingProjectPath, readDestination(home, incomingProjectPath))
-  if (selected.file && !initialFiles.has(selected.file.path))
-    initialFiles.set(selected.file.path, readDestination(home, selected.file.path))
-
-  const sourcePaths = new Set(['woof.config.json', ...initialFiles.keys()])
-  if (selected.source) sourcePaths.add(selected.source.path)
-  const sources = [...sourcePaths].sort().map(path => {
-    if (path === rootSource.path) return { path, digest: rootSource.digest }
-    if (selected.source?.path === path) return { path, digest: selected.source.digest }
-    const data = initialFiles.get(path)
-    return { path, digest: data ? digest(data) : null }
-  })
-  return {
+  const plan: ImportPlan = {
     archiveDigest: digest(archive),
     bundle,
-    conflicts,
     cwd,
     home,
-    initialFiles,
     local,
-    rootSource: { path: rootSource.path, digest: rootSource.digest },
     selected,
-    sources,
+    snapshots: new Map([[rootSource.path, rootSource]]),
+    external: new Map(),
+    conflicts: [],
   }
+  if (selected.source) plan.snapshots.set(selected.source.path, selected.source)
+  const incomingConfigPath = bundle.projectReference?.slice('<root>/'.length)
+  if (incomingConfigPath) snapshot(plan, incomingConfigPath)
+  for (const path of bundle.files.keys()) if (path !== 'woof.config.json') snapshot(plan, path)
+  for (const definition of Object.values(local.$projects ?? {}))
+    if (typeof definition === 'string') snapshot(plan, definition.slice('<root>/'.length))
+  const described = describeImport(plan, {})
+  plan.conflicts = described.issues
+  return plan
 }
 
-function assertProjectDestination(plan: ReturnType<typeof planImport>, projectFile: ProjectFile | undefined) {
-  if (!projectFile) return
-  const { path, data } = projectFile
-  const existing = plan.initialFiles.get(path)
-  const selected = plan.selected.file
-  if (selected?.path === path && isDeepStrictEqual(selected.data, data)) return
-  const finalBytes = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`)
-  if (existing && equalBytes(existing, finalBytes)) return
-  if (selected?.path !== path && existing)
-    throw new Error(
-      `Project configuration destination ${path} is occupied by unrelated local content. Choose a nonconflicting source project-config location and re-export, or keep the existing destination unchanged.`,
-    )
-
-  const targetPhysical = existing ? realpathSync(resolve(plan.home, path)) : undefined
-  for (const [name, definition] of Object.entries(plan.local.$projects ?? {})) {
-    if (name === plan.bundle.projectName || typeof definition !== 'string' || !definition.startsWith('<root>/'))
-      continue
-    const otherPath = definition.slice('<root>/'.length)
-    let otherPhysical: string | undefined
-    try {
-      safePath(otherPath)
-      if (readDestination(plan.home, otherPath)) otherPhysical = realpathSync(resolve(plan.home, otherPath))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
-      throw error
+function describeImport(plan: ImportPlan, choices: Readonly<Record<string, ImportChoice>>) {
+  normalizedChoices(choices)
+  const incomingRoot = flattenImportTokens(plan.bundle.configuration)
+  const incomingProject = flattenImportTokens(plan.bundle.project)
+  const localRoot = flattenImportTokens(plan.local)
+  const localProjectTokens = flattenImportTokens(plan.selected.data ?? {})
+  const mappings = new Map<string, string>()
+  for (const path of incomingRoot.keys()) {
+    const choice = choices[conflict('token', path, undefined, undefined).id]
+    if (choice && typeof choice === 'object') {
+      assertImportAddress(choice.address)
+      mappings.set(path, choice.address)
     }
-    if (otherPath === path || (targetPhysical && otherPhysical === targetPhysical))
-      throw new Error(
-        `Project configuration destination ${path} is also used by registered project ${name}${otherPath === path ? '' : ` through ${otherPath}`}. Choose a nonconflicting source project-config location and re-export before changing it.`,
-      )
   }
+  for (const path of incomingProject.keys()) {
+    const choice = choices[conflict('project-token', path, undefined, undefined).id]
+    if (choice && typeof choice === 'object' && !incomingRoot.has(path)) {
+      assertImportAddress(choice.address)
+      mappings.set(path, choice.address)
+    }
+  }
+  const issues: ImportConflict[] = []
+  const selectedTokens: { origin: 'root' | 'project'; path: string; value: ImportLeaf; added: boolean }[] = []
+  const selectedAddresses = new Set<string>()
+  const root = structuredClone(sourceEntries(plan.local, false)) as Record<string, unknown>
+  const project = structuredClone(sourceEntries(plan.selected.data ?? {}, true)) as Record<string, unknown>
+  const effective = new Map([...localRoot, ...localProjectTokens])
+
+  const handle = (origin: 'root' | 'project', path: string, value: ImportLeaf) => {
+    const kind = origin === 'root' ? 'token' : 'project-token'
+    const id = conflict(kind, path, undefined, undefined).id
+    const choice = choices[id]
+    const action = decisionAction(choice)
+    const bound = mappings.get(path) ?? path
+    const destination = origin === 'root' && choice && typeof choice === 'object' ? choice.address : bound
+    const base = origin === 'root' ? plan.local : (plan.selected.data ?? {})
+    const existing = importValueAt(base, origin === 'root' ? path : destination)
+    const item = tokenIssue(
+      plan,
+      kind,
+      path,
+      destination,
+      existing,
+      value,
+      mappings,
+      origin === 'root' ? localRoot : effective,
+    )
+    const same =
+      destination === path &&
+      isDeepStrictEqual(existing, item.incoming) &&
+      isImportLeaf(existing as TokenValue) &&
+      importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) !== undefined &&
+      importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) ===
+        importTokenFingerprint(value, ref => readIncoming(plan, ref), mappings)
+    if (!same || choice) issues.push(item)
+    if (same && !choice) return
+    if (!action || action === 'keep') return
+    if (action === 'reuse') {
+      if (!choice || typeof choice === 'string' || !item.candidates?.includes(choice.address)) {
+        item.invalid = true
+        item.notice = `Reuse for ${path} is no longer compatible; review this choice again.`
+        return
+      }
+      if (origin === 'project') mappings.set(path, choice.address)
+      return
+    }
+    const target = action === 'add' && choice && typeof choice === 'object' ? choice.address : destination
+    if (action === 'add') {
+      if (origin === 'project' && incomingRoot.has(path) && mappings.get(path) && target !== mappings.get(path))
+        throw new Error(`Project override ${path} must remain bound to ${mappings.get(path)}.`)
+      assertImportAddress(target)
+      const incomingAddresses = origin === 'root' ? incomingRoot : incomingProject
+      if (target !== path && incomingAddresses.has(target)) {
+        item.invalid = true
+        item.notice = `The new address ${target} is already used by another incoming token.`
+        return
+      }
+      if (
+        importValueAt(plan.local, target) !== undefined ||
+        importValueAt(plan.selected.data ?? {}, target) !== undefined
+      ) {
+        item.invalid = true
+        item.notice = `The new token address ${target} is occupied; choose another address.`
+        return
+      }
+      if (origin === 'project') mappings.set(path, target)
+    }
+    const key = `${origin}\0${target}`
+    if (selectedAddresses.has(key)) {
+      item.invalid = true
+      item.notice = `Multiple imported tokens target ${target}; choose distinct addresses.`
+      return
+    }
+    selectedAddresses.add(key)
+    const node = origin === 'root' ? root : project
+    try {
+      putImportValue(node, target, item.incoming)
+    } catch (error) {
+      selectedAddresses.delete(key)
+      item.invalid = true
+      item.notice = error instanceof Error ? error.message : String(error)
+      return
+    }
+    selectedTokens.push({ origin, path: target, value: item.incoming as ImportLeaf, added: action === 'add' })
+  }
+  for (const [path, value] of incomingRoot) handle('root', path, value)
+  const existingDefinition = plan.selected.definition
+  const incomingDefinition = plan.bundle.configuration.$projects![plan.bundle.projectName]!
+  const sameStorage =
+    existingDefinition !== undefined &&
+    ((typeof existingDefinition === 'object' && typeof incomingDefinition === 'object') ||
+      existingDefinition === incomingDefinition)
+  const projectItem = conflict(
+    'project',
+    `$projects.${plan.bundle.projectName}`,
+    existingDefinition,
+    incomingDefinition,
+  )
+  const importedProject = {
+    ...sourceEntries(plan.bundle.project, true),
+    ...(plan.bundle.project.$metadata ? { $metadata: plan.bundle.project.$metadata } : {}),
+    $schemaVersion: 2,
+  }
+  const projectBytes = new TextEncoder().encode(`${JSON.stringify(importedProject, null, 2)}\n`)
+  projectItem.candidates = [...plan.snapshots.values()]
+    .filter(source => source.path !== 'woof.config.json' && source.data && equalBytes(source.data, projectBytes))
+    .map(source => source.path)
+  const projectChoice = choices[projectItem.id]
+  if (!sameStorage) issues.push(projectItem)
+  const includeProject = existingDefinition !== undefined || decisionAction(projectChoice) !== 'keep'
+  if (includeProject) for (const [path, value] of incomingProject) handle('project', path, value)
+  const existingMetadata = plan.selected.data?.$metadata
+  const incomingMetadata = plan.bundle.project.$metadata
+  let metadata = existingMetadata
+  if (includeProject && incomingMetadata !== undefined && !isDeepStrictEqual(existingMetadata, incomingMetadata)) {
+    const item = conflict('project-token', '$metadata', existingMetadata, incomingMetadata)
+    issues.push(item)
+    if (choices[item.id] && typeof choices[item.id] === 'object') {
+      item.invalid = true
+      item.notice = 'Project metadata supports Keep existing or Take incoming.'
+    } else if (decisionAction(choices[item.id]) === 'take') metadata = incomingMetadata
+  }
+  return { issues, mappings, root, project, metadata, projectChoice, includeProject, selectedTokens }
 }
 
-export function reviewImport(plan: ReturnType<typeof planImport>, choices: Readonly<Record<string, ImportChoice>>) {
-  const conflictIds = new Set(plan.conflicts.map(item => item.id))
-  for (const [id, choice] of Object.entries(choices)) {
-    if (!conflictIds.has(id)) throw new Error(`Import decision ${id} is unknown or stale; review the archive again.`)
-    if (choice !== 'keep' && choice !== 'take') throw new Error(`Import decision ${id} must be keep or take.`)
-  }
-  const unresolved = plan.conflicts.filter(item => !choices[item.id])
-  if (unresolved.length) return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length }
+export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, ImportChoice>>) {
+  const described = describeImport(plan, choices)
+  const issues = [...described.issues]
+  const pending = () => issues.filter(item => !choices[item.id] || item.invalid)
+  let unresolved = pending()
+  if (unresolved.length)
+    return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
 
-  const conflicts: ImportConflict[] = []
-  const shared = mergeDefinition(plan.local, plan.bundle.configuration, 'token', choices, conflicts)
-  const definition = definitionChoice(plan.local, plan.bundle, choices, conflicts)
-  const projectTokens = mergeDefinition(
-    plan.selected.data ?? {},
-    plan.bundle.project,
-    'project-token',
-    choices,
-    conflicts,
-  )
-  const metadata = mergeMetadata(plan.selected.data, plan.bundle.project, choices, conflicts)
-  const projectData = { ...projectTokens, ...(metadata ? { $metadata: metadata } : {}) } as InlineProject
-  const projectFile =
-    typeof definition === 'string'
-      ? {
-          path: definition.slice('<root>/'.length),
-          data: validateConfigurationDocument({ ...projectData, $schemaVersion: 2 }, 'project', definition),
+  const files = new Map<string, Uint8Array>()
+  const intents = new Map<string, { action: 'keep' | 'write'; data?: Uint8Array }>()
+  const paths = new Map<string, string>()
+  const requirements = new Map<string, { reference: string; prompt: boolean; added: boolean }>()
+  for (const token of described.selectedTokens) {
+    const prompt = typeof token.value === 'string' || token.value.$type === 'prompt'
+    for (const reference of importTokenFiles(token.value)) {
+      const key = `${reference}\0${prompt ? 'prompt' : 'script'}`
+      const prior = requirements.get(key)
+      requirements.set(key, { reference, prompt, added: token.added || Boolean(prior?.added) })
+    }
+  }
+  for (const [key, requirement] of requirements) {
+    const reference = requirement.reference
+    const originalPath = reference.startsWith('<root>/') ? reference.slice('<root>/'.length) : reference
+    const incoming = readIncoming(plan, reference)
+    let bytes = incoming
+    let rewritten = false
+    if (bytes && requirement.prompt) {
+      const next = rewriteImportPromptBytes(bytes, described.mappings)
+      if (next !== bytes) {
+        bytes = next
+        rewritten = true
+      }
+    }
+    const existing = reference.startsWith('<root>/') ? snapshot(plan, originalPath).data : undefined
+    const forcedNew = Boolean(bytes && (rewritten || requirement.added))
+    if (bytes && existing && equalBytes(bytes, existing) && !forcedNew) {
+      paths.set(key, reference)
+      continue
+    }
+    const item = conflict('file', `${originalPath}\0${requirement.prompt ? 'prompt' : 'script'}`, existing, bytes)
+    item.path = originalPath
+    item.requiredNewPath = forcedNew
+    if (!bytes)
+      item.notice = `Incoming file ${reference} is unavailable; keeping the reference may produce a validation finding.`
+    else if (forcedNew) item.notice = 'Choose a distinct destination for the imported file.'
+    if (existing)
+      item.notice = `${item.notice ? `${item.notice} ` : ''}Taking replaces this file for every existing token that uses it.`
+    if (existing && reference.startsWith('<root>/')) {
+      const physical = realpathSync(resolve(plan.home, originalPath))
+      const owners = Object.entries(plan.local.$projects ?? {})
+        .filter(([, value]) => {
+          if (typeof value !== 'string') return false
+          const candidate = snapshot(plan, value.slice('<root>/'.length))
+          return candidate.data && realpathSync(resolve(plan.home, candidate.path)) === physical
+        })
+        .map(([name]) => name)
+      if (owners.length)
+        item.notice = `This file is registered as configuration for ${owners.join(', ')}. Taking raw bytes may prevent Woof from starting. ${item.notice ?? ''}`
+    }
+    item.candidates = bytes
+      ? [...plan.snapshots.values()]
+          .filter(source => source.data && equalBytes(source.data, bytes!))
+          .map(source => source.path)
+      : []
+    issues.push(item)
+    const choice = choices[item.id]
+    const action = decisionAction(choice)
+    if (!action) continue
+    if (action === 'keep') {
+      if (forcedNew) throw new Error(`File ${originalPath} requires a distinct destination; choose Add as new.`)
+      if (reference.startsWith('<root>/')) {
+        const source = snapshot(plan, originalPath)
+        const identity = source.physical ?? resolve(plan.home, originalPath)
+        const previous = intents.get(identity)
+        if (
+          previous?.action === 'write' &&
+          (!source.data || !previous.data || !equalBytes(source.data, previous.data))
+        ) {
+          item.invalid = true
+          item.notice = `Keeping ${originalPath} conflicts with an earlier choice to replace the same file.`
+          continue
         }
-      : undefined
+        intents.set(identity, { action: 'keep', ...(source.data ? { data: source.data } : {}) })
+      }
+      paths.set(key, reference)
+      continue
+    }
+    if (!bytes) throw new Error(`File ${reference} is unavailable and cannot be taken or reused.`)
+    let target = originalPath
+    if (choice && typeof choice === 'object') {
+      target = safePath(choice.address.startsWith('<root>/') ? choice.address.slice('<root>/'.length) : choice.address)
+      const destination = snapshot(plan, target).data
+      if (choice.action === 'add' && destination)
+        throw new Error(`File destination ${target} is occupied; choose another path.`)
+      if (choice.action === 'reuse' && (!destination || !equalBytes(destination, bytes)))
+        throw new Error(`File ${target} is no longer identical; review reuse again.`)
+      if (choice.action === 'reuse') {
+        if (forcedNew && requirement.added)
+          throw new Error('A file-backed new token requires a distinct file destination.')
+        paths.set(key, `<root>/${target}`)
+        continue
+      }
+    } else if (forcedNew) throw new Error(`File ${originalPath} requires a distinct destination; choose Add as new.`)
+    if (target === 'woof.config.json') throw new Error('A raw payload cannot replace the root registry.')
+    const destination = snapshot(plan, target)
+    const identity = destination.physical ?? resolve(plan.home, target)
+    const prior = intents.get(identity)
+    if (
+      prior &&
+      (prior.action === 'keep' || (prior.data && !equalBytes(prior.data, bytes))) &&
+      (!prior.data || !equalBytes(prior.data, bytes))
+    ) {
+      item.invalid = true
+      item.notice = `This choice conflicts with an earlier decision for the same file; select a different destination.`
+      continue
+    }
+    intents.set(identity, { action: 'write', data: bytes })
+    const previous = files.get(target)
+    if (previous && !equalBytes(previous, bytes))
+      throw new Error(`Multiple imported files require incompatible bytes at ${target}.`)
+    files.set(target, bytes)
+    paths.set(key, `<root>/${target}`)
+  }
+  unresolved = pending()
+  if (unresolved.length)
+    return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
+
+  for (const token of described.selectedTokens) {
+    const prompt = typeof token.value === 'string' || token.value.$type === 'prompt'
+    const replacements = new Map<string, string>()
+    for (const reference of importTokenFiles(token.value)) {
+      const target = paths.get(`${reference}\0${prompt ? 'prompt' : 'script'}`)
+      if (target) replacements.set(reference, target)
+    }
+    const updated = replaceImportTokenFiles(token.value, replacements)
+    putImportValue(token.origin === 'root' ? described.root : described.project, token.path, updated)
+  }
+  const existingDefinition = plan.selected.definition
+  const incomingDefinition = plan.bundle.configuration.$projects![plan.bundle.projectName]!
+  const projectAction = decisionAction(described.projectChoice)
+  let definition = projectAction === 'keep' ? existingDefinition : incomingDefinition
+  if (described.projectChoice && typeof described.projectChoice === 'object') {
+    const path = safePath(described.projectChoice.address.replace(/^<root>\//, ''))
+    const existing = snapshot(plan, path).data
+    if (described.projectChoice.action === 'add' && existing) {
+      const item = issues.find(
+        entry => entry.id === conflict('project', `$projects.${plan.bundle.projectName}`, undefined, undefined).id,
+      )!
+      item.invalid = true
+      item.notice = `Project storage ${path} is occupied; choose another path.`
+      return { status: 'incomplete' as const, next: item, remaining: 1, issues }
+    }
+    definition = `<root>/${path}`
+  }
+  const projectData = {
+    ...described.project,
+    ...(described.metadata ? { $metadata: described.metadata } : {}),
+  } as InlineProject
+  let projectFile: ProjectFile | undefined
+  if (described.includeProject && typeof definition === 'string') {
+    const path = definition.slice('<root>/'.length)
+    const data = validateConfigurationDocument({ ...projectData, $schemaVersion: 2 }, 'project', definition)
+    const bytes = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`)
+    const existing = snapshot(plan, path).data
+    if (
+      described.projectChoice &&
+      typeof described.projectChoice === 'object' &&
+      described.projectChoice.action === 'reuse' &&
+      (!existing || !equalBytes(existing, bytes))
+    ) {
+      const item = issues.find(
+        entry => entry.id === conflict('project', `$projects.${plan.bundle.projectName}`, undefined, undefined).id,
+      )!
+      item.invalid = true
+      item.notice = `Project storage ${path} is no longer identical; review reuse again.`
+      return { status: 'incomplete' as const, next: item, remaining: 1, issues }
+    }
+    const unchangedProject = plan.selected.file?.path === path && isDeepStrictEqual(plan.selected.file.data, data)
+    if (!unchangedProject && (!existing || !equalBytes(existing, bytes))) {
+      const item = conflict('file', `${path}\0project configuration`, existing, bytes)
+      item.path = path
+      item.candidates = [...plan.snapshots.values()]
+        .filter(source => source.data && equalBytes(source.data, bytes))
+        .map(source => source.path)
+      const targetPhysical = snapshot(plan, path).physical
+      const owners = Object.entries(plan.local.$projects ?? {})
+        .filter(([, value]) => {
+          if (typeof value !== 'string') return false
+          const source = snapshot(plan, value.slice('<root>/'.length))
+          return source.path === path || Boolean(targetPhysical && source.physical === targetPhysical)
+        })
+        .map(([name]) => name)
+      if (owners.length)
+        item.notice = `This configuration is used by ${owners.join(', ')}; taking changes affects those projects.`
+      issues.push(item)
+      const choice = choices[item.id]
+      const action = decisionAction(choice)
+      let target = path
+      if (choice && typeof choice === 'object') target = safePath(choice.address.replace(/^<root>\//, ''))
+      const destination = snapshot(plan, target)
+      if (choice && typeof choice === 'object' && choice.action === 'add' && destination.data)
+        throw new Error(`Project storage ${target} is occupied.`)
+      if (
+        choice &&
+        typeof choice === 'object' &&
+        choice.action === 'reuse' &&
+        (!destination.data || !equalBytes(destination.data, bytes))
+      )
+        throw new Error(`Project storage ${target} is not identical.`)
+      const identity = destination.physical ?? resolve(plan.home, target)
+      const prior = intents.get(identity)
+      const desired = action === 'keep' ? destination.data : bytes
+      if (
+        action &&
+        prior &&
+        (prior.action === 'keep' || action === 'keep' || (prior.data && desired && !equalBytes(prior.data, desired))) &&
+        (!prior.data || !desired || !equalBytes(prior.data, desired))
+      ) {
+        item.invalid = true
+        item.notice = `This decision conflicts with another choice for the same physical file.`
+      } else if (action === 'take') projectFile = { path, data }
+      else if (choice && typeof choice === 'object') {
+        definition = `<root>/${target}`
+        if (choice.action === 'add') projectFile = { path: target, data }
+      }
+    } else projectFile = { path, data }
+  }
+  unresolved = pending()
+  if (unresolved.length)
+    return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
+  const projects = { ...plan.local.$projects }
+  if (described.includeProject)
+    projects[plan.bundle.projectName] = typeof definition === 'string' ? definition : projectData
   const configuration = validateConfigurationDocument(
-    {
-      ...shared,
-      $schemaVersion: 2,
-      $projects: {
-        ...plan.local.$projects,
-        [plan.bundle.projectName]: projectFile ? definition : projectData,
-      },
-    },
+    { ...described.root, $schemaVersion: 2, $projects: projects },
     'root',
     'import candidate',
   )
-  const files = new Map<string, Uint8Array>()
-  const fileConflicts = new Map(plan.conflicts.filter(item => item.kind === 'file').map(item => [item.path, item]))
-  for (const [path, incoming] of plan.bundle.files) {
-    if (
-      path === 'woof.config.json' ||
-      path === projectFile?.path ||
-      path === plan.bundle.projectReference?.slice('<root>/'.length)
-    )
-      continue
-    const item = fileConflicts.get(path)
-    const existing = plan.initialFiles.get(path)
-    files.set(path, item && choices[item.id] === 'keep' ? existing! : incoming)
+  if (projectFile && files.has(projectFile.path)) {
+    const projectBytes = new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`)
+    if (!equalBytes(files.get(projectFile.path)!, projectBytes))
+      throw new Error(`Project configuration and raw payload require incompatible writes to ${projectFile.path}.`)
   }
-  assertProjectDestination(plan, projectFile)
-  const sharedChanged = !isDeepStrictEqual(sourceEntries(plan.local, false), shared)
-  const existingResourcesChanged = [...files].some(([path, data]) => {
-    const original = plan.initialFiles.get(path)
-    return original !== undefined && !equalBytes(original, data)
-  })
-  const validation = validateCandidate(
-    configuration,
-    plan.bundle.projectName,
-    projectFile,
-    files,
-    plan.home,
-    plan.cwd,
-    sharedChanged || existingResourcesChanged,
-  )
-  const sources = [...plan.sources]
-  for (const source of validation.sources)
-    if (!sources.some(existing => existing.path === source.path)) sources.push(source)
+  const sourcePaths = [...plan.snapshots.values()].map(({ path, digest: hash, physical }) => ({
+    path,
+    digest: hash,
+    physical,
+  }))
   return {
     status: 'ready' as const,
+    issues,
     candidate: {
       configuration,
-      deferredProjects: validation.deferredProjects,
-      deferredRequirements: validation.requirements,
       files,
       home: plan.home,
-      initialFiles: plan.initialFiles,
-      initialProject: plan.selected.file,
       local: plan.local,
       projectFile,
       projectName: plan.bundle.projectName,
-      sources,
+      initialProject: plan.selected.file,
+      initialFiles: new Map([...plan.snapshots].map(([path, value]) => [path, value.data])),
+      sources: sourcePaths,
+      externalSources: [...plan.external].map(([path, hash]) => ({ path, digest: hash })),
+      deferredProjects: [] as string[],
+      deferredRequirements: [] as string[],
     },
   }
 }
 
-export function assertImportSourcesCurrent(plan: ReturnType<typeof planImport>) {
-  for (const source of plan.sources) {
-    const current = sourceState(plan.home, source.path).digest
-    if (current !== source.digest)
+export function assertImportSourcesCurrent(plan: ImportPlan) {
+  for (const source of plan.snapshots.values())
+    if (!isDeepStrictEqual(sourceState(plan.home, source.path), source))
       throw new Error(`Import destination ${source.path} changed after review; stale decisions were not applied.`)
+}
+
+export function importReviewSources(plan: ImportPlan) {
+  return {
+    home: [...plan.snapshots.values()].map(({ path, digest: hash, physical }) => ({ path, digest: hash, physical })),
+    external: [...plan.external].map(([path, hash]) => ({ path, digest: hash })),
+  }
+}
+
+export function verifyImportReviewSources(plan: ImportPlan, saved: ReturnType<typeof importReviewSources>) {
+  if (!saved || !Array.isArray(saved.home) || !Array.isArray(saved.external))
+    throw new Error('Decisions are missing reviewed source snapshots.')
+  for (const source of saved.home) {
+    if (
+      !source ||
+      typeof source.path !== 'string' ||
+      (typeof source.digest !== 'string' && source.digest !== null) ||
+      (typeof source.physical !== 'string' && source.physical !== null)
+    )
+      throw new Error('Decisions contain invalid source snapshots.')
+    const current = snapshot(plan, source.path)
+    if (current.digest !== source.digest || current.physical !== source.physical)
+      throw new Error(`Import destination ${source.path} changed after review; review it again.`)
+  }
+  const checkout = detectCheckoutRoot(plan.cwd)
+  for (const source of saved.external) {
+    if (
+      !source ||
+      typeof source.path !== 'string' ||
+      typeof source.digest !== 'string' ||
+      !checkout ||
+      !contained(checkout, source.path)
+    )
+      throw new Error('Decisions contain an invalid checkout source.')
+    const physical = realpathSync(source.path)
+    if (!contained(checkout, physical) || digest(readFileSync(physical)) !== source.digest)
+      throw new Error(`Reuse source ${source.path} changed after review.`)
+    plan.external.set(physical, source.digest)
   }
 }
