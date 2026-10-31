@@ -34,7 +34,7 @@ A string token, a prompt, or a script execution value that starts with a marker 
 
 ## Home lifecycle
 
-If Woof home is missing, the first operational invocation creates Woof home with a minimal current root configuration. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create Woof home. Woof never rewrites an existing file implicitly.
+If Woof home is missing, the first operational invocation creates Woof home with a copy of the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create Woof home. Woof never rewrites an existing file implicitly.
 
 Each invocation except the readme command checks these documents:
 
@@ -46,7 +46,7 @@ These checks parse and validate the documents only. They do not read prompt or s
 
 ## Versions and migration
 
-If a version is missing, newer, malformed, or mismatched, the document fails with guidance for that source. Woof never guesses or stamps a version.
+The starter configuration template sets the current schema version. If a version is missing, newer, malformed, or mismatched, the document fails with guidance for that source. Woof never guesses or stamps a version.
 
 Migration is explicit. With the migration flag, Woof migrates supported pending documents before the requested command runs. Current documents ignore the flag. Each migration upgrades a document from one schema version to the next version. No migrations exist yet.
 

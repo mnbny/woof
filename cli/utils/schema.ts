@@ -1,6 +1,9 @@
 import * as v from 'valibot'
 
-export const CURRENT_SCHEMA_VERSION = 2
+import template from '../templates/woof.config.json' with { type: 'json' }
+
+// The starter configuration sets the current schema version.
+export const CURRENT_SCHEMA_VERSION = template.$schemaVersion
 
 export type PromptResource = {
   $type: 'prompt'

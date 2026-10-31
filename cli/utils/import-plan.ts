@@ -24,6 +24,7 @@ import {
 } from './import-tokens.ts'
 import { getWoofHome } from './paths.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
+import { CURRENT_SCHEMA_VERSION } from './schema.ts'
 import { tokenReferencePaths } from './tokens.ts'
 
 export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
@@ -500,7 +501,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
   const importedProject = {
     ...sourceEntries(plan.bundle.project, true),
     ...(plan.bundle.project.$metadata ? { $metadata: plan.bundle.project.$metadata } : {}),
-    $schemaVersion: 2,
+    $schemaVersion: CURRENT_SCHEMA_VERSION,
   }
   const projectBytes = new TextEncoder().encode(`${JSON.stringify(importedProject, null, 2)}\n`)
   projectItem.candidates = [...plan.snapshots.values()]
@@ -860,7 +861,11 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
   let projectFile: ProjectFile | undefined
   if (described.includeProject && typeof definition === 'string') {
     const path = definition.slice('<root>/'.length)
-    const data = validateConfigurationDocument({ ...projectData, $schemaVersion: 2 }, 'project', definition)
+    const data = validateConfigurationDocument(
+      { ...projectData, $schemaVersion: CURRENT_SCHEMA_VERSION },
+      'project',
+      definition,
+    )
     const bytes = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`)
     const existing = snapshot(plan, path).data
     if (
@@ -952,7 +957,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
   if (described.includeProject)
     projects[plan.bundle.projectName] = typeof definition === 'string' ? definition : projectData
   const configuration = validateConfigurationDocument(
-    { ...described.root, $schemaVersion: 2, $projects: projects },
+    { ...described.root, $schemaVersion: CURRENT_SCHEMA_VERSION, $projects: projects },
     'root',
     'import candidate',
   )
