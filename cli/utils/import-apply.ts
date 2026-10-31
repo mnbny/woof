@@ -1,4 +1,5 @@
 import type { ImportSourceState, reviewImport } from './import-plan.ts'
+import type { ProjectDefinition } from './projects.ts'
 
 import { createHash, randomUUID } from 'node:crypto'
 import {
@@ -16,6 +17,9 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
+import { createBackupArchive, referencedResources } from './bundles.ts'
+import { parseConfigurationDocument } from './config.ts'
+
 export type ReviewedImportCandidate = Extract<ReturnType<typeof reviewImport>, { status: 'ready' }>['candidate']
 
 export type ImportApplyReport = {
@@ -24,6 +28,7 @@ export type ImportApplyReport = {
   pending: string[]
   recovery: string[]
   warnings: string[]
+  backup?: string
 }
 
 export class ImportApplyError extends Error {
@@ -271,8 +276,53 @@ function report(
   pending: string[],
   recovery: string[] = [],
   warnings: string[] = [],
-) {
-  return { completed, restored, pending, recovery, warnings }
+  backup?: string,
+): ImportApplyReport {
+  return { completed, restored, pending, recovery, warnings, ...(backup ? { backup } : {}) }
+}
+
+// Rollback covers a failed write only. The archive keeps the state before the import, so a successful import can
+// still be undone: it holds the configuration, every file the configuration references, and every replaced file.
+function writeBackup(candidate: ReviewedImportCandidate, planned: Change[]) {
+  const files = new Map<string, Uint8Array>()
+  const add = (path: string) => {
+    if (files.has(path)) return
+    const data = readCurrent(candidate.home, path)
+    if (data) files.set(path, data)
+  }
+  add('woof.config.json')
+  const projects: ProjectDefinition[] = []
+  for (const definition of Object.values(candidate.local.$projects ?? {})) {
+    if (typeof definition !== 'string') {
+      projects.push(definition)
+      continue
+    }
+    const path = definition.slice('<root>/'.length)
+    add(path)
+    const data = files.get(path)
+    if (data) projects.push(parseConfigurationDocument(new TextDecoder().decode(data), 'project', path))
+  }
+  for (const reference of referencedResources(candidate.local, ...projects))
+    if (reference.startsWith('<root>/')) add(reference.slice('<root>/'.length))
+  for (const change of planned) if (change.original) files.set(change.path, change.original)
+
+  const archive = createBackupArchive(
+    [...files].sort(([left], [right]) => left.localeCompare(right)).map(([path, data]) => ({ path, data })),
+  )
+  const directory = join(candidate.home, '.backups')
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const stamp = new Date().toISOString().replaceAll(':', '-')
+  for (let attempt = 1; ; attempt += 1) {
+    const file = join(directory, `import-${stamp}${attempt === 1 ? '' : `-${attempt}`}.zip`)
+    try {
+      writeExact(file, archive, 0o600)
+      return file
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue
+      rmSync(file, { force: true })
+      throw error
+    }
+  }
 }
 
 export function applyImport(candidate: ReviewedImportCandidate) {
@@ -283,6 +333,21 @@ export function applyImport(candidate: ReviewedImportCandidate) {
       throw new Error(`Reuse source ${source.path} changed after review.`)
   const planned = changes(candidate, current)
   if (!planned.length) return report([], [], [])
+
+  let backup: string
+  try {
+    backup = writeBackup(candidate, planned)
+  } catch (error) {
+    throw new ImportApplyError(
+      `Import backup failed before any change: ${error instanceof Error ? error.message : String(error)}`,
+      report(
+        [],
+        [],
+        planned.map(change => change.path),
+      ),
+      { cause: error },
+    )
+  }
 
   const createdDirectories: string[] = []
   const staged: StagedChange[] = []
@@ -319,6 +384,7 @@ export function applyImport(candidate: ReviewedImportCandidate) {
         planned.map(change => change.path),
         [],
         warnings,
+        backup,
       ),
       { cause: error },
     )
@@ -383,6 +449,7 @@ export function applyImport(candidate: ReviewedImportCandidate) {
         pending,
         [...new Set(recovery)],
         [...warnings, ...rollbackErrors],
+        backup,
       ),
       { cause: error },
     )
@@ -397,5 +464,6 @@ export function applyImport(candidate: ReviewedImportCandidate) {
       .filter(change => change.backup && warnings.some(warning => warning.includes(change.backup!)))
       .map(change => change.backup!),
     warnings,
+    backup,
   )
 }
