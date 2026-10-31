@@ -50,6 +50,8 @@ export const test = baseTest
       filter: path => basename(path) !== 'woof.bundle.mjs',
     })
     await cp(join(repoRoot, 'package.json'), join(checkout, 'package.json'))
+    for (const root of [checkout, bundleDirectory])
+      await cp(join(repoRoot, 'skills', 'woof-execution'), join(root, 'skills', 'woof-execution'), { recursive: true })
     await symlink(join(repoRoot, 'node_modules'), join(checkout, 'node_modules'))
     await cp(join(repoRoot, 'package.json'), join(bundleDirectory, 'package.json'))
     await cp(join(repoRoot, 'cli', 'templates'), join(bundleDirectory, 'cli', 'templates'), { recursive: true })

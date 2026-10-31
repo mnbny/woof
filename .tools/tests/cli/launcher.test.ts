@@ -1,7 +1,9 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import { expect } from 'vitest'
 
-import { test } from '../fixtures.ts'
+import { put, test } from '../fixtures.ts'
 
 test('the source launcher resolves dependencies from its checkout when called elsewhere', async ({ cli }) => {
   const result = await cli.run(process.execPath, [cli.sourceEntry])
@@ -40,3 +42,14 @@ test.for(['sourceEntry', 'entry'] as const)(
     expect(stripVTControlCharacters(human.stdout)).not.toBe(human.stdout)
   },
 )
+
+test('agent runs recommend the execution skill until a current copy is installed', async ({ cli }) => {
+  const run = async () => (await cli.run(process.execPath, [cli.entry, '--help', '--agent'])).stderr
+  const installed = join(cli.taskHome, '.agents', 'skills', 'woof-execution', 'SKILL.md')
+
+  expect(await run()).toContain('Woof execution skill: not installed')
+  await put(installed, '---\nname: woof-execution\n---\n')
+  expect(await run()).toContain('Woof execution skill: update available')
+  await put(installed, await readFile(new URL('../../../skills/woof-execution/SKILL.md', import.meta.url), 'utf8'))
+  expect(await run()).toBe('')
+})
