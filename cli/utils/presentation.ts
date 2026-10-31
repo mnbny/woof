@@ -63,6 +63,13 @@ export function presentError({ summary, details, recovery }: PresentationInput, 
   if (recovery) log.info(recovery)
 }
 
+// People copy the value, so it reads as code. Agents get the value from their template.
+export function presentCode(message: string, code: string, agent: AgentTemplate) {
+  if (agentPresentation()) return writeAgentTemplate(agent)
+  log.info(message)
+  log.message(codeBlockText(code, { compact: true }), { spacing: 0, withGuide: false })
+}
+
 export async function chooseOption({
   message,
   options,
