@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@bomb.sh/tab": "0.0.22",
+    "@chatwoot/pico-search": "0.6.2",
     "@clack/prompts": "1.8.1",
     "ansis": "4.4.0",
     "change-case": "5.4.4",
