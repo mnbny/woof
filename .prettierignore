@@ -4,3 +4,4 @@
 CLAUDE.md
 pnpm-lock.yaml
 cli/woof.bundle.mjs
+cli/templates/*.md

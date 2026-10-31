@@ -30,8 +30,9 @@ export const test = baseTest
     const bin = join(directory, 'bin')
     const project = join(directory, 'project')
     const taskHome = join(directory, "developer's $HOME `literal`")
+    // Laid out like the installed package, which has no node_modules.
     const bundleDirectory = join(directory, 'standalone')
-    const entry = join(bundleDirectory, 'woof.bundle.mjs')
+    const entry = join(bundleDirectory, 'cli', 'woof.bundle.mjs')
     const sourceEntry = join(checkout, 'cli', 'woof.mjs')
     const checkoutEntry = join(checkout, 'cli', 'woof.bundle.mjs')
     const env = {
@@ -43,13 +44,15 @@ export const test = baseTest
       TERM: 'dumb',
     }
 
-    await Promise.all([taskHome, project, bin, bundleDirectory].map(path => mkdir(path, { recursive: true })))
+    await Promise.all([taskHome, project, bin, dirname(entry)].map(path => mkdir(path, { recursive: true })))
     await cp(join(repoRoot, 'cli'), join(checkout, 'cli'), {
       recursive: true,
       filter: path => basename(path) !== 'woof.bundle.mjs',
     })
     await cp(join(repoRoot, 'package.json'), join(checkout, 'package.json'))
     await symlink(join(repoRoot, 'node_modules'), join(checkout, 'node_modules'))
+    await cp(join(repoRoot, 'package.json'), join(bundleDirectory, 'package.json'))
+    await cp(join(repoRoot, 'cli', 'templates'), join(bundleDirectory, 'cli', 'templates'), { recursive: true })
     await writeFile(entry, inject('cliSource'))
     await writeFile(checkoutEntry, inject('cliSource'))
 

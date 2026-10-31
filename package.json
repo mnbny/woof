@@ -9,6 +9,7 @@
   },
   "files": [
     "cli/woof.bundle.mjs",
+    "cli/templates/*.md",
     "skills/woof-execution/SKILL.md"
   ],
   "scripts": {
