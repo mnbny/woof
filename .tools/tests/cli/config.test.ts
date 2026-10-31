@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { chmod, lstat, mkdir, readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { put, test } from '../fixtures.ts'
@@ -16,9 +17,9 @@ type Cli = {
   ): Promise<{ status: number; stdout: string; stderr: string }>
 }
 
-function run(cli: Cli, home: string, args: string[]) {
+function run(cli: Cli, home: string, args: string[], cwd = cli.project) {
   assert(home.includes('woof-test-'), 'WOOF_HOME must belong to the test fixture')
-  return cli.run(process.execPath, [cli.entry, ...args], cli.project, {
+  return cli.run(process.execPath, [cli.entry, ...args], cwd, {
     WOOF_HOME: home,
     NO_COLOR: '1',
     TERM: 'dumb',
@@ -94,4 +95,34 @@ test('rejects checkout-relative registered project configuration on startup', as
   expect(result.status).toBe(1)
   expect(result.stdout).toContain('must be inline or reference a <root>/ configuration file')
   expect(await readFile(root, 'utf8')).toBe(original)
+})
+
+test('registers a home project in place and never replaces one', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'init-home')
+  const file = join(home, 'woof.config.json')
+  await put(file, '{"$schemaVersion":2,"shared":"x","$projects":{"old":{}},"tail":"y"}\n')
+  await chmod(file, 0o600)
+  const register = ['init', '--name', 'acme', '--agent']
+
+  expect((await run(cli, home, [...register, '--base-path', '~/work/acme'])).status).toBe(0)
+  const registered = await readFile(file, 'utf8')
+  expect(Object.keys(JSON.parse(registered))).toEqual(['$schemaVersion', 'shared', '$projects', 'tail'])
+  expect(JSON.parse(registered).$projects).toEqual({ old: {}, acme: { $metadata: { $basePaths: ['~/work/acme'] } } })
+  expect((await lstat(file)).mode & 0o777).toBe(0o600)
+
+  expect((await run(cli, home, register)).status).toBe(1)
+  expect(await readFile(file, 'utf8')).toBe(registered)
+  expect(await readdir(home)).toEqual(['woof.config.json'])
+})
+
+test('creates one repository configuration per checkout', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'init-repository-home')
+  const checkout = join(directory, 'init-checkout')
+  await mkdir(checkout)
+  execFileSync('git', ['init', '-q', checkout])
+
+  expect((await run(cli, home, ['init', '--repo', '.agents/woof.config.json', '--agent'], checkout)).status).toBe(0)
+  expect(JSON.parse(await readFile(join(checkout, '.agents/woof.config.json'), 'utf8'))).toEqual({ $schemaVersion: 2 })
+  expect((await run(cli, home, ['init', '--repo', 'woof.config.json', '--agent'], checkout)).status).toBe(1)
+  await expect(lstat(join(checkout, 'woof.config.json'))).rejects.toThrow()
 })
