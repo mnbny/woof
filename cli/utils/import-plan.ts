@@ -242,8 +242,47 @@ function writeStaged(stage: string, path: string, data: Uint8Array | string) {
   safePath(path)
   const destination = resolve(stage, path)
   if (!contained(stage, destination)) throw new Error(`Staged resource escapes its temporary home: ${path}`)
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
+  try {
+    if (equalBytes(readFileSync(destination), bytes)) return
+    throw new Error(`Staged path ${path} has inconsistent contents.`)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
   mkdirSync(dirname(destination), { recursive: true })
-  writeFileSync(destination, data, { flag: 'wx', mode: 0o600 })
+  writeFileSync(destination, bytes, { flag: 'wx', mode: 0o600 })
+}
+
+function stageOtherProjects(
+  configuration: RootConfiguration,
+  selectedName: string,
+  home: string,
+  stage: string,
+  references: Set<string>,
+  sources: Map<string, ImportSourceState>,
+) {
+  const projects = new Map<string, ProjectDefinition>()
+  const deferred: string[] = []
+  for (const [name, definition] of Object.entries(configuration.$projects ?? {})) {
+    if (name === selectedName) continue
+    let data: ProjectDefinition
+    if (typeof definition === 'string') {
+      if (!definition.startsWith('<root>/')) {
+        deferred.push(name)
+        continue
+      }
+      const path = definition.slice('<root>/'.length)
+      const source = sourceState(home, path)
+      if (!source.data) throw new Error(`Candidate validation cannot read home project ${name} configuration ${path}.`)
+      sources.set(path, { path, digest: source.digest })
+      data = parseConfigurationDocument(new TextDecoder().decode(source.data), 'project', path)
+      writeStaged(stage, path, source.data)
+    } else data = definition
+    projects.set(name, data)
+    for (const [key, value] of Object.entries(data))
+      if (key !== '$schemaVersion' && key !== '$metadata') collectHomeReferences(value as TokenValue, references)
+  }
+  return { projects, deferred }
 }
 
 function validateCandidate(
@@ -253,9 +292,12 @@ function validateCandidate(
   files: ReadonlyMap<string, Uint8Array>,
   home: string,
   cwd: string,
+  preserveOthers: boolean,
 ) {
   const stage = mkdtempSync(join(tmpdir(), 'woof-import-plan-'))
   const previousHome = process.env['WOOF_HOME']
+  const sources = new Map<string, ImportSourceState>()
+  const requirements = new Set<string>()
   try {
     writeStaged(stage, 'woof.config.json', `${JSON.stringify(configuration, null, 2)}\n`)
     if (projectFile) writeStaged(stage, projectFile.path, `${JSON.stringify(projectFile.data, null, 2)}\n`)
@@ -269,9 +311,14 @@ function validateCandidate(
     if (projectFile)
       for (const [key, value] of Object.entries(projectFile.data))
         if (key !== '$schemaVersion' && key !== '$metadata') collectHomeReferences(value as TokenValue, references)
+    const other = preserveOthers
+      ? stageOtherProjects(configuration, projectName, home, stage, references, sources)
+      : { projects: new Map<string, ProjectDefinition>(), deferred: [] }
     for (const path of references) {
-      const data = files.get(path) ?? readDestination(home, path)
+      const incoming = files.get(path)
+      const data = incoming ?? readDestination(home, path)
       if (!data) throw new Error(`Candidate resource is missing: ${path}`)
+      if (!incoming) sources.set(path, { path, digest: digest(data) })
       writeStaged(stage, path, data)
     }
     process.env['WOOF_HOME'] = stage
@@ -288,17 +335,59 @@ function validateCandidate(
     }
     validateTokenGraph(createTokenGraph(rootOnlyContext))
     const validations = validateTokenGraphForTransfer(createTokenGraph(context))
-    return [
-      ...new Set(
-        validations
-          .flatMap(validation => validation.deferredRequirements ?? [])
-          .map(requirement => requirement.reference),
-      ),
-    ].sort()
+    for (const validation of validations)
+      for (const requirement of validation.deferredRequirements ?? []) requirements.add(requirement.reference)
+    for (const name of other.projects.keys()) {
+      try {
+        const otherContext = selectProjectContext({
+          project: name,
+          loader: createResourceLoader({ cwd }),
+          cwd,
+        })
+        const otherValidations = validateTokenGraphForTransfer(createTokenGraph(otherContext))
+        for (const validation of otherValidations)
+          for (const requirement of validation.deferredRequirements ?? []) requirements.add(requirement.reference)
+      } catch (error) {
+        throw new Error(
+          `Candidate changes break registered project ${name}: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        )
+      }
+    }
+    return {
+      requirements: [...requirements].sort(),
+      deferredProjects: other.deferred.sort(),
+      sources: [...sources.values()],
+    }
   } finally {
     if (previousHome === undefined) delete process.env['WOOF_HOME']
     else process.env['WOOF_HOME'] = previousHome
     rmSync(stage, { recursive: true, force: true })
+  }
+}
+
+function assertRawDestinationIsNotConfiguration(
+  local: RootConfiguration,
+  home: string,
+  path: string,
+  existing: Uint8Array | undefined,
+) {
+  const physical = existing ? realpathSync(resolve(home, path)) : undefined
+  for (const [name, definition] of Object.entries(local.$projects ?? {})) {
+    if (typeof definition !== 'string' || !definition.startsWith('<root>/')) continue
+    const configPath = definition.slice('<root>/'.length)
+    let configPhysical: string | undefined
+    try {
+      safePath(configPath)
+      if (readDestination(home, configPath)) configPhysical = realpathSync(resolve(home, configPath))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    if (configPath === path || (physical && configPhysical === physical))
+      throw new Error(
+        `Raw payload destination ${path} belongs to registered project ${name}'s configuration. Choose a nonconflicting resource path or keep existing content; raw text must not replace project JSON.`,
+      )
   }
 }
 
@@ -328,6 +417,7 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
     if (path === 'woof.config.json' || path === incomingProjectPath) continue
     const existing = readDestination(home, path)
     initialFiles.set(path, existing)
+    if (!existing || !equalBytes(existing, data)) assertRawDestinationIsNotConfiguration(local, home, path, existing)
     if (existing && !equalBytes(existing, data)) conflicts.push(conflict('file', path, existing, data))
   }
   if (incomingProjectPath && !initialFiles.has(incomingProjectPath))
@@ -442,19 +532,29 @@ export function reviewImport(plan: ReturnType<typeof planImport>, choices: Reado
     files.set(path, item && choices[item.id] === 'keep' ? existing! : incoming)
   }
   assertProjectDestination(plan, projectFile)
-  const deferredRequirements = validateCandidate(
+  const sharedChanged = !isDeepStrictEqual(sourceEntries(plan.local, false), shared)
+  const existingResourcesChanged = [...files].some(([path, data]) => {
+    const original = plan.initialFiles.get(path)
+    return original !== undefined && !equalBytes(original, data)
+  })
+  const validation = validateCandidate(
     configuration,
     plan.bundle.projectName,
     projectFile,
     files,
     plan.home,
     plan.cwd,
+    sharedChanged || existingResourcesChanged,
   )
+  const sources = [...plan.sources]
+  for (const source of validation.sources)
+    if (!sources.some(existing => existing.path === source.path)) sources.push(source)
   return {
     status: 'ready' as const,
     candidate: {
       configuration,
-      deferredRequirements,
+      deferredProjects: validation.deferredProjects,
+      deferredRequirements: validation.requirements,
       files,
       home: plan.home,
       initialFiles: plan.initialFiles,
@@ -462,7 +562,7 @@ export function reviewImport(plan: ReturnType<typeof planImport>, choices: Reado
       local: plan.local,
       projectFile,
       projectName: plan.bundle.projectName,
-      sources: plan.sources,
+      sources,
     },
   }
 }
