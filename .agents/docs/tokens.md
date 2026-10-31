@@ -10,7 +10,7 @@ Values are strings, namespaces, or typed prompt/script resources. Optional descr
 
 Root definitions form the base. One selected registered or repository project overlays whole tokens, including aliases and metadata. References resolve afterward against that merged view. Inherited entries remain callable without re-declaration.
 
-Global definitions must validate independently and cannot reference project-only tokens or repository resources. Self-reference is a cycle, not parent reuse. Missing targets and cycles fail before computed effects. Double braces reference tokens; quadruple braces emit literal double braces. Script output is never reinterpreted.
+Global definitions must validate independently and cannot reference project-only tokens or repository resources. Self-reference is a cycle, not parent reuse. Missing targets and cycles fail before computed effects. Double braces reference tokens; quadruple braces emit literal double braces. Script output is never reinterpreted. When repository-authored content depends on home tokens or files, lookup emits one nonfatal warning on stderr and leaves payload stdout unchanged.
 
 Explicit selection, repository configuration, metadata matching, and calling-agent inference precede root-only fallback. The caller directory and ancestors drive metadata matching; ambiguity returns choices instead of guessing. No selected project means root alone, not an invented default.
 

@@ -36,4 +36,4 @@ Before writing a test, confirm that **all** conditions below are met. These requ
 
 ## Skills
 
-Use globally installed skills when requested. This repository does not vendor project-local skills.
+Use globally installed development skills when requested. This repository includes only the original `skills/woof-execution/SKILL.md` execution guide; it does not vendor a copied development-skill catalog.
