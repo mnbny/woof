@@ -31,41 +31,57 @@ export default defineCommand({
       const root = loader.loadRootConfiguration()
       const projects = loadRegisteredProjects(root, loader)
       const context = selectProjectContext({ loader })
-      const details = [
-        `Selection: ${context.selection}`,
-        context.project
-          ? `Current scope: ${context.project.kind === 'repository' ? 'unnamed repository (not a registered export)' : context.project.name}`
-          : 'Current scope: root only',
-        context.candidates.length
-          ? `Matching candidates: ${context.candidates.map(candidate => candidate.name).join(', ')}`
-          : 'Matching candidates: none',
-        '',
-        ...projects.flatMap(project => [
+      const scope = context.project
+        ? context.project.kind === 'repository'
+          ? 'unnamed repository (not a registered export)'
+          : context.project.name
+        : 'root only'
+      const candidates = context.candidates.map(candidate => candidate.name).join(', ') || 'none'
+      const list = projects
+        .flatMap(project => [
           `${project.name} [${project.inline ? 'inline' : 'referenced'}]`,
           `  Configuration: ${project.source.file}`,
           `  Resource root: ${project.source.root}`,
           ...metadataPaths(project.data.$metadata?.$basePaths).map(path => `  Checkout: ${path}`),
           ...metadataPaths(project.data.$metadata?.$worktreePaths).map(path => `  Worktree pattern: ${path}`),
-        ]),
-      ].join('\n')
+        ])
+        .join('\n')
+      const projectsNoun = projects.length === 1 ? 'project' : 'projects'
 
-      presentResult({
-        summary: projects.length
-          ? `${projects.length} registered project${projects.length === 1 ? '' : 's'}`
-          : 'No registered projects',
-        details: projects.length
-          ? details
-          : 'Add a registered project to the home registry or define an unnamed project in a repository configuration.',
-        recovery:
-          'Selection is not persisted. Unnamed repository scope is distinct from named, exportable registry entries.',
-      })
+      presentResult(
+        {
+          summary: projects.length ? `${projects.length} registered ${projectsNoun}` : 'No registered projects',
+          details: projects.length
+            ? `Selection: ${context.selection}\nCurrent scope: ${scope}\nMatching candidates: ${candidates}\n\n${list}`
+            : 'Add a registered project to the home registry or define an unnamed project in a repository configuration.',
+          recovery:
+            'Selection is not persisted. Unnamed repository scope is distinct from named, exportable registry entries.',
+        },
+        projects.length
+          ? {
+              template: 'projects-result',
+              values: {
+                count: projects.length,
+                projects: projectsNoun,
+                selection: context.selection,
+                scope,
+                candidates,
+                list,
+              },
+            }
+          : { template: 'projects-empty' },
+      )
     } catch (error) {
-      presentError({
-        summary: 'Woof could not list projects.',
-        details: error instanceof Error ? error.message : String(error),
-        recovery:
-          'Review the configuration paths and selection information, then retry. No project selection was persisted.',
-      })
+      const details = error instanceof Error ? error.message : String(error)
+      presentError(
+        {
+          summary: 'Woof could not list projects.',
+          details,
+          recovery:
+            'Review the configuration paths and selection information, then retry. No project selection was persisted.',
+        },
+        { template: 'projects-error', values: { details } },
+      )
       process.exitCode = 1
     }
   },

@@ -141,18 +141,33 @@ export default defineCommand({
 
       const archive = createBundleArchive(configuration, resources.values())
       const destination = writeUniqueArchive(projectName, archive)
-      presentResult({
-        summary: `Exported ${projectName} without executing scripts.`,
-        details: [`Project: ${projectName}`, `Archive: ${destination}`, `Resources: ${resources.size}`].join('\n'),
-        recovery: `Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
-      })
+      presentResult(
+        {
+          summary: `Exported ${projectName} without executing scripts.`,
+          details: [`Project: ${projectName}`, `Archive: ${destination}`, `Resources: ${resources.size}`].join('\n'),
+          recovery: `Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
+        },
+        {
+          template: 'export-result',
+          values: {
+            project: projectName,
+            archive: destination,
+            resources: resources.size,
+            archiveArgument: shellQuote(destination),
+          },
+        },
+      )
     } catch (error) {
-      presentError({
-        summary: 'Woof could not export the project.',
-        details: error instanceof Error ? error.message : String(error),
-        recovery:
-          'Select an explicit registered project, correct any missing resources or invalid references, then retry. Source configuration was not changed.',
-      })
+      const details = error instanceof Error ? error.message : String(error)
+      presentError(
+        {
+          summary: 'Woof could not export the project.',
+          details,
+          recovery:
+            'Select an explicit registered project, correct any missing resources or invalid references, then retry. Source configuration was not changed.',
+        },
+        { template: 'export-error', values: { details } },
+      )
       process.exitCode = 1
     }
   },

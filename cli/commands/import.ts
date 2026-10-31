@@ -20,6 +20,7 @@ import {
   presentError,
   presentResult,
   presentWarning,
+  renderTemplateFile,
 } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader, detectCheckoutRoot } from '../utils/resources.ts'
@@ -123,7 +124,10 @@ function validateImportedCatalog(cwd: string) {
     root = loader.loadRootConfiguration()
   } catch (error) {
     return [
-      `Could not read ${getWoofHome('woof.config.json')}: ${String(error)}. Repair this configuration before running Woof again.`,
+      renderTemplateFile('import-finding-unreadable', {
+        file: getWoofHome('woof.config.json'),
+        details: String(error),
+      }),
     ]
   }
   const inspect = (name?: string) => {
@@ -164,13 +168,13 @@ function assertImportContext(cwd: string) {
 }
 
 function outcome(report: ImportApplyReport) {
-  return [
-    `Completed: ${report.completed.join(', ') || 'None'}`,
-    `Restored: ${report.restored.join(', ') || 'None'}`,
-    `Pending: ${report.pending.join(', ') || 'None'}`,
-    `Recovery: ${report.recovery.join(', ') || 'None'}`,
-    `Warnings: ${report.warnings.join('; ') || 'None'}`,
-  ].join('\n')
+  return renderTemplateFile('import-report', {
+    completed: report.completed.join(', ') || 'None',
+    restored: report.restored.join(', ') || 'None',
+    pending: report.pending.join(', ') || 'None',
+    recovery: report.recovery.join(', ') || 'None',
+    warnings: report.warnings.join('; ') || 'None',
+  })
 }
 
 export default defineCommand({
@@ -241,18 +245,46 @@ export default defineCommand({
       for (;;) {
         if (reviewed.status === 'ready') break
         const item = reviewed.next
-        presentConflict({
-          summary: `Review ${item.kind} ${item.path}`,
-          details: `${conflictDiff(item)}${item.notice ? `\n${item.notice}` : ''}${item.candidates?.length ? `\nReusable (existing metadata is retained): ${JSON.stringify(item.candidateDetails ?? item.candidates)}` : ''}${invalidated.length ? `\nEarlier decisions need review: ${invalidated.join(', ')}` : ''}`,
-          recovery: 'Choose explicitly. No import files change until every item is reviewed.',
-        })
+        const diff = conflictDiff(item)
+        const notice = item.notice ? `\n${item.notice}` : ''
+        const reusable = item.candidates?.length
+          ? `\n${renderTemplateFile('import-reusable', { candidates: JSON.stringify(item.candidateDetails ?? item.candidates) })}`
+          : ''
+        const rechecks = invalidated.length
+          ? `\n${renderTemplateFile('import-rechecks', { items: invalidated.join(', ') })}`
+          : ''
+        presentConflict(
+          {
+            summary: `Review ${item.kind} ${item.path}`,
+            details: `${diff}${notice}${reusable}${rechecks}`,
+            recovery: 'Choose explicitly. No import files change until every item is reviewed.',
+          },
+          null,
+        )
         if (agent || !isTTY()) {
           const suggested = decisionsPath ?? `${archivePath}.decisions.json`
-          presentConflict({
-            summary: 'Import requires an explicit decision for the next item.',
-            details: JSON.stringify(decisionDocument(plan, choices, reviewed.issues, item, invalidated), null, 2),
-            recovery: `Set choices[next.id] to "keep", "take", {"action":"add","address":"..."}, or {"action":"reuse","address":"..."} as applicable. Save the file and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${agent ? ' --agent' : ''}.`,
-          })
+          const document = JSON.stringify(decisionDocument(plan, choices, reviewed.issues, item, invalidated), null, 2)
+          presentConflict(
+            {
+              summary: 'Import requires an explicit decision for the next item.',
+              details: document,
+              recovery: `Set choices[next.id] to "keep", "take", {"action":"add","address":"..."}, or {"action":"reuse","address":"..."} as applicable. Save the file and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${agent ? ' --agent' : ''}.`,
+            },
+            {
+              template: 'import-decision',
+              values: {
+                kind: item.kind,
+                path: item.path,
+                diff,
+                notice,
+                reusable,
+                rechecks,
+                document,
+                archive: shellQuote(archivePath),
+                decisions: shellQuote(suggested),
+              },
+            },
+          )
           process.exitCode = 1
           return
         }
@@ -303,7 +335,7 @@ export default defineCommand({
           reviewed = reviewImport(plan, choices)
         } catch (error) {
           delete choices[item.id]
-          presentWarning(error instanceof Error ? error.message : String(error))
+          presentWarning('import-choice-rejected', { details: error instanceof Error ? error.message : String(error) })
           reviewed = reviewImport(plan, choices)
           continue
         }
@@ -337,35 +369,55 @@ export default defineCommand({
       try {
         findings = validateImportedCatalog(cwd)
       } catch (error) {
-        findings = [`Validation could not finish: ${error instanceof Error ? error.message : String(error)}`]
+        findings = [
+          renderTemplateFile('import-finding-incomplete', {
+            details: error instanceof Error ? error.message : String(error),
+          }),
+        ]
       }
-      presentResult({
-        summary: result.completed.length
-          ? `Imported ${plan.bundle.projectName} without executing scripts.`
-          : 'Import review passed; no files needed changes.',
-        details: `${outcome(result)}${invalidated.length ? `\nRechecked decisions that no longer required a choice: ${invalidated.join(', ')}` : ''}`,
-        recovery: findings.length
-          ? 'Import completed. Review the separate validation findings; do not repeat the import.'
-          : 'The imported catalog passed post-import validation.',
-      })
+      const report = outcome(result)
+      const rechecked = invalidated.length
+        ? `\n${renderTemplateFile('import-rechecked', { items: invalidated.join(', ') })}`
+        : ''
+      const validation = renderTemplateFile(findings.length ? 'import-validation-findings' : 'import-validation-passed')
+      presentResult(
+        {
+          summary: result.completed.length
+            ? `Imported ${plan.bundle.projectName} without executing scripts.`
+            : 'Import review passed; no files needed changes.',
+          details: `${report}${rechecked}`,
+          recovery: validation,
+        },
+        result.completed.length
+          ? {
+              template: 'import-imported',
+              values: { project: plan.bundle.projectName, report, rechecked, validation },
+            }
+          : { template: 'import-unchanged', values: { report, rechecked, validation } },
+      )
       if (findings.length) {
         const configurationBroken = findings.some(finding =>
           /Could not parse configuration|Invalid configuration|Could not read configuration|requires an explicit \$schemaVersion|unsupported \$schemaVersion/.test(
             finding,
           ),
         )
-        const recovery = configurationBroken
-          ? 'Repair the configuration files named above before running Woof again.'
-          : `Review the reported tokens or run woof validate --project ${shellQuote(plan.bundle.projectName)}.`
-        presentWarning(`Import completed, but validation found:\n${findings.join('\n')}\n${recovery}`)
+        presentWarning(configurationBroken ? 'import-findings-configuration' : 'import-findings', {
+          findings: findings.join('\n'),
+          project: shellQuote(plan.bundle.projectName),
+        })
       }
     } catch (error) {
-      presentError({
-        summary: 'Woof could not complete the import.',
-        details: `${error instanceof Error ? error.message : String(error)}${error instanceof ImportApplyError ? `\n${outcome(error.report)}` : ''}`,
-        recovery:
-          'Review the archive and destination state, then retry with explicit choices. Incomplete review changes nothing; retained recovery artifacts remain available when reported.',
-      })
+      const message = error instanceof Error ? error.message : String(error)
+      const report = error instanceof ImportApplyError ? `\n${outcome(error.report)}` : ''
+      presentError(
+        {
+          summary: 'Woof could not complete the import.',
+          details: `${message}${report}`,
+          recovery:
+            'Review the archive and destination state, then retry with explicit choices. Incomplete review changes nothing; retained recovery artifacts remain available when reported.',
+        },
+        { template: 'import-error', values: { details: message, report } },
+      )
       process.exitCode = 1
     }
   },

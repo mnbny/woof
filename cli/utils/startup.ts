@@ -6,6 +6,7 @@ import { initializeWoofHome } from './bootstrap.ts'
 import { readConfigurationDocument } from './config.ts'
 import { applyConfigurationMigration, prepareConfigurationMigration } from './migrations.ts'
 import { getWoofHome } from './paths.ts'
+import { presentWarning } from './presentation.ts'
 import { insideWoofHome, repositoryConfiguration } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 
@@ -66,7 +67,7 @@ export async function prepareStartup(options: { migrate: boolean; passive: boole
     if (plan.documents.some(document => document.changed)) {
       const changed = await applyConfigurationMigration(plan)
       for (const document of changed)
-        process.stderr.write(`Migrated configuration ${document.file}: ${document.from} -> ${document.to}\n`)
+        presentWarning('migration-notice', { file: document.file, from: document.from, to: document.to })
       for (const document of documents)
         if (document.kind === 'project') readConfigurationDocument(document.file, 'project')
         else readConfigurationDocument(document.file, 'root')

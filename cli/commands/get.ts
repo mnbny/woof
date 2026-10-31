@@ -21,10 +21,7 @@ function warnOnRepositoryHomeDependencies(explanation: ReturnType<typeof preflig
       token.origin === 'root' ||
       (token.origin === 'project' && token.files.some(file => file.markedPath.startsWith('<root>/'))),
   )
-  if (usesHome)
-    presentWarning(
-      'Repository resources depend on Woof home tokens or files; keep those shared dependencies available when moving this checkout.',
-    )
+  if (usesHome) presentWarning('get-home-dependencies')
 }
 
 function candidateText(
@@ -99,16 +96,20 @@ export default defineCommand({
           }
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          presentSelection({
-            summary: 'Multiple projects match this lookup. Select one explicitly.',
-            details: candidates
-              .map(candidate => {
-                const retry = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
-                return `${candidate.name}\n  ${retry}`
-              })
-              .join('\n'),
-            recovery: 'Retry with one exact --project value. No selection was persisted.',
-          })
+          const details = candidates
+            .map(candidate => {
+              const retry = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
+              return `${candidate.name}\n  ${retry}`
+            })
+            .join('\n')
+          presentSelection(
+            {
+              summary: 'Multiple projects match this lookup. Select one explicitly.',
+              details,
+              recovery: 'Retry with one exact --project value. No selection was persisted.',
+            },
+            { template: 'get-ambiguous', values: { candidates: details } },
+          )
           process.exitCode = 1
           return
         }
@@ -132,13 +133,23 @@ export default defineCommand({
       const project = context.project?.kind === 'registered' ? context.project : undefined
       const details = candidateText(candidates, project, agent)
       if (search || !query || agent || !process.stdout.isTTY || candidates.length === 0) {
-        presentSelection({
-          summary: candidates.length ? 'Matching resources' : 'No resources matched this lookup.',
-          details,
-          recovery: search
-            ? 'Use an exact follow-up command to retrieve a selected resource. Discovery never executes a match.'
-            : 'Use an exact token address or broaden the discovery terms, then retry.',
-        })
+        const template = search
+          ? candidates.length
+            ? 'get-search'
+            : 'get-search-empty'
+          : candidates.length
+            ? 'get-candidates'
+            : 'get-no-match'
+        presentSelection(
+          {
+            summary: candidates.length ? 'Matching resources' : 'No resources matched this lookup.',
+            details,
+            recovery: search
+              ? 'Use an exact follow-up command to retrieve a selected resource. Discovery never executes a match.'
+              : 'Use an exact token address or broaden the discovery terms, then retry.',
+          },
+          { template, values: { candidates: details } },
+        )
         if (!search && query) process.exitCode = 1
         return
       }
@@ -164,20 +175,27 @@ export default defineCommand({
       )
       writePayload(output)
     } catch (error) {
+      const details = error instanceof Error ? error.message : String(error)
       if (controller.signal.aborted) {
-        presentError({
-          summary: 'Woof lookup was cancelled.',
-          details: error instanceof Error ? error.message : String(error),
-          recovery: 'Earlier completed effects are not rolled back.',
-        })
+        presentError(
+          {
+            summary: 'Woof lookup was cancelled.',
+            details,
+            recovery: 'Earlier completed effects are not rolled back.',
+          },
+          { template: 'get-cancelled', values: { details } },
+        )
         process.exitCode = 130
       } else {
-        presentError({
-          summary: 'Woof could not complete the lookup.',
-          details: error instanceof Error ? error.message : String(error),
-          recovery:
-            'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',
-        })
+        presentError(
+          {
+            summary: 'Woof could not complete the lookup.',
+            details,
+            recovery:
+              'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',
+          },
+          { template: 'get-error', values: { details } },
+        )
         process.exitCode = 1
       }
     } finally {

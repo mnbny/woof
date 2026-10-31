@@ -57,10 +57,15 @@ try {
       : invocation.args
   await runMain(main, { rawArgs: args })
 } catch (error) {
-  presentError({
-    summary: 'Woof could not prepare the invocation.',
-    details: error instanceof Error ? error.message : String(error),
-    recovery: `Review the arguments and ${getWoofHome('woof.config.json')}. If Woof reports a pending migration, retry with --migrate.`,
-  })
+  const details = error instanceof Error ? error.message : String(error)
+  const configuration = getWoofHome('woof.config.json')
+  presentError(
+    {
+      summary: 'Woof could not prepare the invocation.',
+      details,
+      recovery: `Review the arguments and ${configuration}. If Woof reports a pending migration, retry with --migrate.`,
+    },
+    { template: 'invocation-error', values: { details, configuration } },
+  )
   process.exitCode = 1
 }

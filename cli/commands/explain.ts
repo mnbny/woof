@@ -52,16 +52,20 @@ export default defineCommand({
           }
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          presentSelection({
-            summary: 'Multiple projects match this explanation. Select one explicitly.',
-            details: candidates
-              .map(candidate => {
-                const retry = `woof explain ${shellQuote(query)} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
-                return `${candidate.name}\n  ${retry}`
-              })
-              .join('\n'),
-            recovery: 'Retry with one exact --project value. No selection was persisted.',
-          })
+          const details = candidates
+            .map(candidate => {
+              const retry = `woof explain ${shellQuote(query)} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
+              return `${candidate.name}\n  ${retry}`
+            })
+            .join('\n')
+          presentSelection(
+            {
+              summary: 'Multiple projects match this explanation. Select one explicitly.',
+              details,
+              recovery: 'Retry with one exact --project value. No selection was persisted.',
+            },
+            { template: 'explain-ambiguous', values: { candidates: details } },
+          )
           process.exitCode = 1
           return
         }
@@ -69,11 +73,9 @@ export default defineCommand({
 
       const graph = createTokenGraph(context)
       const explanation = explainToken(graph, query)
-      const details = [
-        `Selection: ${context.selection}`,
-        `Project: ${context.project ? `${context.project.name ?? 'unnamed'} (${context.project.kind})` : 'Root only'}`,
-        `Requested: ${explanation.requested}`,
-        ...explanation.tokens.flatMap(token => {
+      const project = context.project ? `${context.project.name ?? 'unnamed'} (${context.project.kind})` : 'Root only'
+      const tokens = explanation.tokens
+        .flatMap(token => {
           const value = graph.tokens.get(token.path)!.value
           const kind = typeof value === 'string' ? 'prompt' : value.$type
           const lines = [
@@ -88,21 +90,32 @@ export default defineCommand({
           if (token.references.length) lines.push(`  References: ${token.references.join(', ')}`)
           for (const file of token.files) lines.push(`  Resource: ${file.markedPath} -> ${file.file}`)
           return lines
-        }),
-      ].join('\n')
+        })
+        .map(line => `\n${line}`)
+        .join('')
 
-      presentResult({
-        summary: `Resolution for ${explanation.requested}`,
-        details,
-        recovery: 'Explanation and preflight completed without executing any computed tokens.',
-      })
+      presentResult(
+        {
+          summary: `Resolution for ${explanation.requested}`,
+          details: `Selection: ${context.selection}\nProject: ${project}\nRequested: ${explanation.requested}${tokens}`,
+          recovery: 'Explanation and preflight completed without executing any computed tokens.',
+        },
+        {
+          template: 'explain-result',
+          values: { requested: explanation.requested, selection: context.selection, project, tokens },
+        },
+      )
     } catch (error) {
-      presentError({
-        summary: 'Woof could not explain the resolution.',
-        details: error instanceof Error ? error.message : String(error),
-        recovery:
-          'Review the reported source chain, missing reference or cycle, then retry with an exact token address and project.',
-      })
+      const details = error instanceof Error ? error.message : String(error)
+      presentError(
+        {
+          summary: 'Woof could not explain the resolution.',
+          details,
+          recovery:
+            'Review the reported source chain, missing reference or cycle, then retry with an exact token address and project.',
+        },
+        { template: 'explain-error', values: { details } },
+      )
       process.exitCode = 1
     }
   },

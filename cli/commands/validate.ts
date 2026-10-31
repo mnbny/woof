@@ -52,16 +52,20 @@ export default defineCommand({
           }
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          presentSelection({
-            summary: 'Multiple projects match this validation. Select one explicitly.',
-            details: candidates
-              .map(candidate => {
-                const retry = `woof validate${query ? ` ${shellQuote(query)}` : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
-                return `${candidate.name}\n  ${retry}`
-              })
-              .join('\n'),
-            recovery: 'Retry with one exact --project value. No selection was persisted.',
-          })
+          const details = candidates
+            .map(candidate => {
+              const retry = `woof validate${query ? ` ${shellQuote(query)}` : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
+              return `${candidate.name}\n  ${retry}`
+            })
+            .join('\n')
+          presentSelection(
+            {
+              summary: 'Multiple projects match this validation. Select one explicitly.',
+              details,
+              recovery: 'Retry with one exact --project value. No selection was persisted.',
+            },
+            { template: 'validate-ambiguous', values: { candidates: details } },
+          )
           process.exitCode = 1
           return
         }
@@ -71,21 +75,30 @@ export default defineCommand({
       const validations = validateTokenGraph(graph, query || undefined)
       const inspected = validations.reduce((total, validation) => total + validation.tokens.length, 0)
       const project = context.project ? `${context.project.name ?? 'unnamed'} (${context.project.kind})` : 'Root only'
-      presentResult({
-        summary: `Validated ${inspected} token definition${inspected === 1 ? '' : 's'} without executing scripts.`,
-        details: [
-          `Selection: ${context.selection}`,
-          `Project: ${project}`,
-          `Scope: ${query || 'Complete effective catalog'}`,
-        ].join('\n'),
-        recovery: 'Configuration, references and declared resource paths passed preflight without computed execution.',
-      })
+      const definitions = inspected === 1 ? 'definition' : 'definitions'
+      const scope = query || 'Complete effective catalog'
+      presentResult(
+        {
+          summary: `Validated ${inspected} token ${definitions} without executing scripts.`,
+          details: [`Selection: ${context.selection}`, `Project: ${project}`, `Scope: ${scope}`].join('\n'),
+          recovery:
+            'Configuration, references and declared resource paths passed preflight without computed execution.',
+        },
+        {
+          template: 'validate-result',
+          values: { count: inspected, definitions, selection: context.selection, project, scope },
+        },
+      )
     } catch (error) {
-      presentError({
-        summary: 'Woof validation failed.',
-        details: error instanceof Error ? error.message : String(error),
-        recovery: 'Review the reported data, source or reference failure. Correct it, then retry.',
-      })
+      const details = error instanceof Error ? error.message : String(error)
+      presentError(
+        {
+          summary: 'Woof validation failed.',
+          details,
+          recovery: 'Review the reported data, source or reference failure. Correct it, then retry.',
+        },
+        { template: 'validate-error', values: { details } },
+      )
       process.exitCode = 1
     }
   },
