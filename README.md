@@ -2,6 +2,10 @@
 
 CLI scaffold based on the tooling and development setup in `~/Dev/maacs`. Product commands have not been defined.
 
+## Execution skill
+
+Agents can use the project-owned [Woof execution skill](skills/woof-execution/SKILL.md) for exact retrieval, metadata discovery, project retries, computed output, and explicit migration or import decisions. It is included with the project and requires no global installation.
+
 ## Development
 
 Use Node.js 22.13+ (22.x), 24.x, or 26+, and pnpm 12.16.1.
