@@ -28,7 +28,7 @@ Woof includes these parts:
 - Standalone and local package execution.
 - One project-owned execution skill, which ships with the package.
 
-These items are outside the product: provider installers, hosted services, publishing, semantic search, graphical editors, and a general collection of development skills. MAACS is a reference for shared development practices and invocation structure. Its catalogs are not part of Woof.
+These items are outside the product: provider installers, hosted services, publishing, semantic search, and a general collection of development skills. MAACS is a reference for shared development practices and invocation structure. Its catalogs are not part of Woof.
 
 ## Vocabulary
 

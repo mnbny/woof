@@ -71,6 +71,11 @@ Add each document using this format:
 - Description: Creation of one token, content handling, checks before the write, and the drafting handoff for agents.
 - Tags: `add`, `authoring`
 
+#### [cli-command-edit.md](./cli-command-edit.md)
+
+- Description: Changes to one token's content, description, or tags, the layer choice, the local browser page, and the agent handoff.
+- Tags: `edit`, `authoring`
+
 #### [cli-command-get.md](./cli-command-get.md)
 
 - Description: Exact lookup, discovery fallback, candidate output, and lookup exit status.
