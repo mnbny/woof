@@ -2,6 +2,8 @@ import type { selectProjectContext } from './projects.ts'
 import type { ConfigurationSource, ResourceLocation } from './resources.ts'
 import type { Resource, ScriptResource, TokenNamespace, TokenValue } from './schema.ts'
 
+import { isAbsolute, win32 } from 'node:path'
+
 import { isMarkedResourceReference, readMarkedResource, resolveResourceLocation } from './resources.ts'
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
@@ -174,7 +176,22 @@ export function enumerateEffectiveTokens(graph: TokenGraph) {
   })
 }
 
-function createWalker(graph: TokenGraph) {
+function validateRepositoryMarker(reference: string) {
+  const path = reference.slice('<repo>/'.length)
+  if (
+    !path ||
+    path.includes('\\') ||
+    path.includes('\0') ||
+    isAbsolute(path) ||
+    win32.isAbsolute(path) ||
+    path.split('/').some(segment => !segment || segment === '.' || segment === '..')
+  )
+    throw new TokenResolutionError(
+      `Repository resource ${reference} contains an absolute, empty, backslash or traversal component.`,
+    )
+}
+
+function createWalker(graph: TokenGraph, options: { transfer?: boolean } = {}) {
   const traces = new Map<
     string,
     {
@@ -190,10 +207,16 @@ function createWalker(graph: TokenGraph) {
   >()
   const payloads = new Map<string, { content: string; provenance: ResourceLocation }>()
   const evaluations = new Map<string, Promise<string>>()
+  const deferred = new Map<string, { token: string; reference: string }>()
 
   function location(reference: string, token: EffectiveToken) {
     if (token.origin === 'root' && reference.startsWith('<repo>/'))
       throw new TokenResolutionError(`Global token ${token.path} cannot depend on repository resource ${reference}.`)
+    if (options.transfer && reference.startsWith('<repo>/')) {
+      validateRepositoryMarker(reference)
+      deferred.set(`${token.path}\0${reference}`, { token: token.path, reference })
+      return undefined
+    }
     const checkoutRoot = graph.context.checkoutRoot
     return resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
   }
@@ -204,6 +227,7 @@ function createWalker(graph: TokenGraph) {
     const authored = typeof token.value === 'string' ? token.value : token.value.$exec
     if (!isMarkedResourceReference(authored)) return { content: authored, parts: contentParts(authored), files: [] }
     const provenance = location(authored, token)
+    if (!provenance) return { content: '', parts: [], files: [] }
     const cached = payloads.get(authored)
     if (cached) return { content: cached.content, parts: contentParts(cached.content), files: [cached.provenance] }
     const checkoutRoot = graph.context.checkoutRoot
@@ -241,7 +265,11 @@ function createWalker(graph: TokenGraph) {
         }
     } else {
       const executions = Array.isArray(token.value.$exec) ? token.value.$exec : [token.value.$exec]
-      for (const exec of executions) if (isMarkedResourceReference(exec)) files.push(location(exec, token))
+      for (const exec of executions) {
+        if (!isMarkedResourceReference(exec)) continue
+        const provenance = location(exec, token)
+        if (provenance) files.push(provenance)
+      }
     }
 
     traces.set(path, {
@@ -292,10 +320,14 @@ function createWalker(graph: TokenGraph) {
     traces() {
       return [...traces.values()]
     },
+    deferredRequirements() {
+      return [...deferred.values()]
+    },
   }
 }
 
 function explanation(graph: TokenGraph, path: string, walker: ReturnType<typeof createWalker>) {
+  const deferredRequirements = walker.deferredRequirements()
   return {
     requested: path,
     selection: graph.context.selection,
@@ -303,12 +335,20 @@ function explanation(graph: TokenGraph, path: string, walker: ReturnType<typeof 
       ? { kind: graph.context.project.kind, name: graph.context.project.name, source: graph.context.project.source }
       : undefined,
     tokens: walker.traces(),
+    ...(deferredRequirements.length ? { deferredRequirements } : {}),
   }
 }
 
 export function preflightToken(graph: TokenGraph, address: string) {
   const path = graphAddress(graph, address)
   const walker = createWalker(graph)
+  walker.visit(path, [])
+  return explanation(graph, path, walker)
+}
+
+function preflightTokenForTransfer(graph: TokenGraph, address: string) {
+  const path = graphAddress(graph, address)
+  const walker = createWalker(graph, { transfer: true })
   walker.visit(path, [])
   return explanation(graph, path, walker)
 }
@@ -328,4 +368,9 @@ export async function resolveToken(graph: TokenGraph, address: string, evaluator
 export function validateTokenGraph(graph: TokenGraph, address?: string) {
   if (address) return [preflightToken(graph, address)]
   return [...graph.tokens.keys()].map(path => preflightToken(graph, path))
+}
+
+export function validateTokenGraphForTransfer(graph: TokenGraph, address?: string) {
+  if (address) return [preflightTokenForTransfer(graph, address)]
+  return [...graph.tokens.keys()].map(path => preflightTokenForTransfer(graph, path))
 }
