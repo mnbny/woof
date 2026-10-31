@@ -534,3 +534,168 @@ test('offers a distinct identical file when a prompt reference is remapped', asy
   expect(await readFile(join(home, 'reuse.md'), 'utf8')).toBe('incoming {{a_variant}}')
   expect(fs.existsSync(join(home, 'prompt.md'))).toBe(false)
 })
+
+test('keeps a reused project override bound to the reused shared token', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'bound-reuse-home')
+  await config(home, {
+    $schemaVersion: 2,
+    matchroot: 'A',
+    matchproject: 'B',
+    $projects: { demo: { matchroot: 'old override' } },
+  })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, x: 'A', agents: '{{x}}', $projects: { demo: { x: 'B' } } }),
+    [],
+  )
+  const path = join(directory, 'bound-reuse.zip')
+  await writeFile(path, archive)
+  let sawBinding = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'bound-reuse-decisions.json'), item => {
+    if (item.kind === 'token' && item.path === 'x') return { action: 'reuse', address: 'matchroot' }
+    if (item.kind === 'project-token' && item.path === 'x') return { action: 'reuse', address: 'matchproject' }
+    if (item.kind === 'project-token' && item.path === 'matchroot') sawBinding = true
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(sawBinding).toBe(true)
+  expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
+  expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'B',
+  })
+})
+
+test('reopens a reuse choice when a later file replacement changes its content', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'reuse-file-change-home')
+  await config(home, { $schemaVersion: 2, matching: '<root>/payload.txt', $projects: { demo: {} } })
+  await put(join(home, 'payload.txt'), 'A')
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      alias: 'A',
+      use: '{{alias}}',
+      other: '<root>/payload.txt',
+      $projects: { demo: {} },
+    }),
+    [{ path: 'payload.txt', data: strToU8('B') }],
+  )
+  const path = join(directory, 'reuse-file-change.zip')
+  await writeFile(path, archive)
+  let reopened = false
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'reuse-file-change-decisions.json'),
+    (item, doc) => {
+      if (doc.invalidated?.includes('alias')) reopened = true
+      if (item.path === 'alias' && !reopened) return { action: 'reuse', address: 'matching' }
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(reopened).toBe(true)
+  expect(await readFile(join(home, 'payload.txt'), 'utf8')).toBe('B')
+  expect(await run(cli, home, ['get', 'use', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
+})
+
+test('reopens reuse when a project binding would make the reused alias circular', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'reuse-cycle-home')
+  await config(home, { $schemaVersion: 2, matchroot: 'A', matchproject: '{{matchroot}}', $projects: { demo: {} } })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, x: 'A', agents: '{{x}}', $projects: { demo: { x: '{{matchroot}}' } } }),
+    [],
+  )
+  const path = join(directory, 'reuse-cycle.zip')
+  await writeFile(path, archive)
+  let reopened = false
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'reuse-cycle-decisions.json'),
+    (item, doc) => {
+      if (doc.invalidated?.includes('x')) reopened = true
+      if (item.kind === 'token' && item.path === 'x')
+        return reopened ? { action: 'add', address: 'x_variant' } : { action: 'reuse', address: 'matchroot' }
+      if (item.kind === 'project-token' && item.path === 'x' && !reopened)
+        return { action: 'reuse', address: 'matchproject' }
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(reopened).toBe(true)
+  expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'A',
+  })
+})
+
+test('reopens project reuse when the conflicting local binding is kept', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'kept-binding-home')
+  await config(home, {
+    $schemaVersion: 2,
+    matchroot: 'A',
+    matchproject: 'B',
+    $projects: { demo: { matchroot: 'old' } },
+  })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, x: 'A', agents: '{{x}}', $projects: { demo: { x: 'B' } } }),
+    [],
+  )
+  const path = join(directory, 'kept-binding.zip')
+  await writeFile(path, archive)
+  let reopened = false
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'kept-binding-decisions.json'),
+    (item, doc) => {
+      if (doc.invalidated?.includes('x')) reopened = true
+      if (item.kind === 'token' && item.path === 'x') return { action: 'reuse', address: 'matchroot' }
+      if (item.kind === 'project-token' && item.path === 'x' && !reopened)
+        return { action: 'reuse', address: 'matchproject' }
+      if (item.kind === 'project-token' && item.path === 'matchroot' && !reopened) return 'keep'
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(reopened).toBe(true)
+  expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
+  expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'B',
+  })
+})
+
+test('reopens reuse when another choice replaces the reused token', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'reuse-token-change-home')
+  await config(home, { $schemaVersion: 2, matching: 'A', $projects: { demo: {} } })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, alias: 'A', use: '{{alias}}', matching: 'B', $projects: { demo: {} } }),
+    [],
+  )
+  const path = join(directory, 'reuse-token-change.zip')
+  await writeFile(path, archive)
+  let reopened = false
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'reuse-token-change-decisions.json'),
+    (item, doc) => {
+      if (doc.invalidated?.includes('alias')) reopened = true
+      if (item.path === 'alias' && !reopened) return { action: 'reuse', address: 'matching' }
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(reopened).toBe(true)
+  expect(await run(cli, home, ['get', 'use', '--agent'])).toMatchObject({ status: 0, stdout: 'A' })
+  expect(await run(cli, home, ['get', 'matching', '--agent'])).toMatchObject({ status: 0, stdout: 'B' })
+})

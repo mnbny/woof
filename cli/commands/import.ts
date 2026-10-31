@@ -83,6 +83,7 @@ function decisionDocument(
     ...(item.notice ? { notice: item.notice } : {}),
     ...(item.candidates?.length ? { candidates: item.candidates, candidateDetails: item.candidateDetails } : {}),
     ...(item.requiredNewPath ? { requiredNewPath: true } : {}),
+    ...(item.keepTakeOnly ? { keepTakeOnly: true } : {}),
   })
   return {
     archive: plan.archiveDigest,
@@ -217,12 +218,13 @@ export default defineCommand({
         )
         reviewed = reviewImport(plan, choices)
       }
+      let freshlyChosen = prior?.next?.id
       for (;;) {
         const changed = Object.keys(choices).filter(id => {
           const before = recorded.find(item => item.id === id)
           const now = reviewed.issues.find(item => item.id === id)
           if (now?.invalid) return true
-          if (id === prior?.next?.id) return false
+          if (id === freshlyChosen) return false
           return (
             !before ||
             !now ||
@@ -237,6 +239,7 @@ export default defineCommand({
           delete choices[id]
         }
         reviewed = reviewImport(plan, choices)
+        freshlyChosen = undefined
       }
       for (;;) {
         if (reviewed.status === 'ready') break
@@ -263,8 +266,10 @@ export default defineCommand({
                 ...(item.incoming !== undefined ? [{ value: 'take', label: 'Take incoming' }] : []),
               ]
             : []),
-          ...(item.incoming !== undefined && item.path !== '$metadata' ? [{ value: 'add', label: 'Add as new' }] : []),
-          ...(item.candidates?.length ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
+          ...(item.incoming !== undefined && item.path !== '$metadata' && !item.keepTakeOnly
+            ? [{ value: 'add', label: 'Add as new' }]
+            : []),
+          ...(item.candidates?.length && !item.keepTakeOnly ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
         ]
         const selected = await chooseOption({ message: `${item.path}: choose an action`, options })
         if (!selected) {
@@ -305,24 +310,29 @@ export default defineCommand({
           reviewed = reviewImport(plan, choices)
           continue
         }
-        const changed = Object.keys(choices).filter(id => {
-          const before = recorded.find(entry => entry.id === id)
-          const now = reviewed.issues.find(entry => entry.id === id)
-          if (now?.invalid) return true
-          if (id === item.id) return false
-          return (
-            !before ||
-            !now ||
-            before.path !== now.path ||
-            before.existingDigest !== now.existingDigest ||
-            before.incomingDigest !== now.incomingDigest
-          )
-        })
-        for (const id of changed) {
-          invalidated.push(recorded.find(entry => entry.id === id)?.path ?? id)
-          delete choices[id]
+        let freshlySelected: string | undefined = item.id
+        for (;;) {
+          const changed = Object.keys(choices).filter(id => {
+            const before = recorded.find(entry => entry.id === id)
+            const now = reviewed.issues.find(entry => entry.id === id)
+            if (now?.invalid) return true
+            if (id === freshlySelected) return false
+            return (
+              !before ||
+              !now ||
+              before.path !== now.path ||
+              before.existingDigest !== now.existingDigest ||
+              before.incomingDigest !== now.incomingDigest
+            )
+          })
+          if (!changed.length) break
+          for (const id of changed) {
+            invalidated.push(recorded.find(entry => entry.id === id)?.path ?? id)
+            delete choices[id]
+          }
+          reviewed = reviewImport(plan, choices)
+          freshlySelected = undefined
         }
-        if (changed.length) reviewed = reviewImport(plan, choices)
       }
 
       const result = applyImport(reviewed.candidate)

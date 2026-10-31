@@ -132,6 +132,10 @@ function contentParts(content: string): ContentPart[] {
   return parts
 }
 
+export function tokenReferencePaths(content: string) {
+  return contentParts(content).flatMap(part => (part.kind === 'reference' ? [part.path] : []))
+}
+
 export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<string, string>) {
   let output = ''
   let index = 0

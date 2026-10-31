@@ -23,6 +23,7 @@ import {
 } from './import-tokens.ts'
 import { getWoofHome } from './paths.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
+import { tokenReferencePaths } from './tokens.ts'
 
 export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
 export type ImportConflict = {
@@ -36,6 +37,7 @@ export type ImportConflict = {
   candidates?: string[]
   candidateDetails?: { address: string; description?: string; tags?: string[] }[]
   requiredNewPath?: boolean
+  keepTakeOnly?: boolean
   invalid?: boolean
   notice?: string
 }
@@ -329,7 +331,28 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
     }
   }
   const issues: ImportConflict[] = []
-  const selectedTokens: { origin: 'root' | 'project'; path: string; value: ImportLeaf; added: boolean }[] = []
+  const selectedTokens: {
+    origin: 'root' | 'project'
+    path: string
+    value: ImportLeaf
+    added: boolean
+    item: ImportConflict
+  }[] = []
+  const reuses: {
+    item: ImportConflict
+    origin: 'root' | 'project'
+    value: ImportLeaf
+    address: string
+    original: ImportLeaf
+    binding?: string
+    sourcePath?: string
+  }[] = []
+  const tokenChecks: {
+    item: ImportConflict
+    origin: 'root' | 'project'
+    value: ImportLeaf
+    candidates: Map<string, ImportLeaf>
+  }[] = []
   const selectedAddresses = new Set<string>()
   const root = structuredClone(sourceEntries(plan.local, false)) as Record<string, unknown>
   const project = structuredClone(sourceEntries(plan.selected.data ?? {}, true)) as Record<string, unknown>
@@ -354,6 +377,8 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
       mappings,
       origin === 'root' ? localRoot : effective,
     )
+    if (origin === 'project' && incomingRoot.has(path))
+      item.notice = `${item.notice ? `${item.notice} ` : ''}A reused token at another address is connected through a project alias at ${bound}.`
     const same =
       destination === path &&
       isDeepStrictEqual(existing, item.incoming) &&
@@ -361,7 +386,10 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
       importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) !== undefined &&
       importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) ===
         importTokenFingerprint(value, ref => readIncoming(plan, ref), mappings)
-    if (!same || choice) issues.push(item)
+    if (!same || choice) {
+      issues.push(item)
+      tokenChecks.push({ item, origin, value, candidates: origin === 'root' ? localRoot : effective })
+    }
     if (same && !choice) return
     if (!action || action === 'keep') return
     if (action === 'reuse') {
@@ -370,7 +398,52 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
         item.notice = `Reuse for ${path} is no longer compatible; review this choice again.`
         return
       }
-      if (origin === 'project') mappings.set(path, choice.address)
+      const original = (origin === 'root' ? localRoot : effective).get(choice.address)!
+      const reuse: (typeof reuses)[number] = { item, origin, value, address: choice.address, original }
+      reuses.push(reuse)
+      if (origin === 'project' && incomingRoot.has(path) && bound !== choice.address) {
+        const metadata =
+          typeof original === 'string'
+            ? {}
+            : {
+                ...(original.$description !== undefined ? { $description: original.$description } : {}),
+                ...(original.$tags !== undefined ? { $tags: original.$tags } : {}),
+              }
+        const alias: ImportLeaf = Object.keys(metadata).length
+          ? { $type: 'prompt', $exec: `{{${choice.address}}}`, ...metadata }
+          : `{{${choice.address}}}`
+        const existingBinding = importValueAt(plan.selected.data ?? {}, bound)
+        if (existingBinding !== undefined && !isDeepStrictEqual(existingBinding, alias)) {
+          const binding = conflict('project-token', `${path}\0binding`, existingBinding, alias)
+          binding.path = bound
+          binding.keepTakeOnly = true
+          binding.notice = `The reused token needs a project alias at ${bound}. Taking replaces the existing project override; keeping it reopens this reuse choice.`
+          issues.push(binding)
+          const bindingChoice = choices[binding.id]
+          if (bindingChoice && typeof bindingChoice === 'object') {
+            binding.invalid = true
+            binding.notice += ' Choose Keep existing or Take incoming.'
+            return
+          }
+          if (bindingChoice === 'keep') {
+            item.invalid = true
+            item.notice = `Keeping the project override at ${bound} is incompatible with this reuse; review the reuse choice again.`
+            return
+          }
+          if (bindingChoice !== 'take') return
+        }
+        const key = `project\0${bound}`
+        if (selectedAddresses.has(key)) {
+          item.invalid = true
+          item.notice = `Multiple imported tokens target ${bound}; choose distinct addresses.`
+          return
+        }
+        selectedAddresses.add(key)
+        putImportValue(project, bound, alias)
+        reuse.binding = bound
+        reuse.sourcePath = path
+        selectedTokens.push({ origin: 'project', path: bound, value: alias, added: false, item })
+      }
       return
     }
     const target = action === 'add' && choice && typeof choice === 'object' ? choice.address : destination
@@ -410,7 +483,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
       item.notice = error instanceof Error ? error.message : String(error)
       return
     }
-    selectedTokens.push({ origin, path: target, value: item.incoming as ImportLeaf, added: action === 'add' })
+    selectedTokens.push({ origin, path: target, value: item.incoming as ImportLeaf, added: action === 'add', item })
   }
   for (const [path, value] of incomingRoot) handle('root', path, value)
   const existingDefinition = plan.selected.definition
@@ -449,18 +522,28 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
       item.notice = 'Project metadata supports Keep existing or Take incoming.'
     } else if (decisionAction(choices[item.id]) === 'take') metadata = incomingMetadata
   }
-  return { issues, mappings, root, project, metadata, projectChoice, includeProject, selectedTokens }
+  return {
+    issues,
+    mappings,
+    root,
+    project,
+    metadata,
+    projectChoice,
+    includeProject,
+    selectedTokens,
+    reuses,
+    tokenChecks,
+  }
 }
 
 export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, ImportChoice>>) {
   const described = describeImport(plan, choices)
   const issues = [...described.issues]
   const pending = () => issues.filter(item => !choices[item.id] || item.invalid)
-  let unresolved = pending()
-  if (unresolved.length)
-    return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
+  let unresolved: ImportConflict[]
 
   const files = new Map<string, Uint8Array>()
+  const fileItems = new Map<string, ImportConflict>()
   const intents = new Map<string, { action: 'keep' | 'write'; data?: Uint8Array }>()
   const paths = new Map<string, string>()
   const requirements = new Map<string, { reference: string; prompt: boolean; added: boolean }>()
@@ -586,8 +669,113 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     if (previous && !equalBytes(previous, bytes))
       throw new Error(`Multiple imported files require incompatible bytes at ${target}.`)
     files.set(target, bytes)
+    fileItems.set(target, item)
     paths.set(key, `<root>/${target}`)
   }
+  function checkReuses(projectFile?: ProjectFile) {
+    const replacements = new Map(files)
+    if (projectFile)
+      replacements.set(projectFile.path, new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`))
+    const readAfter = (reference: string) => {
+      if (!reference.startsWith('<root>/')) return readLocal(plan, reference)
+      const path = reference.slice('<root>/'.length)
+      const original = snapshot(plan, path)
+      for (const [target, data] of replacements) {
+        const destination = snapshot(plan, target)
+        if (target === path || (original.physical && destination.physical === original.physical)) return data
+      }
+      return original.data
+    }
+    for (const check of described.tokenChecks) {
+      const expected = importTokenFingerprint(check.value, ref => readIncoming(plan, ref), described.mappings)
+      check.item.candidates = [...check.candidates.entries()]
+        .filter(([address, original]) => {
+          const current =
+            (check.origin === 'project' ? importValueAt(described.project, address) : undefined) ??
+            importValueAt(described.root, address)
+          return (
+            expected !== undefined &&
+            isDeepStrictEqual(current, original) &&
+            isImportLeaf(current as TokenValue) &&
+            importTokenFingerprint(current as ImportLeaf, readAfter) === expected
+          )
+        })
+        .map(([address]) => address)
+        .sort()
+      check.item.candidateDetails = check.item.candidates.map(address => {
+        const value = check.candidates.get(address)!
+        return typeof value === 'string'
+          ? { address }
+          : {
+              address,
+              ...(value.$description !== undefined ? { description: value.$description } : {}),
+              ...(value.$tags !== undefined ? { tags: value.$tags } : {}),
+            }
+      })
+    }
+    for (const reuse of described.reuses) {
+      if (reuse.binding && reuse.sourcePath && reuse.binding !== reuse.sourcePath) {
+        const seen = new Set<string>()
+        const reachesBinding = (path: string): boolean => {
+          if (path === reuse.binding) return true
+          if (seen.has(path)) return false
+          seen.add(path)
+          const value = importValueAt(described.project, path) ?? importValueAt(described.root, path)
+          if (!isImportLeaf(value as TokenValue)) return false
+          const token = value as ImportLeaf
+          if (typeof token !== 'string' && token.$type !== 'prompt') return false
+          const source = typeof token === 'string' ? token : token.$exec
+          const bytes = source.startsWith('<root>/') || source.startsWith('<repo>/') ? readAfter(source) : undefined
+          if ((source.startsWith('<root>/') || source.startsWith('<repo>/')) && !bytes) return false
+          const content = bytes ? new TextDecoder().decode(bytes) : source
+          return tokenReferencePaths(content).some(reachesBinding)
+        }
+        if (reachesBinding(reuse.address)) {
+          reuse.item.invalid = true
+          reuse.item.notice = `Reuse would make the project binding ${reuse.binding} reference itself; choose a different mapping.`
+          const base = issues.find(item => item.id === conflict('token', reuse.sourcePath!, undefined, undefined).id)
+          if (base && choices[base.id] && typeof choices[base.id] === 'object') {
+            base.invalid = true
+            base.notice = `This mapping makes the reused project override circular; choose a different address.`
+          }
+          continue
+        }
+      }
+      const current =
+        (reuse.origin === 'project' ? importValueAt(described.project, reuse.address) : undefined) ??
+        importValueAt(described.root, reuse.address)
+      const incoming = importTokenFingerprint(reuse.value, ref => readIncoming(plan, ref), described.mappings)
+      const after = isImportLeaf(current as TokenValue)
+        ? importTokenFingerprint(current as ImportLeaf, readAfter)
+        : undefined
+      if (!isDeepStrictEqual(current, reuse.original) || !incoming || after !== incoming) {
+        reuse.item.invalid = true
+        reuse.item.notice = `The reused token ${reuse.address} changes under another choice; review this reuse again.`
+        reuse.item.candidates = (reuse.item.candidates ?? []).filter(address => address !== reuse.address)
+        if (!isDeepStrictEqual(current, reuse.original)) {
+          for (const token of described.selectedTokens) {
+            if (token.path === reuse.address && (reuse.origin === 'project' || token.origin === 'root')) {
+              token.item.invalid = true
+              token.item.notice = `This token change conflicts with reuse of ${reuse.address}; review both choices.`
+            }
+          }
+        }
+        for (const reference of importTokenFiles(reuse.original)) {
+          if (!reference.startsWith('<root>/')) continue
+          const sourcePath = reference.slice('<root>/'.length)
+          const source = snapshot(plan, sourcePath)
+          for (const [target, item] of fileItems) {
+            const destination = snapshot(plan, target)
+            if (target === sourcePath || (source.physical && source.physical === destination.physical)) {
+              item.invalid = true
+              item.notice = `This file change conflicts with reuse of ${reuse.address}; review both choices.`
+            }
+          }
+        }
+      }
+    }
+  }
+  checkReuses()
   unresolved = pending()
   if (unresolved.length)
     return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
@@ -685,13 +873,19 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       ) {
         item.invalid = true
         item.notice = `This decision conflicts with another choice for the same physical file.`
-      } else if (action === 'take') projectFile = { path, data }
-      else if (choice && typeof choice === 'object') {
+      } else if (action === 'take') {
+        projectFile = { path, data }
+        fileItems.set(path, item)
+      } else if (choice && typeof choice === 'object') {
         definition = `<root>/${target}`
-        if (choice.action === 'add') projectFile = { path: target, data }
+        if (choice.action === 'add') {
+          projectFile = { path: target, data }
+          fileItems.set(target, item)
+        }
       }
     } else projectFile = { path, data }
   }
+  checkReuses(projectFile)
   unresolved = pending()
   if (unresolved.length)
     return { status: 'incomplete' as const, next: unresolved[0]!, remaining: unresolved.length, issues }
