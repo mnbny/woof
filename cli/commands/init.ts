@@ -1,8 +1,7 @@
 import type { ProjectMetadata } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
-import { randomUUID } from 'node:crypto'
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, sep } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -10,7 +9,7 @@ import * as v from 'valibot'
 
 import template from '../templates/woof.config.json' with { type: 'json' }
 import { isAgent } from '../utils/agent.ts'
-import { parseConfigurationDocument, validateConfigurationDocument } from '../utils/config.ts'
+import { parseConfigurationDocument, replaceConfigurationFile, validateConfigurationDocument } from '../utils/config.ts'
 import { shellQuote } from '../utils/display.ts'
 import { withConfigurationLock } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
@@ -58,15 +57,7 @@ function registerProject(name: string, metadata: ProjectMetadata) {
       $projects: { ...projects, [name]: Object.keys(metadata).length ? { $metadata: metadata } : {} },
     }
     validateConfigurationDocument(next, 'root', target)
-    const staging = join(dirname(target), `.${basename(target)}.${randomUUID()}.init.tmp`)
-    const { mode } = statSync(target)
-    try {
-      writeFileSync(staging, `${JSON.stringify(next, null, 2)}\n`, { flag: 'wx', mode })
-      chmodSync(staging, mode & 0o7777)
-      renameSync(staging, target)
-    } finally {
-      rmSync(staging, { force: true })
-    }
+    replaceConfigurationFile(target, next)
     return target
   })
 }

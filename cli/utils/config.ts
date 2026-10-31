@@ -1,6 +1,8 @@
 import type { ProjectConfiguration, RootConfiguration } from './schema.ts'
 
-import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { chmodSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import * as v from 'valibot'
 
 import { CURRENT_SCHEMA_VERSION, projectConfigurationSchema, rootConfigurationSchema } from './schema.ts'
@@ -216,4 +218,17 @@ export function readConfigurationDocument(file: string, kind: ConfigurationKind)
     throw new ConfigurationReadError(file, options)
   }
   return kind === 'root' ? parseConfigurationDocument(text, kind, file) : parseConfigurationDocument(text, kind, file)
+}
+
+// Writing a staged copy and renaming it replaces the file in one step and keeps its mode.
+export function replaceConfigurationFile(target: string, value: unknown) {
+  const staging = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`)
+  const { mode } = statSync(target)
+  try {
+    writeFileSync(staging, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode })
+    chmodSync(staging, mode & 0o7777)
+    renameSync(staging, target)
+  } finally {
+    rmSync(staging, { force: true })
+  }
 }
