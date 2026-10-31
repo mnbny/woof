@@ -511,11 +511,19 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       if (owners.length)
         item.notice = `This file is registered as configuration for ${owners.join(', ')}. Taking raw bytes may prevent Woof from starting. ${item.notice ?? ''}`
     }
-    item.candidates = bytes
-      ? [...plan.snapshots.values()]
-          .filter(source => source.data && equalBytes(source.data, bytes!))
-          .map(source => source.path)
-      : []
+    const originalPhysical = reference.startsWith('<root>/') ? snapshot(plan, originalPath).physical : null
+    item.candidates =
+      bytes && !requirement.added
+        ? [...plan.snapshots.values()]
+            .filter(
+              source =>
+                source.data &&
+                equalBytes(source.data, bytes!) &&
+                (!forcedNew ||
+                  (source.path !== originalPath && (!originalPhysical || source.physical !== originalPhysical))),
+            )
+            .map(source => source.path)
+        : []
     issues.push(item)
     const choice = choices[item.id]
     const action = decisionAction(choice)
@@ -549,8 +557,13 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       if (choice.action === 'reuse' && (!destination || !equalBytes(destination, bytes)))
         throw new Error(`File ${target} is no longer identical; review reuse again.`)
       if (choice.action === 'reuse') {
-        if (forcedNew && requirement.added)
-          throw new Error('A file-backed new token requires a distinct file destination.')
+        if (
+          forcedNew &&
+          (requirement.added ||
+            target === originalPath ||
+            (originalPhysical && snapshot(plan, target).physical === originalPhysical))
+        )
+          throw new Error('This file needs a distinct destination.')
         paths.set(key, `<root>/${target}`)
         continue
       }

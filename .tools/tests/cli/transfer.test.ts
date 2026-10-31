@@ -507,3 +507,30 @@ test('reports post-import validation without undoing an explicit shared-file rep
   expect(fs.existsSync(join(home, 'missing.md'))).toBe(false)
   expect(result.stderr).toContain('Repair the configuration files')
 })
+
+test('offers a distinct identical file when a prompt reference is remapped', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'file-reuse-home')
+  await config(home, { $schemaVersion: 2, a: 'local', reusable: '<root>/reuse.md', $projects: {} })
+  await put(join(home, 'reuse.md'), 'incoming {{a_variant}}')
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, a: 'incoming', prompt: '<root>/prompt.md', $projects: { demo: {} } }),
+    [{ path: 'prompt.md', data: strToU8('incoming {{a}}') }],
+  )
+  const path = join(directory, 'file-reuse.zip')
+  await writeFile(path, archive)
+  let offered = false
+  const result = await reviewAgentImport(cli, home, path, join(directory, 'file-reuse-decisions.json'), item => {
+    if (item.kind === 'token' && item.path === 'a') return { action: 'add', address: 'a_variant' }
+    if (item.kind === 'file') {
+      offered = Boolean(item.requiredNewPath && item.candidates?.includes('reuse.md'))
+      return { action: 'reuse', address: 'reuse.md' }
+    }
+    return 'take'
+  })
+  expect(result.status).toBe(0)
+  expect(offered).toBe(true)
+  const root = JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8'))
+  expect(root.prompt).toBe('<root>/reuse.md')
+  expect(await readFile(join(home, 'reuse.md'), 'utf8')).toBe('incoming {{a_variant}}')
+  expect(fs.existsSync(join(home, 'prompt.md'))).toBe(false)
+})

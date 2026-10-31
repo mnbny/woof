@@ -264,7 +264,7 @@ export default defineCommand({
               ]
             : []),
           ...(item.incoming !== undefined && item.path !== '$metadata' ? [{ value: 'add', label: 'Add as new' }] : []),
-          ...(item.candidates?.length && !item.requiredNewPath ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
+          ...(item.candidates?.length ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
         ]
         const selected = await chooseOption({ message: `${item.path}: choose an action`, options })
         if (!selected) {
