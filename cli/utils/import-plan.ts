@@ -195,14 +195,26 @@ function assertRepositoryImportAllowed(cwd: string) {
   }
 }
 
-function localProject(local: RootConfiguration, bundle: WoofBundle, home: string, prepared?: ProjectConfiguration) {
+function localProject(
+  local: RootConfiguration,
+  bundle: WoofBundle,
+  home: string,
+  prepared?: ProjectConfiguration,
+  preparedSource?: PreparedSource,
+) {
   const definition = local.$projects?.[bundle.projectName]
   if (definition === undefined) return { definition, data: undefined, file: undefined, source: undefined }
   if (typeof definition === 'string') {
     if (!definition.startsWith('<root>/'))
       throw new Error(`Local project ${bundle.projectName} is repository-defined and cannot be imported.`)
     const path = definition.slice('<root>/'.length)
-    const source = sourceState(home, path)
+    const source = preparedSource
+      ? {
+          path,
+          digest: digest(new TextEncoder().encode(preparedSource.source)),
+          data: new TextEncoder().encode(preparedSource.source),
+        }
+      : sourceState(home, path)
     if (!source.data) throw new Error(`Local selected project configuration is missing: ${path}`)
     const original = parseConfigurationDocument(new TextDecoder().decode(source.data), 'project', path)
     return {
@@ -445,7 +457,7 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
     options.prepared?.root ??
     parseConfigurationDocument(new TextDecoder().decode(rootSource.data), 'root', getWoofHome('woof.config.json'))
   if (options.prepared) assertPreparedSources(options.prepared, local, bundle, home, rootSource.data)
-  const selected = localProject(local, bundle, home, options.prepared?.project)
+  const selected = localProject(local, bundle, home, options.prepared?.project, options.prepared?.sources.project)
   const conflicts: ImportConflict[] = []
   mergeDefinition(local, bundle.configuration, 'token', {}, conflicts)
   definitionChoice(local, bundle, {}, conflicts)
@@ -469,8 +481,10 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
   const sourcePaths = new Set(['woof.config.json', ...initialFiles.keys()])
   if (selected.source) sourcePaths.add(selected.source.path)
   const sources = [...sourcePaths].sort().map(path => {
-    const state = sourceState(home, path)
-    return { path, digest: state.digest }
+    if (path === rootSource.path) return { path, digest: rootSource.digest }
+    if (selected.source?.path === path) return { path, digest: selected.source.digest }
+    const data = initialFiles.get(path)
+    return { path, digest: data ? digest(data) : null }
   })
   return {
     archiveDigest: digest(archive),
