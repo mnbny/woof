@@ -10,7 +10,7 @@ import { migrateConfigurationDocuments } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentError, presentResult, presentSelection } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
-import { createResourceLoader, detectCheckoutRoot, ResourceLoadError } from '../utils/resources.ts'
+import { createResourceLoader } from '../utils/resources.ts'
 import { createTokenGraph, splitProjectAddress, validateTokenGraph } from '../utils/tokens.ts'
 
 export default defineCommand({
@@ -61,28 +61,10 @@ export default defineCommand({
         await migrateConfigurationDocuments(migrationInputs(rootData, process.cwd(), explicitProject))
       }
 
-      let context
-      try {
-        context = selectProjectContext({
-          ...(explicitProject ? { project: explicitProject } : {}),
-          loader: createResourceLoader({ cwd: process.cwd() }),
-        })
-      } catch (error) {
-        if (
-          explicitProject ||
-          detectCheckoutRoot(process.cwd()) ||
-          !(error instanceof ResourceLoadError) ||
-          !error.reference.startsWith('<repo>/')
-        )
-          throw error
-        const loader = createResourceLoader({ cwd: process.cwd() })
-        context = {
-          root: loader.loadRootConfiguration(),
-          candidates: [],
-          checkoutRoot: undefined,
-          selection: 'root' as const,
-        }
-      }
+      let context = selectProjectContext({
+        ...(explicitProject ? { project: explicitProject } : {}),
+        loader: createResourceLoader({ cwd: process.cwd() }),
+      })
       if (context.selection === 'ambiguous') {
         const candidates = context.candidates
         if (!agent && process.stdout.isTTY) {
