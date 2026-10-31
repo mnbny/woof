@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof prompt for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
 metadata:
-  version: 4
+  version: 5
 ---
 
 # woof execution
@@ -34,7 +34,9 @@ Pass `--agent` to every command: `woof <command> --agent`.
 
 Read the output, also after a nonzero exit. A handoff writes nothing and exits with status 1. The handoff gives the decision and the exact next command. Follow the instructions in the output.
 
-Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, restore, or migrate only after the user approves. Report a missing CLI or an unresolved failure. Do not install a package to guess a remedy.
+Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. Report a missing CLI or an unresolved failure. Do not install a package to guess a remedy.
+
+When a migration changes a repository configuration, tell the user. Git shares that file, so each user of the checkout then needs a woof release that supports the new schema version.
 
 Use `--help` or `woof readme --agent` only when the request, the output, or the recovery is unclear.
 
