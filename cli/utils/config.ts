@@ -221,14 +221,18 @@ export function readConfigurationDocument(file: string, kind: ConfigurationKind)
 }
 
 // Writing a staged copy and renaming it replaces the file in one step and keeps its mode.
-export function replaceConfigurationFile(target: string, value: unknown) {
+export function replaceFileContent(target: string, content: string | Uint8Array) {
   const staging = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`)
   const { mode } = statSync(target)
   try {
-    writeFileSync(staging, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode })
+    writeFileSync(staging, content, { flag: 'wx', mode })
     chmodSync(staging, mode & 0o7777)
     renameSync(staging, target)
   } finally {
     rmSync(staging, { force: true })
   }
+}
+
+export function replaceConfigurationFile(target: string, value: unknown) {
+  replaceFileContent(target, `${JSON.stringify(value, null, 2)}\n`)
 }
