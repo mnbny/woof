@@ -5,6 +5,7 @@ import { defineCommand, runMain } from 'citty'
 import { parseArgs } from 'node:util'
 
 import manifest from '../package.json' with { type: 'json' }
+import get from './commands/get.ts'
 import { initializeWoofHome } from './utils/bootstrap.ts'
 import { ConfigurationNotFoundError, readRootConfiguration } from './utils/config.ts'
 import { migrateConfigurationDocument } from './utils/migrations.ts'
@@ -15,7 +16,7 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
 })
 
-const subCommands: SubCommandsDef = {}
+const subCommands: SubCommandsDef = { get }
 
 const main = defineCommand({
   args: {
@@ -42,7 +43,7 @@ const rawArgs = process.argv.slice(2)
 const helpRequested = rawArgs.length === 0 || rawArgs.includes('--help')
 const migrationRequested = rawArgs.includes('--migrate')
 
-if (migrationRequested) {
+if (migrationRequested && rawArgs.every(argument => argument.startsWith('--'))) {
   try {
     const { values } = parseArgs({
       args: rawArgs,
@@ -68,6 +69,8 @@ if (migrationRequested) {
     })
     process.exitCode = 1
   }
+} else if (migrationRequested) {
+  await runMain(main, { rawArgs })
 } else {
   if (!helpRequested && rawArgs[0] !== 'complete') {
     try {
