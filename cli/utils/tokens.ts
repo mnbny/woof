@@ -357,11 +357,17 @@ export function explainToken(graph: TokenGraph, address: string) {
   return preflightToken(graph, address)
 }
 
-export async function resolveToken(graph: TokenGraph, address: string, evaluator?: TokenEvaluator) {
+export async function resolveToken(
+  graph: TokenGraph,
+  address: string,
+  evaluator?: TokenEvaluator,
+  onPreflight?: (explanation: ReturnType<typeof preflightToken>) => void,
+) {
   const path = graphAddress(graph, address)
   const walker = createWalker(graph)
   walker.setEvaluator(evaluator)
   walker.visit(path, [])
+  onPreflight?.(explanation(graph, path, walker))
   return walker.evaluate(path)
 }
 

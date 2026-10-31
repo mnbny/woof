@@ -1,4 +1,5 @@
 import type { RegisteredProject } from '../utils/projects.ts'
+import type { preflightToken } from '../utils/tokens.ts'
 
 import { defineCommand } from 'citty'
 import { readFileSync } from 'node:fs'
@@ -11,11 +12,25 @@ import { shellQuote } from '../utils/display.ts'
 import { migrationInputs } from '../utils/migration-scope.ts'
 import { migrateConfigurationDocuments } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
-import { chooseOption, presentError, presentSelection, writePayload } from '../utils/presentation.ts'
+import { chooseOption, presentError, presentSelection, presentWarning, writePayload } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
+
+function warnOnRepositoryHomeDependencies(explanation: ReturnType<typeof preflightToken>) {
+  if (explanation.project?.kind !== 'repository') return
+  if (!explanation.tokens.some(token => token.origin === 'project')) return
+  const usesHome = explanation.tokens.some(
+    token =>
+      token.origin === 'root' ||
+      (token.origin === 'project' && token.files.some(file => file.markedPath.startsWith('<root>/'))),
+  )
+  if (usesHome)
+    presentWarning(
+      'Repository resources depend on Woof home tokens or files; keep those shared dependencies available when moving this checkout.',
+    )
+}
 
 function candidateText(
   candidates: ReturnType<typeof discoverResources>,
@@ -134,6 +149,7 @@ export default defineCommand({
           graph,
           query,
           createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
+          warnOnRepositoryHomeDependencies,
         )
         writePayload(output)
         return
@@ -171,6 +187,7 @@ export default defineCommand({
         graph,
         selectedCandidate.path,
         createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
+        warnOnRepositoryHomeDependencies,
       )
       writePayload(output)
     } catch (error) {

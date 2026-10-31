@@ -114,6 +114,10 @@ export async function chooseOption({
   return isCancel(selected) ? undefined : selected
 }
 
+export function presentWarning(summary: string) {
+  process.stderr.write(`Warning: ${summary}\n`)
+}
+
 export function writePayload(payload: string) {
   process.stdout.write(payload)
 }
