@@ -1,8 +1,8 @@
 ---
 name: woof-execution
-description: Retrieve Woof prompts and computed resources, discover candidates, select projects, and complete explicit migration and import reviews. Use for exact token requests, discovery-only searches, project retries, computed output, and archive decisions.
+description: Retrieve Woof prompts and computed resources, discover candidates, select projects, add tokens, and complete explicit migration and import reviews. Use for exact token requests, discovery-only searches, project retries, computed output, new tokens such as a convention from the conversation, and archive decisions.
 metadata:
-  version: 1
+  version: 2
 ---
 
 # Woof execution
@@ -40,6 +40,16 @@ woof get --search --agent
 Discovery reads metadata, not prompt or script bodies, and never executes a match automatically. A unique fuzzy match has no special execution permission. Read the returned paths, kinds, descriptions, tags, and exact follow-up commands, then choose the resource that fits the conversation.
 
 Read all useful output even when the exit is nonzero. Exact misses, ambiguous projects, stale decisions, and unsupported operations can return candidates or recovery instructions. Use those instructions when they fit the current request; ask only when the choice remains ambiguous. `woof projects --agent` lists registered names and paths without token bodies.
+
+## Add a token
+
+When the user asks Woof to keep something, such as a convention that came out of the conversation, start with:
+
+```sh
+woof add --agent
+```
+
+Follow the drafting steps in the output: work out the token from the conversation, search for a similar token, and propose a path, type, target, description, and tags. Show the draft to the user and save only after the user approves. Run the exact command from the output, with the content on standard input. If the command reports problems, correct all of them and run it again. Woof does not edit or remove tokens; for those changes, edit the source configuration.
 
 ## Validate and migrate deliberately
 
