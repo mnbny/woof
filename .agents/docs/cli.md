@@ -4,22 +4,20 @@
 
 The CLI owns command registration, startup configuration checks, caller detection, shell completion, and shared presentation. Each command owns its operation and recovery.
 
-## Installation identity
+## Startup and configuration lifecycle
 
-Setup selects source execution for development or bundle execution for direct use. The executable link remains outside versioned Node.js installations.
+First operational launch silently creates a missing home and current versioned configuration. Existing files are never rewritten implicitly. Unversioned, malformed, or mismatched documents fail with source-specific guidance instead of being stamped with a guessed version.
 
-Source execution uses checkout changes directly. Bundle execution uses the generated artifact. Both modes identify their own installation independently of the caller's working directory.
+Migration requires explicit authorization on an applicable command. Validation is the migration-only entry point. The operation prepares every used document before replacement, preserves physical targets and modes, checks concurrent changes, and supports ordinary-failure rollback. Import migration remains prepared during review and applies with the completed import, registry last.
 
-Setup registers supported shell completion without duplicate registration. Dependency installation does not perform shell setup automatically. Completion remains available to the shell but is hidden from the normal command list.
+Commands include `get`, `projects`, `explain`, `validate`, `export`, and `import`. Shell completion is hidden from the normal command list and does not evaluate resources.
 
 ## Caller modes
 
 The shared agent-mode contract owns caller identity, noninteractive execution, output, and permission boundaries. Commands retain their operations and adapt presentation to the caller. Terminal availability remains separate from caller identity.
 
-## Shared configuration checks
+Human selection and conflict review use Clack. Agents receive plain metadata, exact retries, and decisions handoffs. Non-TTY humans also receive an exit-1 handoff instead of a cancellation result; actual Clack cancellation exits 130. Agent mode grants no additional permission.
 
-Personal configuration is optional. Startup checks existing configuration without creating a missing file or rewriting saved content.
+## Distribution identity
 
-Invalid configuration blocks normal root execution and help. Customize and Upgrade remain available for recovery. Their own operations determine success or failure. Completion suppresses configuration errors so completion remains usable.
-
-A configuration from a newer schema requires a checkout upgrade. Other configuration errors direct the developer to configuration repair.
+Source execution uses checkout changes directly. Standalone execution uses the generated artifact. Local npm/npx package execution uses a packed tarball and isolated caches, not a global link or public-release claim. Presentation templates and the project-owned execution skill ship with the package.

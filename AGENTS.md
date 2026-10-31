@@ -4,7 +4,7 @@ Read [.agents/docs/index.md](./.agents/docs/index.md).
 
 After a feature or change reaches its logical conclusion, use `toolkit-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
 
-This repository is a CLI scaffold. Product behavior has not been specified. Do not infer commands, integrations, or domain concepts from the project name or from the MAACS reference project.
+Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) for historical product intent and decisions. The delivered token CLI implements the finalized bundle; current resolved decisions control, while the vision remains historical context. Keep agreed decisions, proposals, and open questions distinct. Do not infer additional requirements from the project name or the MAACS reference project.
 
 ## Run Validations Smartly
 

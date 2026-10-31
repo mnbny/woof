@@ -2,33 +2,34 @@
 
 ## Execution model
 
-Woof uses TypeScript on Node.js. Source execution resolves dependencies from its own checkout, even when the caller works in another project.
+Woof uses TypeScript on Node.js. Source execution resolves dependencies from its own checkout, even when the caller works in another project. The generated standalone bundle includes runtime code and required presentation assets and needs no dependency installation or TypeScript loader.
 
-The generated CLI bundle includes its JavaScript runtime dependencies. It runs without a dependency installation or TypeScript loader. Configuration defaults and command guidance are included in the bundle. Checkout upgrades require the installation's Git checkout.
+The bundle is the only committed build artifact. Source defines behavior; the build reproduces generated output. Local npm/npx package execution is verified with isolated caches and does not require global installation or publication.
 
-The bundle is the only committed build artifact. Source defines behavior. The build reproduces generated output.
-
-Personal configuration remains outside the checkout. The caller's working directory does not determine which installation Upgrade changes.
+Personal configuration remains outside the checkout. The detected checkout root supplies `<repo>` and script working directory; the Woof home supplies `<root>`. Known configuration symlinks do not redefine either root.
 
 ## Organization and ownership
 
 The repository separates CLI behavior, shared utilities, development tooling, tests, and agent documentation.
 
-Commands own their operations, the order of writes, recovery, and reports. Shared utilities own configuration validation, installation identity, state locations, and terminal presentation.
+Commands own operations, write order, recovery, and reports. Shared utilities own configuration validation, installation paths, project selection, resolution, transfer, migrations, and terminal presentation. A helper used by one command stays with that command; a shared utility needs a distinct shared responsibility.
 
-A helper used by one command stays with that command. Shared utilities need a distinct shared responsibility.
+Resolution uses root-plus-one-project overlays, late references, independent global definitions, and complete preflight before computed side effects. Discovery enumerates metadata only. Transfer uses a fixed manifest-free ZIP codec, conditional candidate validation, staged writes, and original-state recovery.
 
 ## Dependency roles and conventions
 
 - tsx runs source. esbuild bundles the CLI, and terser minifies the generated executable.
-- citty defines commands. Shell completion uses those command definitions.
-- Clack and ansis provide terminal presentation.
-- TypeScript checks source with strict compiler defaults. ESLint and Prettier enforce code and formatting conventions.
-- Vitest runs automated tests separately from validation.
+- citty defines commands and shell completion. Clack and ansis provide terminal presentation.
+- Valibot validates configuration. Pico discovers metadata without evaluating bodies. Picomatch matches worktree metadata. fflate reads and writes ZIP archives. diff renders import review.
+- TypeScript checks source with strict compiler defaults. ESLint and Prettier enforce code and formatting conventions. Vitest runs automated tests separately from validation.
 
-Dependencies and the package manager use exact versions. Compiler and linting compatibility can limit upgrades. Node.js support follows the requirements of the development tools and runtime dependencies.
+Dependencies and the package manager use exact versions. Compiler and linting compatibility can limit upgrades. Node.js support follows the package engine declaration and actual runtime verification; it does not imply equivalent behavior on every operating system.
 
-Editor and workspace setup use the same project conventions as validation. Workspace preparation completes dependency installation before source setup.
+## Runtime boundaries
+
+Computed scripts use the running Node executable, available bash, pinned npx tsx, and pinned npx Bun. Cold runtime acquisition can require network; a warm cache can avoid it. Bun-native package resolution may fetch script dependencies. Woof does not implement a dependency installer or typecheck scripts.
+
+Captured stdout is limited to 10 MiB per child and fails explicitly instead of truncating. POSIX cancellation cleans only the owned process group and waits for descendants. Windows has parent-only termination and no equivalent process-tree claim. Archive input and expanded data are capped at 100 MiB each and 10,000 entries, with portable path and integrity checks.
 
 ## Validation and tests
 
@@ -36,4 +37,4 @@ Validation runs formatting, linting, type checking, and the build in sequence. F
 
 Tests protect distinct behavior that is easy to break. Test authoring must satisfy every project criterion. Coverage or test count alone does not justify a test.
 
-Subprocess tests compile current source and isolate the checkout, caller's project, home, and environment. They do not depend on a previous bundle or personal configuration. Upgrade tests use local Git remotes and isolate recovery state from the developer's work.
+Subprocess tests compile current source and isolate the checkout, caller's project, home, and environment. Transfer and migration checks use local archives, temporary Git repositories, restrictive child umasks, and injected failures without modifying real personal configuration.

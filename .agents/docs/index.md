@@ -38,7 +38,7 @@ Add each document using this format:
 
 #### [project-vision.md](./project-vision.md)
 
-- Description: Placeholder for the owner's product vision. Preserve the vision once supplied; do not update it with the `toolkit-living-docs` skill.
+- Description: Owner's problems, product decisions, proposed MVP, deferred ideas, and open questions. Update only at the owner's request; exclude from routine living-documentation maintenance.
 - Tags: `vision`
 
 #### [project-brief.md](./project-brief.md)
@@ -53,7 +53,7 @@ Add each document using this format:
 
 #### [cli.md](./cli.md)
 
-- Description: CLI ownership, installation identity, configuration checks, and shell completion.
+- Description: CLI ownership, startup configuration, migration, presentation, and package execution.
 - Tags: `cli`, `setup`, `configuration`, `completions`
 
 #### [cli-flag-agent.md](./cli-flag-agent.md)
@@ -61,15 +61,15 @@ Add each document using this format:
 - Description: Caller detection, noninteractive execution, output, and permission boundaries.
 - Tags: `cli`, `agent`
 
-#### [cli-command-customize.md](./cli-command-customize.md)
+#### [tokens.md](./tokens.md)
 
-- Description: Personal configuration ownership, creation, display, and recovery.
-- Tags: `customize`, `configuration`
+- Description: Token schemas, project resolution, metadata discovery, and computed execution.
+- Tags: `tokens`, `resolution`, `discovery`, `scripts`
 
-#### [cli-command-upgrade.md](./cli-command-upgrade.md)
+#### [sharing.md](./sharing.md)
 
-- Description: Checkout ownership, update policy, preservation of local work, and recovery.
-- Tags: `upgrade`
+- Description: Portable project archives, conflict review, destination ownership, and recovery.
+- Tags: `sharing`, `transfer`, `import`, `export`
 
 #### [questions-brief.md](./questions-brief.md)
 

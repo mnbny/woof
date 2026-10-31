@@ -2,12 +2,18 @@
 
 ## Purpose
 
-This brief holds product and policy questions that require an owner decision. Command-specific behavior belongs to the domain that owns it.
+This brief holds product and policy questions that require an owner decision. Command-specific behavior belongs to the domain that owns it. The MVP configuration, resolution, execution, migration, and transfer contracts are implemented; earlier open questions in those areas are resolved for this delivery.
 
-## Questions
+## Deferred product choices
 
-### Product scope
+### Output interpolation
 
-Which users and problems should Woof serve?
+Script output is literal in the MVP. A future owner decision can define whether generated output may introduce token references and how that affects side effects and validation.
 
-The command-line delivery format and shared CLI operations are defined. Product purpose, intended users, and integrations remain open. These decisions determine the product's vocabulary and command boundaries.
+### Authoring interfaces
+
+No browser editor, hosted service, broad authoring/provider tooling, semantic search, or new authoring system is part of the MVP. Their future scope and priority remain owner decisions.
+
+### Portability validation
+
+POSIX owned-process cleanup is verified. Equivalent process-tree behavior on other operating systems is not claimed and needs separate validation before any portability commitment.
