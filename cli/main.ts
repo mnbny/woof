@@ -47,7 +47,7 @@ const main = defineCommand({
     migrate: { description: 'Migrate configuration to the current schema', type: 'boolean' },
   },
   meta: {
-    name: manifest.name,
+    name: 'woof',
     version: manifest.version,
     description: manifest.description,
   },
@@ -73,9 +73,9 @@ try {
   const configuration = getWoofHome('woof.config.json')
   presentError(
     {
-      summary: 'Woof could not prepare the invocation.',
+      summary: 'woof could not prepare the invocation.',
       details,
-      recovery: `Review the arguments and ${configuration}. If Woof reports a pending migration, retry with --migrate.`,
+      recovery: `Review the arguments and ${configuration}. If woof reports a pending migration, retry with --migrate.`,
     },
     { template: 'invocation-error', values: { details, configuration } },
   )

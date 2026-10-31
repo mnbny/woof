@@ -1,8 +1,8 @@
 {
-  "name": "woof",
+  "name": "@moonbunny/woof",
   "version": "0.0.0",
   "private": true,
-  "description": "Woof CLI",
+  "description": "Local CLI for reusable instructions, prompts, and computed resources",
   "type": "module",
   "bin": {
     "woof": "./cli/woof.bundle.mjs"
