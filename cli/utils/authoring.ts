@@ -1,15 +1,22 @@
-import type { RegisteredProject, RepositoryProject, selectProjectContext } from './projects.ts'
-import type { ProjectConfiguration, RootConfiguration, TokenValue } from './schema.ts'
+import type { RegisteredProject, RepositoryProject } from './projects.ts'
+import type { ProjectConfiguration, Resource, RootConfiguration, TokenValue } from './schema.ts'
 
+import { createHash } from 'node:crypto'
 import { chmodSync, constants, copyFileSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 
-import { replaceConfigurationFile, validateConfigurationDocument } from './config.ts'
+import { replaceConfigurationFile, replaceFileContent, validateConfigurationDocument } from './config.ts'
 import { withConfigurationLock } from './migrations.ts'
 import { getWoofHome } from './paths.ts'
-import { insideWoofHome, loadRegisteredProjects, repositoryConfiguration } from './projects.ts'
-import { createResourceLoader, detectCheckoutRoot, isMarkedResourceReference } from './resources.ts'
+import { insideWoofHome, loadRegisteredProjects, repositoryConfiguration, selectProjectContext } from './projects.ts'
+import {
+  createResourceLoader,
+  detectCheckoutRoot,
+  isMarkedResourceReference,
+  resolveResourceLocation,
+} from './resources.ts'
 import { createTokenGraph, preflightToken } from './tokens.ts'
 
 export const TOKEN_TYPES = ['prompt', 'bash', 'node', 'tsx', 'bun'] as const
@@ -27,6 +34,12 @@ export type TokenDraft = {
 }
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
+
+export function targetLabel(target: TokenTarget) {
+  if (target.kind === 'shared') return 'shared tokens, used by every project'
+  if (target.kind === 'repository') return 'the repository configuration of this checkout'
+  return `registered project ${target.name}`
+}
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/
 const PROTOTYPE_NAMES = new Set(['__proto__', 'prototype', 'constructor'])
@@ -64,7 +77,8 @@ function destination(target: TokenTarget, cwd: string) {
   return { file: rootFile, kind: 'root' as const, base: ['$projects', target.name] }
 }
 
-function insert(document: Record<string, unknown>, base: string[], path: string, value: TokenValue) {
+// Adding needs a free path. Replacing needs an existing token at the path.
+function insert(document: Record<string, unknown>, base: string[], path: string, value: TokenValue, replace = false) {
   const next = structuredClone(document)
   let namespace = base.reduce((node, key) => node[key] as Record<string, unknown>, next)
   const segments = path.split('.')
@@ -72,24 +86,32 @@ function insert(document: Record<string, unknown>, base: string[], path: string,
     const current = segments.slice(0, index + 1).join('.')
     const existing = Object.hasOwn(namespace, segment) ? namespace[segment] : undefined
     if (index === segments.length - 1) {
-      if (existing !== undefined) throw new Error(`Token ${current} already exists in this configuration.`)
+      if (replace && (existing === undefined || isNamespace(existing)))
+        throw new Error(`Token ${current} does not exist in this configuration.`)
+      if (!replace && existing !== undefined) throw new Error(`Token ${current} already exists in this configuration.`)
       namespace[segment] = value
-    } else if (existing === undefined) namespace = namespace[segment] = {}
-    else if (isNamespace(existing)) namespace = existing
+    } else if (existing === undefined) {
+      if (replace) throw new Error(`Token ${path} does not exist in this configuration.`)
+      namespace = namespace[segment] = {}
+    } else if (isNamespace(existing)) namespace = existing
     else throw new Error(`Token ${current} already exists, so it cannot hold ${path}.`)
   }
   return next
 }
 
-export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>): TokenValue {
-  const { type, content, description, tags } = draft
-  if (type === 'prompt' && !description && !tags.length) return content.exec
+// A prompt without metadata is a plain string. Every other token is a resource object.
+function resourceValue(type: TokenType, exec: string | string[], description: string | undefined, tags: string[]) {
+  if (type === 'prompt' && typeof exec === 'string' && !description && !tags.length) return exec
   return {
     $type: type,
-    $exec: content.exec,
+    $exec: exec,
     ...(description ? { $description: description } : {}),
     ...(tags.length ? { $tags: tags } : {}),
   } as TokenValue
+}
+
+export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>): TokenValue {
+  return resourceValue(draft.type, draft.content.exec, draft.description, draft.tags)
 }
 
 // A copied file does not exist in Woof home until the save, so checks read the source instead. A prompt file and
@@ -139,13 +161,13 @@ export function readTokenContent(content: string, options: { cwd: string; target
 // Checks the configuration with the token in place: its document, every project graph that the change reaches, and
 // the references and files of the new token. Returns the changed document and whether the token overrides a shared one.
 export function checkToken(
-  draft: Omit<TokenDraft, 'type' | 'content' | 'description' | 'tags'> & { value: TokenValue },
+  draft: Omit<TokenDraft, 'type' | 'content' | 'description' | 'tags'> & { value: TokenValue; replace?: boolean },
   cwd: string,
 ) {
   assertTokenPath(draft.path)
   const target = destination(draft.target, cwd)
   const document = JSON.parse(readFileSync(target.file, 'utf8')) as Record<string, unknown>
-  const next = insert(document, target.base, draft.path, draft.value)
+  const next = insert(document, target.base, draft.path, draft.value, draft.replace)
   const validated = validateConfigurationDocument(next, target.kind, target.file)
 
   const loader = createResourceLoader({ cwd })
@@ -237,5 +259,117 @@ export async function saveToken(draft: TokenDraft, cwd: string) {
       throw error
     }
     return { file: target, overrides: checked.overrides }
+  })
+}
+
+export type TokenLayer = 'definition' | 'override'
+export type TokenEdit = { content?: string; description?: string; tags?: string[] }
+
+function digest(files: string[]) {
+  const hash = createHash('sha256')
+  for (const file of files) hash.update(readFileSync(file))
+  return hash.digest('hex')
+}
+
+function projectTarget(project: RegisteredProject | RepositoryProject): TokenTarget {
+  return project.kind === 'repository' ? { kind: 'repository' } : { kind: 'project', name: project.name }
+}
+
+// Finds the definition behind the token that the caller sees. A prompt file is edited in place. A script file is
+// edited outside Woof, so its content is fixed here.
+export function describeToken(address: string, options: { cwd: string; project?: string | undefined }) {
+  const loader = createResourceLoader({ cwd: options.cwd })
+  const context = selectProjectContext({
+    cwd: options.cwd,
+    loader,
+    ...(options.project ? { project: options.project } : {}),
+  })
+  if (context.selection === 'ambiguous')
+    throw new Error(
+      `Several projects match this directory: ${context.candidates.map(candidate => candidate.name).join(', ')}. Retry with --project NAME.`,
+    )
+  const graph = createTokenGraph(context)
+  const token = graph.tokens.get(address)
+  if (!token)
+    throw new Error(
+      graph.rootNamespaces.has(address) || graph.projectNamespaces.has(address)
+        ? `${address} is a namespace. Choose one token in it.`
+        : `Unknown token ${address}. Find it with woof get --search.`,
+    )
+  const project = 'project' in context ? context.project : undefined
+  const definition: TokenTarget = token.origin === 'root' ? { kind: 'shared' } : projectTarget(project!)
+  const value = token.value as string | Resource
+  const type: TokenType = typeof value === 'string' ? 'prompt' : value.$type
+  const exec = typeof value === 'string' ? value : value.$exec
+  const files = (Array.isArray(exec) ? exec : [exec])
+    .filter(isMarkedResourceReference)
+    .map(
+      reference =>
+        resolveResourceLocation(reference, context.checkoutRoot ? { repoRoot: context.checkoutRoot } : {}).file,
+    )
+  const kind = Array.isArray(exec) || (files.length && type !== 'prompt') ? 'fixed' : files.length ? 'file' : 'inline'
+  const configuration = destination(definition, options.cwd).file
+  return {
+    path: address,
+    value,
+    type,
+    exec,
+    kind,
+    files,
+    content: kind === 'file' ? readFileSync(files[0]!, 'utf8') : kind === 'inline' ? (exec as string) : undefined,
+    description: typeof value === 'string' ? undefined : value.$description,
+    tags: typeof value === 'string' ? [] : (value.$tags ?? []),
+    definition,
+    // Only a shared token seen from a project can get an override in that project.
+    override: token.origin === 'root' && project ? projectTarget(project) : undefined,
+    configuration,
+    version: digest([configuration, ...files]),
+  }
+}
+
+export async function editToken(
+  address: string,
+  edit: TokenEdit,
+  options: { cwd: string; project?: string | undefined; layer: TokenLayer; version?: string },
+) {
+  const opened = describeToken(address, options)
+  const target = options.layer === 'override' ? opened.override : opened.definition
+  if (!target) throw new Error(`${address} is not a shared token seen from a project, so it cannot get an override.`)
+  return withConfigurationLock(destination(target, options.cwd).file, file => {
+    // The user can take a while, so the save reads the token again under the lock.
+    const token = describeToken(address, options)
+    if (options.version && token.version !== options.version)
+      throw new Error(`${address} changed after it was opened. Open it again to edit the current version.`)
+    if (edit.content !== undefined && token.kind === 'fixed')
+      throw new Error(`The content of ${address} is in ${token.files.join(', ')}. Edit the file directly.`)
+    if (edit.content !== undefined && !edit.content.trim()) throw new Error('The token content is empty.')
+    const description = edit.description === undefined ? token.description : edit.description.trim() || undefined
+    const tags = edit.tags ?? token.tags
+    const changed = edit.content !== undefined && edit.content !== token.content
+    // A definition takes new prompt text into its file. An override keeps its text inline, so the shared file stays.
+    const writesFile = changed && token.kind === 'file' && options.layer === 'definition'
+    const value = resourceValue(token.type, changed && !writesFile ? edit.content! : token.exec, description, tags)
+    if (options.layer === 'definition' && !writesFile && isDeepStrictEqual(value, token.value))
+      return { file, contentFile: undefined, changed: false }
+
+    const checked = checkToken(
+      {
+        target,
+        path: address,
+        value: writesFile ? resourceValue(token.type, edit.content!, description, tags) : value,
+        replace: options.layer === 'definition',
+      },
+      options.cwd,
+    )
+    const next = writesFile ? insert(checked.document, checked.base, address, value, true) : checked.next
+    const original = writesFile ? readFileSync(token.files[0]!) : undefined
+    if (writesFile) replaceFileContent(token.files[0]!, edit.content!)
+    try {
+      if (options.layer === 'override' || !isDeepStrictEqual(value, token.value)) replaceConfigurationFile(file, next)
+    } catch (error) {
+      if (original) replaceFileContent(token.files[0]!, original)
+      throw error
+    }
+    return { file, contentFile: writesFile ? token.files[0] : undefined, changed: true }
   })
 }

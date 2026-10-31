@@ -11,6 +11,7 @@ import {
   checkToken,
   readTokenContent,
   saveToken,
+  targetLabel,
   TOKEN_TYPES,
 } from '../utils/authoring.ts'
 import { shellQuote } from '../utils/display.ts'
@@ -43,12 +44,6 @@ function targetFlag(target: TokenTarget) {
   if (target.kind === 'shared') return '--shared'
   if (target.kind === 'repository') return '--repo'
   return `--project ${shellQuote(target.name)}`
-}
-
-function targetLabel(target: TokenTarget) {
-  if (target.kind === 'shared') return 'shared tokens, used by every project'
-  if (target.kind === 'repository') return 'the repository configuration of this checkout'
-  return `registered project ${target.name}`
 }
 
 function splitList(value: string) {
