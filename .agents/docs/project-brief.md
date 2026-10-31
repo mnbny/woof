@@ -2,38 +2,46 @@
 
 ## Purpose
 
-Woof is a command-line application for developers and coding agents to find and use reusable instructions and scripts. Its delivered product model replaces scattered resource management with structured, composable tokens.
+Woof is a local command-line application. It helps developers and coding agents find and use reusable instructions and scripts. It replaces scattered prompt files, snippets, and helper scripts with one catalog of structured, composable tokens.
 
-## Product direction
+## Product model
 
-Standard JSON stores versioned resource definitions. Named tokens supply conventions, instructions, project context, and executable resources. Ordinary token names remain open-ended; Woof-owned structures use `$`-prefixed keys. Prototype-sensitive names are rejected explicitly.
+- Standard JSON stores versioned definitions. Authors choose ordinary token names freely. Woof-owned structure uses `$`-prefixed keys.
+- A token supplies stored text, a file-backed prompt, a reference to another token, or computed script output. Callers use one lookup interface for all of them.
+- The token model follows the concepts of the Design Tokens Community Group (DTCG): groups, aliases, tiers, and modes. Woof adapts these concepts for instructions and scripts. Woof files are not compatible with DTCG files.
+- A shared root catalog supplies defaults. One selected project overrides whole tokens. References resolve against that merged view.
+- A project is registered by name in Woof home, or a repository configuration defines it without a name. All checkouts and worktrees of a project share one context.
+- Resources can be shared, private, or outside a repository. Callers address them the same way in each case. Folder layout has no restrictions.
+- Discovery uses token paths and optional metadata. Callers choose a resource before they read its body or run it.
+- Registered projects move between homes as portable archives with explicit import review. Repository projects move through Git.
+- Convention over configuration guides the design. If a reference is missing or forms a cycle, resolution fails before any computed side effect.
 
-Prompts can remain plain strings or use objects. Scripts require objects. Object resources support optional descriptions and tags; bare strings have no separate metadata fields. Discovery uses token paths and available metadata to help callers choose a resource without retrieving its body or executing it.
+## Scope
 
-Project context selects overrides throughout late reference resolution. A project's worktrees share its logical identity. Resources can remain shared, private, or outside the repository without changing how callers address them.
+Woof includes these parts:
 
-The home registry selects projects by name. A discovered repository configuration defines one unnamed project directly. Both forms use versioned project schemas and root/repository resource markers.
+- The CLI and its configuration model.
+- Project selection and resolution.
+- Computed resources.
+- Migration, export, and import.
+- Human and agent presentation.
+- Standalone and local package execution.
+- One project-owned execution skill, which ships with the package.
 
-Folder layout is unrestricted. Project resources can be kept together, split across directories, or stored inline. `<root>` always means Woof home, and `<repo>` always means the detected checkout, independently of the configuration file's directory. Resource reads and import writes enforce containment.
+These items are outside the product: provider installers, hosted services, publishing, semantic search, graphical editors, and a general collection of development skills. MAACS is a reference for shared development practices and invocation structure. Its catalogs are not part of Woof.
 
-Bundles share explicitly selected registered projects and required shared dependencies while excluding other project entries. Repository-defined projects use Git and cannot use project import or export. Import review requires explicit choices before application. Catalog validation follows a successful save. Missing required tokens and circular references fail before computed side effects.
+## Vocabulary
 
-Convention over configuration guides the design. The first product delivery is the CLI plus one project-owned execution skill, not a provider installer or development-skill collection. Broader authoring interfaces remain deferred.
-
-## Delivered CLI responsibilities
-
-- Silent first-launch home creation and explicit startup migration with original-state recovery.
-- Exact and metadata-only lookup, project selection, explanation, validation, and registry listing.
-- Computed bash/node/tsx/bun resources with preflight, literal output, and owned-process cancellation.
-- Manifest-free project export, sequential import review, safe application, and rollback/recovery.
-- Shared human and noninteractive agent presentation, standalone execution, and local npm/npx package use.
-
-MAACS is a reference for shared development practices and invocation structure. Its catalogs are outside Woof's scope. Woof includes one original execution skill and does not distribute a general development-skill collection.
-
-## Ownership and vocabulary
-
-A **checkout** is a detected Git repository or linked worktree that can supply `<repo>` resources and script working directory. A **Woof home** supplies `<root>` and is independent of the caller's checkout.
-
-The intended **project** identity groups related checkouts and worktrees under one resolution context. A **token** is a named resource that can supply stored content, references, or a computed value. The **root** is the shared base; one selected project overlays whole tokens before references resolve.
-
-**Migration** is an explicit startup transition that preserves original bytes for rollback. **Export** packages a registered project. **Import** applies a candidate after every item is reviewed, then reports validation findings separately.
+- **Woof home:** the personal directory that holds the root configuration, registered project files, home resources, and exports. `<root>` refers to Woof home.
+- **Checkout:** the Git repository or linked worktree that contains the caller's directory. `<repo>` refers to the checkout root. Computed scripts run in the checkout root.
+- **Root configuration:** the document in Woof home that holds shared tokens and the project registry.
+- **Registered project:** a named entry in the project registry. The entry is inline or refers to a separate configuration file in Woof home.
+- **Repository project:** a project without a name, defined by a configuration file in a checkout.
+- **Token:** a value with a dotted-path address. A token is a string, a typed resource object, or a namespace that contains more tokens.
+- **Resource:** a token object with a declared type. The type is prompt, bash, node, tsx, or bun.
+- **Alias:** a string token whose whole value is one reference to another token.
+- **Effective view:** the root tokens, with the tokens of the selected project on top.
+- **Discovery:** a search over metadata only, in the effective view.
+- **Migration:** an explicit startup change to a supported legacy configuration. Migration keeps the original bytes for rollback.
+- **Export and import:** export packages a registered project as a portable archive. Import applies an archive after a review of every item.
+- **Handoff:** plain output that returns a pending decision to the caller. A handoff replaces a terminal question.

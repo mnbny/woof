@@ -2,22 +2,36 @@
 
 ## Purpose and ownership
 
-The CLI owns command registration, startup configuration checks, caller detection, shell completion, and shared presentation. Each command owns its operation and recovery.
+The CLI owns argument parsing, startup order, command dispatch, shell completion, and shared presentation. Each command owns its operation, recovery, and exit status. Configuration, projects, tokens, scripts, sharing, and agent mode each have a brief.
 
-## Startup and configuration lifecycle
+## Commands
 
-First operational launch silently creates a missing home and current versioned configuration. Existing files are never rewritten implicitly. Unversioned, malformed, or mismatched documents fail with source-specific guidance instead of being stamped with a guessed version.
+The commands are readme, get, projects, explain, validate, export, and import. Each command has a brief.
 
-Every invocation checks the home configuration, registered home configurations, and the current checkout configuration. Explicit migration applies supported pending changes before the requested command. Migration preserves physical targets and modes, checks concurrent changes, and supports ordinary-failure rollback. Import review starts after migration completes.
+Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified address that names a project has the same effect as that option. If the address and the option select different projects, the command fails.
 
-Commands include `get`, `projects`, `explain`, `validate`, `export`, and `import`. Shell completion is hidden from the normal command list and does not evaluate resources.
+## Invocation and startup
 
-## Caller modes
+Before startup, Woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator.
 
-The shared agent-mode contract owns caller identity, noninteractive execution, output, and permission boundaries. Commands retain their operations and adapt presentation to the caller. Terminal availability remains separate from caller identity.
+After these checks, startup checks the configuration and applies an explicit migration. The configuration brief describes these steps.
 
-Human selection and conflict review use Clack. Agents receive plain metadata, exact retries, and decisions handoffs. Non-TTY humans also receive an exit-1 handoff instead of a cancellation result; actual Clack cancellation exits 130. Agent mode grants no additional permission.
+- Help, version, and completion are passive. They do not create Woof home.
+- Unless migration is requested, readme skips all configuration checks. This keeps the guide readable when the configuration is broken.
+- An invalid invocation fails before Woof creates its home or runs a migration.
 
-## Distribution identity
+## Presentation and exit status
 
-Source execution uses checkout changes directly. Standalone execution uses the generated artifact. Local npm/npx package execution uses a packed tarball and isolated caches, not a global link or public-release claim. Presentation templates and the project-owned execution skill ship with the package.
+- Human mode uses Clack for results, interactive choices, and import review.
+- Agent mode uses plain templates for results, candidate lists, decision handoffs, errors, and recovery.
+- Payloads, results, and reports go to standard output. Warnings, migration notices, and script error output go to standard error.
+- A failure exits with status 1. An interactive cancellation exits with status 130.
+- If a human has no terminal, Woof returns the agent handoff and exits with status 1. Woof does not report a cancellation in this case.
+
+## Completion
+
+Shell completion is a hidden command. It emits completion scripts for supported shells. It does not create Woof home and does not evaluate resources.
+
+## Distribution
+
+Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. A link script in the repository can put the bundle on the user's local path and enable shell completion. For development, the link script can link the source entry instead.

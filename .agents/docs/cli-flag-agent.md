@@ -2,30 +2,30 @@
 
 ## Purpose and ownership
 
-Agent mode lets the current coding agent use Woof without terminal questions. Commands return results, recovery guidance, or the decision needed to continue. Each command retains ownership of its operation.
+Agent mode lets the current coding agent use Woof without terminal questions. A command returns a result, candidates, recovery guidance, or the decision that it needs to continue. Each command keeps ownership of its operation.
 
 ## Caller detection
 
-Shared detection and the explicit agent flag select the same mode. The flag supports callers that detection does not recognize. No flag forces a detected agent into human mode.
+Detection and the agent flag select the same mode. The flag covers callers that detection does not recognize. No flag can force a detected agent into human mode.
 
-Detection uses execution markers in the environment. Specific caller markers take priority over generic agent markers. Incomplete provider context does not establish a provider identity.
+Detection reads execution markers in the environment. Specific caller markers have priority over generic agent markers. Incomplete provider context does not identify a provider. These items do not identify a caller: installed software, authentication settings, editor identity, and terminal availability.
 
-Installed software, authentication settings, editor identity, and terminal availability do not establish caller identity. Agent mode applies when a terminal is available. Redirected human output does not become agent output.
+Agent mode applies with or without a terminal. Redirected human output does not become agent output.
 
 ## Execution and permission
 
-Human and agent modes share the same command operations. Agent mode changes presentation and guidance. It does not grant permission or transfer command operations to the agent.
+Human mode and agent mode run the same operations. Agent mode changes only presentation and guidance. Agent mode grants no permission, and it does not transfer an operation to the agent.
 
-Complete authorized input performs the operation directly. Missing decisions remain in the conversation. Explicit permission already given remains valid. Defaults and terminal availability do not imply consent.
+If the input is complete and authorized, the command runs the operation directly. If a decision is missing, the command returns the decision to the conversation as a handoff:
 
-Invalid arguments fail before command actions. A negated agent flag cannot bypass detection or permit an operation.
+- If several projects match, the command returns the candidates with exact retry commands.
+- Discovery returns candidates with exact follow-up commands. Discovery never runs a match.
+- Import review returns a decision document for the next unresolved item.
+
+Explicit permission that the user already gave in the conversation stays valid. Defaults and terminal availability do not imply consent. Migration still requires its explicit flag. Invalid arguments fail before the command acts.
 
 ## Output and recovery
 
-Agent output is plain text without terminal questions, progress animation, color, or terminal hyperlinks. Help and early failures remain plain even when the environment requests color. Human mode retains terminal presentation.
+Agent output is plain text. It has no prompts, progress animation, color, or terminal hyperlinks. Help and early failures stay plain, even when the environment requests color.
 
-Results and recovery reports use standard output. Standalone failures can use standard error. Failures return a nonzero status, including when a report contains the error.
-
-Recovery guidance identifies the remaining action and preserves explicit agent mode for supported CLI retries. Reports distinguish completed work from pending recovery. A successful checkout update does not imply successful restoration of local work.
-
-Shared configuration errors remain plain in agent mode. Customize and Upgrade remain available for configuration recovery. Their own results determine the command's exit status.
+Results, handoffs, errors, and recovery guidance go to standard output. A failure returns a nonzero status, even when the output contains guidance. Follow-up commands keep explicit agent mode and the selected registered project. Reports keep completed work separate from pending recovery.

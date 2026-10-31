@@ -1,23 +1,46 @@
 # Sharing domain
 
-## Portable archives
+## Purpose and ownership
 
-Export requires an explicitly registered home project. Repository-defined projects use their repository for sharing. A standard ZIP contains one selected project and the shared definitions it needs. It has no manifest.
+Sharing moves a registered project between Woof homes through a portable archive. Repository projects move through Git, and they cannot be exported or imported. The export and import commands own their flows. This domain owns archive content, review semantics, and application safety.
 
-Export copies declared checkout payload files into a project-specific directory and updates the exported references. It preserves source files, project overrides, metadata, aliases, and raw payload bytes. It does not execute scripts or copy an entire checkout.
+## Archives
 
-Archive handling checks format integrity and destination containment. Unreferenced entries do not become import writes.
+- An archive is a standard ZIP file without a manifest. Its root configuration holds every shared definition and only the selected project entry. Pruning changes only the archive. It never changes the source registry.
+- The archive includes every file that the shared graph and the project graph declare, including shadowed shared files. It also includes the project's configuration file, if one exists. Raw payload bytes stay unchanged.
+- Export copies project files under `<repo>` into a project-specific directory. The exported references point to the copies. Export does not copy the checkout or undeclared script dependencies.
 
-## Review and ownership
+When Woof reads an archive, it checks entry names, sizes, and checksums. It also checks that the central and local records agree. These conditions cause a failure: unsafe paths, duplicate destinations, required entries that are not regular files, multi-disk archives, and ZIP64. Woof ignores entries that no definition references. These entries never become writes.
 
-Import reviews incoming definitions and files one item at a time. Identical definitions at the same address need no decision. Other items, including additions, require an explicit choice to keep, take, add, or reuse where applicable.
+## Review
 
-Taking shared content can affect existing users. Adding a token can require a distinct file destination. Reuse retains the selected existing definition and its metadata. Reference remapping applies only to imported content and preserves project overrides. Script bodies are not rewritten or executed.
+Import compares the archive with the local home. It reviews each difference one item at a time. The items are shared tokens, the project entry, project tokens, project metadata, and files. An identical item at the same address needs no decision.
 
-## Decisions and recovery
+Each item offers the choices that apply to it:
 
-Human and agent review use the same choices. Decisions bind the archive and observed source state. A later mapping can require an earlier choice to be reviewed again. Incomplete review makes no import writes.
+- **Keep existing** keeps the local item, or declines an addition.
+- **Take incoming** adds or replaces the item. If taking a shared token can affect existing projects, the review names those projects.
+- **Add as new** stores the item at an unused token address or home path. A file must use a new path if remapping changes its content or if the file belongs to an added token.
+- **Reuse existing** maps the item to a local item with identical type and content. The local item keeps its metadata.
 
-Complete review triggers source rechecks and staged application. Explicit startup migration completes before import review. Import rollback restores the post-migration state after write failures. Original bytes and modes support rollback and retained recovery artifacts. Multi-file crash atomicity is not promised.
+Project metadata and project override bindings allow only keep or take.
 
-Validation runs after a successful save. Missing resources, broken references, cycles, and other catalog findings are reported separately from import success. Validation does not execute scripts or roll back the import.
+## Remapping
+
+Accepted renames and reuses remap references only in imported content. Local references keep their meaning, unless their own definitions are replaced. A project override stays bound to the address of its shared token. If reuse selects another definition, a project alias keeps this binding. Woof never rewrites escaped examples or script bodies.
+
+## Decisions
+
+Decisions bind the archive, the observed source state, and earlier choices. If a later choice changes the context of an earlier choice, the earlier choice must be reviewed again. Saved decisions fail if the archive is different or the sources changed. If the review is incomplete, import writes nothing.
+
+Each decision claims one physical destination. Woof compares destinations after links resolve, even for files that do not exist yet. These items claim destinations: writes, kept files, the imported project configuration, and added files whose incoming content is missing. If two decisions claim the same file, the review reopens the conflicting choice.
+
+## Application and recovery
+
+After each item has a decision, Woof checks each source snapshot and reuse snapshot again. Woof stages each write with its original mode. Woof replaces resources and the project configuration before the root registry.
+
+If a write fails, Woof restores the completed replacements in reverse order. Woof does not overwrite later edits during this restoration. If the restoration cannot finish, backups stay as recovery artifacts. Woof does not promise atomic behavior across several files after a crash.
+
+Explicit startup migration completes before the review. For this reason, rollback returns to the state after migration.
+
+Validation follows a successful save and never undoes the save. Missing incoming files and cycles that the archive already contains do not block the review. Woof saves them as chosen and reports them as findings.
