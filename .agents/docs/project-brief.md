@@ -8,13 +8,13 @@ Woof is a command-line application for developers and coding agents to find and 
 
 Standard JSON stores versioned resource definitions. Named tokens supply conventions, instructions, project context, and executable resources. Ordinary token names remain open-ended; Woof-owned structures use `$`-prefixed keys. Prototype-sensitive names are rejected explicitly.
 
-Prompts can remain plain strings or use objects. Scripts require objects. Both forms support optional descriptions and tags. Discovery uses token paths and available metadata to help callers choose a resource without retrieving its body or executing it.
+Prompts can remain plain strings or use objects. Scripts require objects. Object resources support optional descriptions and tags; bare strings have no separate metadata fields. Discovery uses token paths and available metadata to help callers choose a resource without retrieving its body or executing it.
 
 Project context selects overrides throughout late reference resolution. A project's worktrees share its logical identity. Resources can remain shared, private, or outside the repository without changing how callers address them.
 
 The home registry selects projects by name. A discovered repository configuration defines one unnamed project directly. Both forms use versioned project schemas and root/repository resource markers.
 
-Folder layout is unrestricted. Project resources can be kept together, split across directories, or stored inline. Resource references use the root of their owning configuration, with containment enforced for reads and import writes.
+Folder layout is unrestricted. Project resources can be kept together, split across directories, or stored inline. `<root>` always means Woof home, and `<repo>` always means the detected checkout, independently of the configuration file's directory. Resource reads and import writes enforce containment.
 
 Bundles share explicitly selected registered projects and required shared dependencies while excluding other project entries. Repository-defined projects use Git and cannot use project import or export. Import conflicts require explicit keep/take choices and final validation before replacement. Missing required tokens and circular references fail before computed side effects.
 

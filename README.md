@@ -36,6 +36,8 @@ woof get --search
 
 ## Configuration
 
+Put the root configuration at `~/.woof/woof.config.json`. If this file does not exist, the first operational launch creates it silently. Help and shell completion do not create the file. Edit this JSON file to add shared tokens and registered projects.
+
 Configuration documents require `$schemaVersion: 2`. A referenced project document declares its own version; an inline project inherits the containing document version. Woof-owned keys start with `$`.
 
 ```json
@@ -46,9 +48,22 @@ Configuration documents require `$schemaVersion: 2`. A referenced project docume
     "tests": "Test meaningful behavior only."
   },
   "agents": "{{conventions.commit}} {{conventions.tests}}",
+  "review": {
+    "$type": "prompt",
+    "$exec": "<root>/prompts/review.md",
+    "$description": "Review a focused change.",
+    "$tags": ["review"]
+  },
+  "environment": {
+    "$type": "node",
+    "$exec": "console.log(process.cwd())"
+  },
   "$projects": {
     "microsoft": {
-      "$metadata": { "$basePaths": ["/work/microsoft"] },
+      "$metadata": {
+        "$basePaths": ["/work/microsoft"],
+        "$worktreePaths": ["/work/microsoft-*"]
+      },
       "conventions": { "commit": "Use semantic commits." }
     },
     "acme": "<root>/projects/acme.json"
@@ -56,7 +71,9 @@ Configuration documents require `$schemaVersion: 2`. A referenced project docume
 }
 ```
 
-Ordinary token segments are case-sensitive ASCII letters, digits, underscores, and hyphens. Dots delimit namespaces. Values are strings, namespaces, or typed resource objects, not arbitrary scalars or generic arrays. Resource types are `prompt`, `bash`, `node`, `tsx`, and `bun`. Prompt `$exec` is one string; executable `$exec` is a string or a nonempty string array. `$description` and `$tags` are optional and replace all metadata when a project overrides a token. Unknown reserved keys fail. Prototype-sensitive names `__proto__`, `prototype`, and `constructor` are rejected explicitly instead of being silently dropped.
+A repository configuration is a versioned project object, not a root registry. Put its token definitions and optional `$metadata` directly beside `$schemaVersion`, without a `$projects` wrapper. Woof recognizes `woof.config.json`, `.agents/woof.config.json`, and `.claude/woof.config.json` at the checkout root.
+
+Ordinary token segments are case-sensitive ASCII letters, digits, underscores, and hyphens. Dots delimit namespaces. Values are strings, namespaces, or typed resource objects, not arbitrary scalars or generic arrays. Resource types are `prompt`, `bash`, `node`, `tsx`, and `bun`. Prompt `$exec` is one string; executable `$exec` is a string or a nonempty string array. Object resources can have optional `$description` and `$tags`; bare strings have no separate metadata fields. A project override replaces all metadata on the token. Unknown reserved keys fail. Prototype-sensitive names `__proto__`, `prototype`, and `constructor` are rejected explicitly instead of being silently dropped.
 
 A string token or prompt `$exec` can reference a file. Every referenced prompt payload is raw UTF-8 text, even with a `.json` suffix. `$projects` references are different: they load versioned JSON project configuration. Missing marked files fail; they are never treated as inline code.
 
@@ -85,7 +102,7 @@ Metadata matches the normalized caller directory and its ancestors, with descend
 
 Scripts run as child processes, not inside Woof. Working directory is the detected checkout root or the caller directory when no checkout exists. Array entries run independently and sequentially from the same initial directory; the first failure stops later entries, and working-directory or environment changes do not persist between entries. Output concatenates literally without inserted separators. Repeated references to one script token share one successful result only within one resolution; separate invocations rerun it.
 
-Cold `tsx` and Bun acquisition can require registry access. A warm npm cache can avoid those downloads. Bun can also acquire script dependencies through its own resolver. Woof has no separate dependency installer. Acquisition time depends on the environment and is not a fixed startup-latency guarantee.
+Cold `tsx` and Bun acquisition can require registry access because `npx` fetches the pinned runtime packages themselves. A warm npm cache can avoid those downloads. `node` and `tsx` do not automatically fetch arbitrary packages imported by script source; those imports must already resolve in the script's runtime environment. Bun may fetch missing script dependencies through its native resolver. Woof has no separate dependency installer. Acquisition time depends on the environment and is not a fixed startup-latency guarantee.
 
 Captured stdout is limited to 10 MiB per child process. Exceeding the limit is an explicit error, never silent truncation, and triggers the same owned-process cleanup as cancellation. There is no default execution timeout or public output-limit flag. On POSIX, cancellation terminates only the owned detached process group, escalates within a bounded period, and waits for descendants. Windows has parent-only termination; equivalent process-tree behavior is not claimed.
 
