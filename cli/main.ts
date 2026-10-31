@@ -5,6 +5,7 @@ import { defineCommand, runMain } from 'citty'
 
 import manifest from '../package.json' with { type: 'json' }
 import explain from './commands/explain.ts'
+import exportProject from './commands/export.ts'
 import get from './commands/get.ts'
 import projects from './commands/projects.ts'
 import validate from './commands/validate.ts'
@@ -17,7 +18,7 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
 })
 
-const subCommands: SubCommandsDef = { explain, get, projects, validate }
+const subCommands: SubCommandsDef = { explain, export: exportProject, get, projects, validate }
 
 const main = defineCommand({
   args: {
