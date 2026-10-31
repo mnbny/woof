@@ -1,4 +1,4 @@
-import { isCancel, log, select, text } from '@clack/prompts'
+import { isCancel, log, multiline, select, text } from '@clack/prompts'
 import { readFileSync } from 'node:fs'
 
 import { isAgent } from './agent.ts'
@@ -85,6 +85,17 @@ export async function chooseOption({
 // Warnings read the same for people and agents, so both modes use the template.
 export function presentWarning(template: string, values: Record<string, TemplateValue> = {}) {
   process.stderr.write(`${renderTemplateFile(template, values)}\n`)
+}
+
+// Enter adds a line, so pasted text with blank lines cannot submit early. Tab reaches the submit button.
+export async function enterMultiline(message: string) {
+  if (agentPresentation() || !isTTY()) return undefined
+  const value = await multiline({
+    message,
+    showSubmit: true,
+    validate: input => (input?.trim() ? undefined : 'Enter a value.'),
+  })
+  return isCancel(value) ? undefined : (value ?? '').trimEnd()
 }
 
 export function writePayload(payload: string) {
