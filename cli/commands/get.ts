@@ -1,92 +1,21 @@
-import type { ConfigurationMigrationInput } from '../utils/migrations.ts'
 import type { RegisteredProject } from '../utils/projects.ts'
-import type { ConfigurationSource } from '../utils/resources.ts'
-import type { ProjectConfiguration, RootConfiguration } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
-import { readFileSync, realpathSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
 import { initializeWoofHome } from '../utils/bootstrap.ts'
 import { discoverResources } from '../utils/discovery.ts'
 import { shellQuote } from '../utils/display.ts'
+import { migrationInputs } from '../utils/migration-scope.ts'
 import { migrateConfigurationDocuments } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentError, presentSelection, writePayload } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
-import { createResourceLoader, detectCheckoutRoot, resolveResourceLocation } from '../utils/resources.ts'
+import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
-
-type ResourceLoader = ReturnType<typeof createResourceLoader>
-
-function migrationInputs(rootData: unknown, cwd: string, explicitProject?: string): ConfigurationMigrationInput[] {
-  const rootFile = getWoofHome('woof.config.json')
-  const checkoutRoot = detectCheckoutRoot(cwd)
-  const inputs: ConfigurationMigrationInput[] = [{ file: rootFile, kind: 'root' }]
-  const projects =
-    rootData && typeof rootData === 'object' && !Array.isArray(rootData)
-      ? (rootData as Record<string, unknown>)['$projects']
-      : undefined
-
-  if (explicitProject) {
-    const definition =
-      projects && typeof projects === 'object' && !Array.isArray(projects)
-        ? (projects as Record<string, unknown>)[explicitProject]
-        : undefined
-    if (typeof definition === 'string')
-      inputs.push({
-        file: resolveResourceLocation(definition, checkoutRoot ? { repoRoot: checkoutRoot } : {}).file,
-        kind: 'project',
-      })
-    return inputs
-  }
-
-  const rootSource: ConfigurationSource = {
-    file: realpathSync(rootFile),
-    root: realpathSync(getWoofHome()),
-    rootKind: 'root',
-    markedPath: rootFile,
-    kind: 'root',
-  }
-  const inspectionLoader: ResourceLoader = {
-    repoRoot: checkoutRoot,
-    loadRootConfiguration() {
-      return { data: rootData as RootConfiguration, source: rootSource }
-    },
-    loadProjectConfiguration(reference: string) {
-      const provenance = resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
-      return {
-        data: JSON.parse(readFileSync(provenance.file, 'utf8')) as ProjectConfiguration,
-        source: { ...provenance, kind: 'project' },
-      }
-    },
-    loadRepositoryConfiguration(file: string) {
-      if (!checkoutRoot) throw new Error(`No active checkout supplies ${file}.`)
-      const physical = realpathSync(file)
-      return {
-        data: JSON.parse(readFileSync(physical, 'utf8')) as ProjectConfiguration,
-        source: {
-          file: physical,
-          root: checkoutRoot,
-          rootKind: 'repo',
-          markedPath: file,
-          kind: 'project',
-        },
-      }
-    },
-    readResource(reference: string) {
-      const provenance = resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
-      return { content: readFileSync(provenance.file, 'utf8'), provenance }
-    },
-  }
-  const context = selectProjectContext({ loader: inspectionLoader, cwd })
-  const candidates = context.project ? [context.project] : context.candidates
-  for (const candidate of candidates)
-    if (!candidate.inline) inputs.push({ file: candidate.source.file, kind: 'project' })
-  return inputs
-}
 
 function candidateText(
   candidates: ReturnType<typeof discoverResources>,

@@ -5,6 +5,7 @@ import { defineCommand, runMain } from 'citty'
 import { parseArgs } from 'node:util'
 
 import manifest from '../package.json' with { type: 'json' }
+import explain from './commands/explain.ts'
 import get from './commands/get.ts'
 import { initializeWoofHome } from './utils/bootstrap.ts'
 import { ConfigurationNotFoundError, readRootConfiguration } from './utils/config.ts'
@@ -16,7 +17,7 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
 })
 
-const subCommands: SubCommandsDef = { get }
+const subCommands: SubCommandsDef = { explain, get }
 
 const main = defineCommand({
   args: {
