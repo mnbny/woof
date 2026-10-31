@@ -126,3 +126,56 @@ test('creates one repository configuration per checkout', async ({ cli, director
   expect((await run(cli, home, ['init', '--repo', 'woof.config.json', '--agent'], checkout)).status).toBe(1)
   await expect(lstat(join(checkout, 'woof.config.json'))).rejects.toThrow()
 })
+
+test('adds a token only when the whole configuration still works', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'add-home')
+  const file = join(home, 'woof.config.json')
+  await put(
+    file,
+    JSON.stringify({
+      $schemaVersion: 2,
+      conventions: { commit: { default: 'seven rules' } },
+      $projects: { acme: { agents: { local: 'acme agents' } } },
+    }),
+  )
+  const original = await readFile(file, 'utf8')
+  const add = (path: string, content: string) =>
+    run(cli, home, ['add', path, '--type', 'prompt', '--shared', '--content', content, '--agent'])
+
+  expect((await add('agents', 'a shared leaf over a project namespace')).status).toBe(1)
+  expect((await add('broken', 'see {{missing}}')).status).toBe(1)
+  expect((await add('conventions.commit.default', 'a duplicate')).status).toBe(1)
+  expect(await readFile(file, 'utf8')).toBe(original)
+
+  expect((await add('conventions.commit.short', 'Keep {{conventions.commit.default}} short.')).status).toBe(0)
+  const added = JSON.parse(await readFile(file, 'utf8'))
+  expect(added.conventions.commit).toEqual({
+    default: 'seven rules',
+    short: 'Keep {{conventions.commit.default}} short.',
+  })
+  expect(added.$projects).toEqual({ acme: { agents: { local: 'acme agents' } } })
+})
+
+test('copies a file from outside Woof home so that the new token resolves', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'add-copy-home')
+  const source = join(directory, 'outside', 'rule.md')
+  await put(join(home, 'woof.config.json'), JSON.stringify({ $schemaVersion: 2, base: 'seven rules' }))
+  await put(source, 'Use {{base}}.\n')
+
+  const added = await run(cli, home, [
+    'add',
+    'rules.commit',
+    '--type',
+    'prompt',
+    '--shared',
+    '--content',
+    source,
+    '--agent',
+  ])
+  expect(added.status).toBe(0)
+  expect(JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8')).rules).toEqual({
+    commit: '<root>/resources/rules/commit.md',
+  })
+  expect((await run(cli, home, ['get', 'rules.commit', '--agent'])).stdout).toBe('Use seven rules.\n')
+  expect(await readFile(source, 'utf8')).toBe('Use {{base}}.\n')
+})
