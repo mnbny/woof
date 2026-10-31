@@ -20,6 +20,7 @@ import { prepareConfigurationMigration } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentConflict, presentError, presentResult } from '../utils/presentation.ts'
 import { detectCheckoutRoot } from '../utils/resources.ts'
+import { isTTY } from '../utils/terminal.ts'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`
@@ -54,10 +55,23 @@ function conflictDiff(conflict: ImportConflict) {
   })
 }
 
-function decisionDocument(plan: ReturnType<typeof planImport>, next?: ImportConflict) {
+function decisionDocument(
+  plan: ReturnType<typeof planImport>,
+  choices: Readonly<Record<string, ImportChoice>>,
+  next?: ImportConflict,
+) {
   return {
     archive: plan.archiveDigest,
-    choices: next ? { [next.id]: 'keep' } : {},
+    choices: { ...choices },
+    next: next
+      ? {
+          id: next.id,
+          kind: next.kind,
+          path: next.path,
+          existingDigest: next.existingDigest,
+          incomingDigest: next.incomingDigest,
+        }
+      : undefined,
     conflicts: plan.conflicts.map(conflict => ({
       id: conflict.id,
       kind: conflict.kind,
@@ -191,12 +205,13 @@ export default defineCommand({
           details: conflictDiff(conflict),
           recovery: 'Choose keep-existing or take-incoming. No files change until every conflict is resolved.',
         })
-        if (agent) {
+        if (agent || !isTTY()) {
           const suggested = decisionsPath ?? `${archivePath}.decisions.json`
           presentConflict({
-            summary: 'Import requires an explicit decisions handoff.',
-            details: JSON.stringify(decisionDocument(plan, conflict), null, 2),
-            recovery: `Save the reviewed choices and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration} --agent.`,
+            summary:
+              'Import requires an explicit decisions handoff; add keep-existing or take-incoming for the next conflict.',
+            details: JSON.stringify(decisionDocument(plan, choices, conflict), null, 2),
+            recovery: `Save the reviewed choices and run woof import ${shellQuote(archivePath)} --decisions ${shellQuote(suggested)}${migration}${agent ? ' --agent' : ''}.`,
           })
           process.exitCode = 1
           return
@@ -220,7 +235,7 @@ export default defineCommand({
       if (reviewed.status === 'incomplete') {
         presentConflict({
           summary: `Import review is incomplete; ${reviewed.remaining} conflict(s) remain.`,
-          details: `${conflictDiff(reviewed.next)}\n${JSON.stringify(decisionDocument(plan, reviewed.next), null, 2)}`,
+          details: `${conflictDiff(reviewed.next)}\n${JSON.stringify(decisionDocument(plan, choices, reviewed.next), null, 2)}`,
           recovery: `Complete every choice and rerun woof import ${shellQuote(archivePath)}${decisionsPath ? ` --decisions ${shellQuote(decisionsPath)}` : ''}${migration}${agent ? ' --agent' : ''}. No import was applied.`,
         })
         process.exitCode = 1
@@ -228,13 +243,17 @@ export default defineCommand({
       }
 
       const result = applyImport(reviewed.candidate)
+      const deferred = [
+        ...result.deferredRequirements,
+        ...result.deferredProjects.map(name => `project configuration ${name}`),
+      ]
       presentResult({
         summary: result.completed.length
           ? `Imported ${plan.bundle.projectName} without executing scripts.`
           : 'Import review passed; no files needed changes.',
         details: outcome(result),
-        recovery: result.deferredRequirements.length
-          ? `Checkout resources require normal validation in the target checkout: woof validate --project ${shellQuote(plan.bundle.projectName)}. Deferred: ${result.deferredRequirements.join(', ')}`
+        recovery: deferred.length
+          ? `Checkout resources require normal validation in the target checkout: woof validate --project ${shellQuote(plan.bundle.projectName)}. Deferred: ${deferred.join(', ')}`
           : 'All selected configuration and resources passed final validation before application.',
       })
     } catch (error) {

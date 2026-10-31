@@ -252,7 +252,12 @@ export function applyImport(candidate: ReviewedImportCandidate) {
   const current = new Map<string, Uint8Array | undefined>()
   for (const source of candidate.sources) current.set(source.path, currentDigest(candidate.home, source))
   const planned = changes(candidate, current)
-  if (!planned.length) return { ...report([], [], []), deferredRequirements: candidate.deferredRequirements }
+  if (!planned.length)
+    return {
+      ...report([], [], []),
+      deferredProjects: candidate.deferredProjects,
+      deferredRequirements: candidate.deferredRequirements,
+    }
 
   const createdDirectories: string[] = []
   const staged: StagedChange[] = []
@@ -364,6 +369,7 @@ export function applyImport(candidate: ReviewedImportCandidate) {
         .map(change => change.backup!),
       warnings,
     ),
+    deferredProjects: candidate.deferredProjects,
     deferredRequirements: candidate.deferredRequirements,
   }
 }
