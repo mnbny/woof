@@ -148,6 +148,11 @@ function assertDocumentKeys(value: Record<string, unknown>, kind: ConfigurationK
 
 export function validateConfigurationDocument(value: unknown, kind: 'root', source?: string): RootConfiguration
 export function validateConfigurationDocument(value: unknown, kind: 'project', source?: string): ProjectConfiguration
+export function validateConfigurationDocument(
+  value: unknown,
+  kind: ConfigurationKind,
+  source?: string,
+): RootConfiguration | ProjectConfiguration
 export function validateConfigurationDocument(value: unknown, kind: ConfigurationKind, source = '<configuration>') {
   if (isDictionary(value)) {
     if (!hasOwn(value, '$schemaVersion')) throw new ConfigurationVersionError(source, 'missing')
