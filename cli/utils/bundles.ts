@@ -77,12 +77,13 @@ function collectReferences(value: TokenValue, references: Set<string>, shared: b
   for (const child of Object.values(value)) collectReferences(child, references, shared)
 }
 
-function referencedResources(configuration: RootConfiguration, project: ProjectDefinition) {
+export function referencedResources(configuration: RootConfiguration, ...projects: ProjectDefinition[]) {
   const references = new Set<string>()
   for (const [key, value] of Object.entries(configuration))
     if (key !== '$schemaVersion' && key !== '$projects') collectReferences(value as TokenValue, references, true)
-  for (const [key, value] of Object.entries(project))
-    if (key !== '$schemaVersion' && key !== '$metadata') collectReferences(value as TokenValue, references, false)
+  for (const project of projects)
+    for (const [key, value] of Object.entries(project))
+      if (key !== '$schemaVersion' && key !== '$metadata') collectReferences(value as TokenValue, references, false)
   return references
 }
 
@@ -315,4 +316,9 @@ export function createBundleArchive(configuration: RootConfiguration, resources:
   validateBundle(files)
   const archive = zipSync(Object.fromEntries(files) as Zippable, { level: 6 })
   return archive
+}
+
+// A backup mirrors Woof home paths, so extracting it over Woof home restores those files.
+export function createBackupArchive(files: Iterable<BundleFile>) {
+  return zipSync(Object.fromEntries(indexedFiles(files)) as Zippable, { level: 6 })
 }
