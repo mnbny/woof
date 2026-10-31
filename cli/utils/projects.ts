@@ -195,7 +195,7 @@ export function selectProjectContext(
     }
   }
 
-  const candidatePath = checkoutRoot ?? realpathSync(cwd)
+  const candidatePath = realpathSync(cwd)
   const candidates = loadRegisteredProjects(root, loader).filter(project => metadataMatches(project, candidatePath))
   const inferred = options.inferredProject
   if (inferred && candidates.some(project => project.name === inferred))
