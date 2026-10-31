@@ -2,16 +2,11 @@ import type { RegisteredProject } from '../utils/projects.ts'
 import type { preflightToken } from '../utils/tokens.ts'
 
 import { defineCommand } from 'citty'
-import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { initializeWoofHome } from '../utils/bootstrap.ts'
 import { discoverResources } from '../utils/discovery.ts'
 import { shellQuote } from '../utils/display.ts'
-import { migrationInputs } from '../utils/migration-scope.ts'
-import { migrateConfigurationDocuments } from '../utils/migrations.ts'
-import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentError, presentSelection, presentWarning, writePayload } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
@@ -85,26 +80,6 @@ export default defineCommand({
         )
       const explicitProject = qualified?.project ?? values.project
       const search = values.search === true
-      const migration = values.migrate === true
-
-      if (migration) {
-        await initializeWoofHome()
-        const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
-        if (explicitProject) {
-          const projects =
-            rootData && typeof rootData === 'object' && !Array.isArray(rootData)
-              ? (rootData as Record<string, unknown>)['$projects']
-              : undefined
-          if (
-            !projects ||
-            typeof projects !== 'object' ||
-            Array.isArray(projects) ||
-            !Object.prototype.hasOwnProperty.call(projects, explicitProject)
-          )
-            throw new Error(`Unknown registered project: ${explicitProject}.`)
-        }
-        await migrateConfigurationDocuments(migrationInputs(rootData, process.cwd(), explicitProject))
-      }
 
       process.on('SIGINT', onCancel)
       process.on('SIGTERM', onCancel)

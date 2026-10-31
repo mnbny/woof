@@ -5,12 +5,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { initializeWoofHome } from '../utils/bootstrap.ts'
 import { createBundleArchive } from '../utils/bundles.ts'
 import { validateConfigurationDocument } from '../utils/config.ts'
 import { shellQuote } from '../utils/display.ts'
-import { migrationInputs } from '../utils/migration-scope.ts'
-import { migrateConfigurationDocuments } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { presentError, presentResult } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
@@ -59,23 +56,6 @@ export default defineCommand({
           'Export requires an explicit registered --project; repository-defined projects cannot be exported.',
         )
       const agent = values.agent === true || Boolean(isAgent())
-
-      if (values.migrate === true) {
-        await initializeWoofHome()
-        const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
-        const projects =
-          rootData && typeof rootData === 'object' && !Array.isArray(rootData)
-            ? (rootData as Record<string, unknown>)['$projects']
-            : undefined
-        if (
-          !projects ||
-          typeof projects !== 'object' ||
-          Array.isArray(projects) ||
-          !Object.prototype.hasOwnProperty.call(projects, projectName)
-        )
-          throw new Error(`Unknown registered project: ${projectName}.`)
-        await migrateConfigurationDocuments(migrationInputs(rootData, process.cwd(), projectName))
-      }
 
       const context = selectProjectContext({
         project: projectName,

@@ -45,7 +45,7 @@ Read all useful output even when the exit is nonzero. Exact misses, ambiguous pr
 
 Use `woof explain` for graph provenance and `woof validate` for non-executing checks. Do not treat either as computed output.
 
-Migration is explicit. Add `--migrate` only when the user authorized it or an existing instruction clearly requests it. Keep that flag in later retries while the original source still needs it. Missing versions, future versions, and unsupported migrations require correction or a compatible release; never guess a version or overwrite data to force a result.
+Migration is explicit. Add `--migrate` only when the user authorized it or an existing instruction clearly requests it. Woof reports completed startup migrations on stderr before running the requested command. Current configuration ignores the flag. Missing versions, future versions, and unsupported migrations require correction or a compatible release; never guess a version or overwrite data to force a result.
 
 ## Complete import review
 
@@ -57,6 +57,6 @@ Agent handoffs contain the archive digest, complete conflict metadata, accepted 
 woof import '/path/to/project.woof.zip' --decisions '/path/to/decisions.json' --agent
 ```
 
-Continue using the emitted archive, decisions path, and `--migrate` when present. Read application and recovery reports before retrying. Later edits, unsafe destinations, or incomplete recovery require renewed review, not a blanket overwrite. Agent mode grants no additional permission to modify files.
+Continue using the emitted archive and decisions path. A completed startup migration remains in place if import review is canceled. Read application and recovery reports before retrying. Later edits, unsafe destinations, or incomplete recovery require renewed review, not a blanket overwrite. Agent mode grants no additional permission to modify files.
 
 Apply returned instructions in the current conversation, with the user's original request as the scope. Do not repeat computed work just to submit an answer.

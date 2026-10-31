@@ -160,7 +160,7 @@ function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string
       })
     }
   }
-  if (candidate.migrationChanged || !isDeepStrictEqual(candidate.local, candidate.configuration)) {
+  if (!isDeepStrictEqual(candidate.local, candidate.configuration)) {
     const path = 'woof.config.json'
     const source = candidate.sources.find(source => source.path === path)
     if (!source) throw new Error('Reviewed root source state is missing.')

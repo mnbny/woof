@@ -8,7 +8,7 @@ The CLI owns command registration, startup configuration checks, caller detectio
 
 First operational launch silently creates a missing home and current versioned configuration. Existing files are never rewritten implicitly. Unversioned, malformed, or mismatched documents fail with source-specific guidance instead of being stamped with a guessed version.
 
-Migration requires explicit authorization on an applicable command. Validation is the migration-only entry point. The operation prepares every used document before replacement, preserves physical targets and modes, checks concurrent changes, and supports ordinary-failure rollback. Import migration remains prepared during review and applies with the completed import, registry last.
+Every invocation checks the home configuration, resolvable registered configurations, and the current checkout configuration. Startup defers registered checkout references when no checkout is available. Explicit migration applies supported pending changes before the requested command. Migration preserves physical targets and modes, checks concurrent changes, and supports ordinary-failure rollback. Import review starts after migration completes.
 
 Commands include `get`, `projects`, `explain`, `validate`, `export`, and `import`. Shell completion is hidden from the normal command list and does not evaluate resources.
 

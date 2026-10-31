@@ -40,7 +40,7 @@ function contained(root: string, file: string) {
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path))
 }
 
-function insideWoofHome(cwd: string) {
+export function insideWoofHome(cwd: string) {
   try {
     return contained(realpathSync(getWoofHome()), realpathSync(cwd))
   } catch {
@@ -48,7 +48,7 @@ function insideWoofHome(cwd: string) {
   }
 }
 
-function repositoryConfiguration(checkoutRoot: string) {
+export function repositoryConfiguration(checkoutRoot: string) {
   const candidates = [
     resolve(checkoutRoot, 'woof.config.json'),
     resolve(checkoutRoot, '.agents/woof.config.json'),

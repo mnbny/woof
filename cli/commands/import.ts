@@ -1,6 +1,5 @@
 import type { ImportApplyReport } from '../utils/import-apply.ts'
 import type { ImportChoice, ImportConflict } from '../utils/import-plan.ts'
-import type { ProjectConfiguration, RootConfiguration } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
 import { createPatch } from 'diff'
@@ -10,14 +9,10 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { initializeWoofHome } from '../utils/bootstrap.ts'
-import { BUNDLE_LIMITS, readBundleArchive } from '../utils/bundles.ts'
+import { BUNDLE_LIMITS } from '../utils/bundles.ts'
 import { shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
 import { planImport, reviewImport } from '../utils/import-plan.ts'
-import { migrationInputs } from '../utils/migration-scope.ts'
-import { prepareConfigurationMigration } from '../utils/migrations.ts'
-import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentConflict, presentError, presentResult } from '../utils/presentation.ts'
 import { detectCheckoutRoot } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
@@ -167,49 +162,9 @@ export default defineCommand({
       if (statSync(archivePath).size > BUNDLE_LIMITS.archiveBytes)
         throw new Error(`Archive exceeds the ${BUNDLE_LIMITS.archiveBytes}-byte input limit.`)
       const archive = readFileSync(archivePath)
-      const bundle = readBundleArchive(archive)
       assertImportContext(cwd)
 
-      let prepared:
-        | {
-            root: RootConfiguration
-            project?: ProjectConfiguration
-            migrationChanged: boolean
-            sources: {
-              root: { target: string; source: string }
-              project?: { target: string; source: string }
-            }
-          }
-        | undefined
-      if (values.migrate === true) {
-        await initializeWoofHome()
-        const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
-        const projects =
-          rootData && typeof rootData === 'object' && !Array.isArray(rootData)
-            ? (rootData as Record<string, unknown>)['$projects']
-            : undefined
-        const selected =
-          projects && typeof projects === 'object' && !Array.isArray(projects)
-            ? (projects as Record<string, unknown>)[bundle.projectName]
-            : undefined
-        if (typeof selected === 'string' && !selected.startsWith('<root>/'))
-          throw new Error(`Local project ${bundle.projectName} is repository-defined and cannot be imported.`)
-        const documents = prepareConfigurationMigration(migrationInputs(rootData, cwd, bundle.projectName))
-        const rootDocument = documents.documents.find(document => document.kind === 'root')
-        if (!rootDocument) throw new Error('Import migration did not prepare a root document.')
-        const projectDocument = documents.documents.find(document => document.kind === 'project')
-        prepared = {
-          root: rootDocument.migrated as RootConfiguration,
-          ...(projectDocument ? { project: projectDocument.migrated as ProjectConfiguration } : {}),
-          migrationChanged: documents.documents.some(document => document.changed),
-          sources: {
-            root: { target: rootDocument.target, source: rootDocument.source },
-            ...(projectDocument ? { project: { target: projectDocument.target, source: projectDocument.source } } : {}),
-          },
-        }
-      }
-
-      const plan = planImport(archive, { cwd, ...(prepared ? { prepared } : {}) })
+      const plan = planImport(archive, { cwd })
       let choices: Record<string, ImportChoice> = {}
       if (decisionsPath) choices = readDecisions(decisionsPath, plan)
       for (const conflict of plan.conflicts) {

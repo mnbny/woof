@@ -1,5 +1,3 @@
-import type { RootConfiguration } from '../../../cli/utils/schema.ts'
-
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { chmod, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
@@ -10,7 +8,6 @@ import { createBundleArchive, readBundleArchive } from '../../../cli/utils/bundl
 import { validateConfigurationDocument } from '../../../cli/utils/config.ts'
 import { applyImport, ImportApplyError } from '../../../cli/utils/import-apply.ts'
 import { planImport, reviewImport } from '../../../cli/utils/import-plan.ts'
-import { prepareConfigurationMigration } from '../../../cli/utils/migrations.ts'
 import { put, test } from '../fixtures.ts'
 
 type Cli = {
@@ -204,7 +201,7 @@ test('preserves mixed review choices and rejects stale state without partial app
   expect(JSON.parse(await readFile(root, 'utf8'))).toEqual(merged)
 })
 
-test('rejects config takeover and stale prepared views before changing source data', async ({ directory, expect }) => {
+test('rejects config takeover and stale import sources before changing source data', async ({ directory, expect }) => {
   const ownedHome = join(directory, 'owned-home')
   const ownedFile = join(ownedHome, 'acme/project.json')
   const originalProject = '{"$schemaVersion":2,"agents":"local acme"}\n'
@@ -221,45 +218,17 @@ test('rejects config takeover and stale prepared views before changing source da
   expect(() => planImport(takeover, { home: ownedHome, cwd: directory })).toThrow(/Raw payload destination/)
   expect(await readFile(ownedFile, 'utf8')).toBe(originalProject)
 
-  const staleHome = join(directory, 'stale-prepared-home')
+  const staleHome = join(directory, 'stale-import-home')
   const staleRoot = join(staleHome, 'woof.config.json')
-  await put(staleRoot, '{"schemaVersion":1}\n')
-  const migration = prepareConfigurationMigration([{ file: staleRoot, kind: 'root' }])
-  const document = migration.documents[0]!
+  await config(staleHome, { $schemaVersion: 2 })
+  const archive = createBundleArchive(rootConfiguration({ $schemaVersion: 2, $projects: { demo: {} } }), [])
+  const plan = planImport(archive, { home: staleHome, cwd: directory })
+  const review = reviewImport(plan, {})
+  assert(review.status === 'ready')
   const concurrent = '{"$schemaVersion":2,"localOnly":"preserve concurrent edit"}\n'
   await writeFile(staleRoot, concurrent)
-  const archive = createBundleArchive(rootConfiguration({ $schemaVersion: 2, $projects: { demo: {} } }), [])
-  expect(() =>
-    planImport(archive, {
-      home: staleHome,
-      cwd: directory,
-      prepared: {
-        root: document.migrated as RootConfiguration,
-        migrationChanged: true,
-        sources: { root: { target: document.target, source: document.source } },
-      },
-    }),
-  ).toThrow(/changed during import review/)
+  expect(() => applyImport(review.candidate)).toThrow(/changed after review/)
   expect(await readFile(staleRoot, 'utf8')).toBe(concurrent)
-
-  const currentHome = join(directory, 'current-prepared-home')
-  const currentRoot = join(currentHome, 'woof.config.json')
-  await put(currentRoot, '{"schemaVersion":1}\n')
-  const currentMigration = prepareConfigurationMigration([{ file: currentRoot, kind: 'root' }])
-  const currentDocument = currentMigration.documents[0]!
-  const currentPlan = planImport(archive, {
-    home: currentHome,
-    cwd: directory,
-    prepared: {
-      root: currentDocument.migrated as RootConfiguration,
-      migrationChanged: true,
-      sources: { root: { target: currentDocument.target, source: currentDocument.source } },
-    },
-  })
-  const currentReview = reviewImport(currentPlan, {})
-  assert(currentReview.status === 'ready')
-  applyImport(currentReview.candidate)
-  expect(JSON.parse(await readFile(currentRoot, 'utf8'))).toEqual({ $schemaVersion: 2, $projects: { demo: {} } })
 })
 
 test('restores completed resources with original modes when registry replacement fails', async ({

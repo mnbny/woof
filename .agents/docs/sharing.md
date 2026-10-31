@@ -20,4 +20,4 @@ When shared definitions or existing resource bytes change, candidate validation 
 
 Review presents one conflict and diff at a time. Agents and non-TTY humans receive an exit-1 decisions handoff; actual Clack cancellation exits 130. Decisions JSON binds the archive digest and complete conflict metadata. Accepted `keep`/`take` choices persist while `next` identifies the unresolved conflict without preselecting it. Unchanged handoffs cannot apply, including on the last conflict.
 
-Complete choices trigger final validation, source rechecks, staged application, and root-registry-last replacement. Prepared migrations apply with that import rather than during review. Original bytes and modes support ordinary-failure rollback and retained recovery artifacts; multi-file crash atomicity is not promised.
+Complete choices trigger final validation, source rechecks, staged application, and root-registry-last replacement. Explicit startup migration completes before import review. Import rollback restores the post-migration state. Original bytes and modes support ordinary-failure rollback and retained recovery artifacts; multi-file crash atomicity is not promised.

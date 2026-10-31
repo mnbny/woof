@@ -44,11 +44,13 @@ test('migrates the known legacy format while preserving its link and mode', asyn
   await symlink(target, file)
 
   expect((await run(cli, home, ['validate'])).status).toBe(1)
-  expect((await run(cli, home, ['--migrate'])).status).toBe(1)
   expect((await run(cli, home, ['validate', '--migrate', '--unknown'])).status).toBe(1)
+  expect((await run(cli, home, ['get', '--project', '--migrate', 'other'])).status).toBe(1)
+  expect((await run(cli, home, ['complete', '--migrate', '--unknown'])).status).toBe(1)
+  expect((await run(cli, home, ['get', '--', '--migrate'])).status).toBe(1)
   expect(await readFile(target, 'utf8')).toBe('{"schemaVersion":1}\n')
 
-  expect((await run(cli, home, ['validate', '--migrate'])).status).toBe(0)
+  expect((await run(cli, home, ['--migrate'])).status).toBe(0)
   expect((await lstat(file)).isSymbolicLink()).toBe(true)
   expect((await lstat(target)).mode & 0o777).toBe(0o640)
   expect(JSON.parse(await readFile(target, 'utf8'))).toEqual({ $schemaVersion: 2 })
@@ -80,4 +82,26 @@ test('rejects unversioned, future and invalid configurations without rewriting t
   const selected = await run(cli, home, ['validate', '--project', 'broken', '--migrate'])
   expect(selected.status).toBe(1)
   expect(await readFile(file, 'utf8')).toBe(original)
+})
+
+test('checks registered configuration globally without reading payloads', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'global-home')
+  const root = join(home, 'woof.config.json')
+  const project = join(home, 'project.json')
+  await put(
+    root,
+    JSON.stringify({
+      $schemaVersion: 2,
+      instructions: '<root>/missing-payload.txt',
+      $projects: { unrelated: '<root>/project.json' },
+    }),
+  )
+  await put(project, '{"$schemaVersion":3}\n')
+
+  for (const args of [['--help'], ['get', 'instructions', '--project', 'unrelated'], ['projects', '--migrate']]) {
+    expect((await run(cli, home, args)).status).toBe(1)
+  }
+  expect(await readFile(project, 'utf8')).toBe('{"$schemaVersion":3}\n')
+  await put(project, '{"$schemaVersion":2}\n')
+  expect((await run(cli, home, ['--help'])).status).toBe(0)
 })

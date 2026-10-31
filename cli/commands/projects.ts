@@ -1,36 +1,11 @@
-import type { ConfigurationMigrationInput } from '../utils/migrations.ts'
-
 import { defineCommand } from 'citty'
-import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { initializeWoofHome } from '../utils/bootstrap.ts'
-import { migrateConfigurationDocuments } from '../utils/migrations.ts'
-import { getWoofHome } from '../utils/paths.ts'
 import { presentError, presentResult } from '../utils/presentation.ts'
 import { loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
-import { createResourceLoader, detectCheckoutRoot, resolveResourceLocation } from '../utils/resources.ts'
-
-function registeredMigrationInputs(rootData: unknown, cwd: string): ConfigurationMigrationInput[] {
-  const inputs: ConfigurationMigrationInput[] = [{ file: getWoofHome('woof.config.json'), kind: 'root' }]
-  const projects =
-    rootData && typeof rootData === 'object' && !Array.isArray(rootData)
-      ? (rootData as Record<string, unknown>)['$projects']
-      : undefined
-  if (projects && typeof projects === 'object' && !Array.isArray(projects)) {
-    const checkoutRoot = detectCheckoutRoot(cwd)
-    for (const reference of Object.values(projects)) {
-      if (typeof reference === 'string')
-        inputs.push({
-          file: resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {}).file,
-          kind: 'project',
-        })
-    }
-  }
-  return inputs
-}
+import { createResourceLoader } from '../utils/resources.ts'
 
 function metadataPaths(paths: string[] | undefined) {
   return (paths ?? []).map(path =>
@@ -46,18 +21,12 @@ export default defineCommand({
   meta: { description: 'List registered projects and their paths', name: 'projects' },
   async run({ rawArgs }) {
     try {
-      const { values, positionals } = parseArgs({
+      const { positionals } = parseArgs({
         args: rawArgs,
         allowPositionals: true,
         options: { agent: { type: 'boolean' }, migrate: { type: 'boolean' } },
       })
       if (positionals.length) throw new Error('Projects does not accept positional arguments.')
-
-      if (values.migrate === true) {
-        await initializeWoofHome()
-        const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
-        await migrateConfigurationDocuments(registeredMigrationInputs(rootData, process.cwd()))
-      }
 
       const loader = createResourceLoader({ cwd: process.cwd() })
       const root = loader.loadRootConfiguration()

@@ -22,7 +22,7 @@ Convention over configuration guides the design. The first product delivery is t
 
 ## Delivered CLI responsibilities
 
-- Silent first-launch home creation and explicit, scoped migration with original-state recovery.
+- Silent first-launch home creation and explicit startup migration with original-state recovery.
 - Exact and metadata-only lookup, project selection, explanation, validation, and registry listing.
 - Computed bash/node/tsx/bun resources with preflight, literal output, and owned-process cancellation.
 - Manifest-free project export, sequential import review, safe application, and rollback/recovery.
@@ -36,4 +36,4 @@ A **checkout** is a detected Git repository or linked worktree that can supply `
 
 The intended **project** identity groups related checkouts and worktrees under one resolution context. A **token** is a named resource that can supply stored content, references, or a computed value. The **root** is the shared base; one selected project overlays whole tokens before references resolve.
 
-**Migration** is an explicit prepared transition that applies with the reviewed operation and preserves original bytes for rollback. **Export** packages a registered project; **import** reviews and applies a complete candidate only after every conflict is resolved and final validation succeeds.
+**Migration** is an explicit startup transition that preserves original bytes for rollback. **Export** packages a registered project; **import** reviews and applies a complete candidate only after every conflict is resolved and final validation succeeds.

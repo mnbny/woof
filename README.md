@@ -13,7 +13,7 @@ Woof is a local CLI for reusable instructions, prompts, and computed resources. 
 | `woof export --project NAME` | Export a named registered project and required shared resources to a unique ZIP under home `exports`. |
 | `woof import ARCHIVE` | Review each conflict, then validate and apply the complete import. |
 
-Applicable context commands accept `--project NAME`, `--agent`, and `--migrate`. Import also accepts `--decisions FILE`. Every command provides `--help`. `woof validate --migrate` is the migration-only entry point.
+Applicable context commands accept `--project NAME` and `--agent`. Import also accepts `--decisions FILE`. Every command provides `--help`. Use `--migrate` before or after any command, or run `woof --migrate` on its own, to apply pending supported configuration migrations before continuing.
 
 Use exact retrieval for a known address:
 
@@ -145,11 +145,11 @@ A decisions document contains the archive digest, complete conflict metadata, ac
 }
 ```
 
-Choices use exact JSON values `keep` and `take`. Accepted earlier choices remain unchanged. The next conflict is identified by `next`, but its ID is deliberately absent from `choices`; an agent default is not consent. Add an explicit choice for it. Saving an unchanged handoff cannot apply, including on the last conflict. Keep `--migrate` in retries while the original source still needs it.
+Choices use exact JSON values `keep` and `take`. Accepted earlier choices remain unchanged. The next conflict is identified by `next`, but its ID is deliberately absent from `choices`; an agent default is not consent. Add an explicit choice for it. Saving an unchanged handoff cannot apply, including on the last conflict. A completed startup migration is reported on stderr before import review begins.
 
 Complete choices trigger final validation, then staged application. Resources and project configuration replace before the root registry. Original bytes and permission modes support ordinary-failure rollback; later edits are not overwritten during rollback. Recovery artifacts are retained when restoration cannot finish. Multi-file crash atomicity is not promised.
 
-Explicit migration prepares used documents without rewriting them during review. The prepared migration applies together with the completed import, registry last, using original source bytes for rollback. Incomplete, invalid, stale, or canceled review leaves the original data unchanged. Unsupported or unversioned input is never guessed or stamped with a new version. The known legacy root scaffold `{"schemaVersion":1}` is the supported legacy form.
+Woof checks the home configuration, resolvable registered project configurations, and the current checkout configuration on every invocation. Registered `<repo>` configuration paths are deferred outside a checkout. The check does not read prompt or script payloads. Pending supported migrations require `--migrate`; current configurations ignore it. Migration completes before the requested command, so an incomplete or canceled import leaves import data unchanged from the post-migration state. Unsupported or unversioned input is never guessed or stamped with a new version. The known legacy root scaffold `{"schemaVersion":1}` is the supported legacy form.
 
 ## People and agents
 
