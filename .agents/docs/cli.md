@@ -23,7 +23,7 @@ After these checks, startup checks the configuration and applies an explicit mig
 ## Presentation and exit status
 
 - Human mode uses Clack for results, interactive choices, and import review.
-- Agent mode uses plain templates for results, candidate lists, decision handoffs, errors, and recovery.
+- Agent mode prints only text from markdown templates. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template.
 - Payloads, results, and reports go to standard output. Warnings, migration notices, and script error output go to standard error.
 - A failure exits with status 1. An interactive cancellation exits with status 130.
 - If a human has no terminal, Woof returns the agent handoff and exits with status 1. Woof does not report a cancellation in this case.

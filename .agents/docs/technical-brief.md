@@ -5,7 +5,7 @@
 Woof is written in TypeScript and runs on Node.js. Three entry points have the same behavior:
 
 - Source execution loads TypeScript through tsx. It resolves dependencies from the Woof checkout, so it works from any caller directory.
-- The standalone bundle is one generated module. It embeds the runtime code and the presentation templates. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
+- The standalone bundle is one generated module. It embeds the runtime code. It reads the agent templates from the package at runtime. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
 - Local package execution runs the bundle from a packed tarball. It needs no global installation and no publication.
 
 Each invocation parses the arguments, runs the startup checks, and runs one command. The readme command skips the configuration checks. Woof keeps no daemon, persistent cache, or index between invocations.
@@ -36,6 +36,7 @@ The bundle embeds every runtime library. For this reason, all packages are devel
 - Woof stages each write to configuration and Woof home files. Before the write, Woof checks the source state again. Woof keeps the original bytes and modes for rollback.
 - Startup checks, discovery, explanation, validation, export, and import never run scripts.
 - Human mode and agent mode run the same operations. They differ only in presentation.
+- All text that agent mode prints comes from a markdown template. Code supplies only the values. Human mode keeps its wording in the code.
 - POSIX is the supported target for process cleanup. Other operating systems have weaker guarantees.
 
 ## Validation and tests

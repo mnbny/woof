@@ -26,6 +26,6 @@ Explicit permission that the user already gave in the conversation stays valid. 
 
 ## Output and recovery
 
-Agent output is plain text. It has no prompts, progress animation, color, or terminal hyperlinks. Help and early failures stay plain, even when the environment requests color.
+Agent output is plain text from markdown templates. It has no prompts, progress animation, color, or terminal hyperlinks. Help and early failures stay plain, even when the environment requests color.
 
 Results, handoffs, errors, and recovery guidance go to standard output. A failure returns a nonzero status, even when the output contains guidance. Follow-up commands keep explicit agent mode and the selected registered project. Reports keep completed work separate from pending recovery.
