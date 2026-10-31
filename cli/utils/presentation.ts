@@ -84,8 +84,13 @@ export function writePayload(payload: string) {
   process.stdout.write(payload)
 }
 
-export async function enterText(message: string) {
+// An optional prompt returns an empty string for no answer and undefined only for a cancellation.
+export async function enterText(message: string, options: { initialValue?: string; optional?: boolean } = {}) {
   if (agentPresentation() || !isTTY()) return undefined
-  const value = await text({ message, validate: input => (input?.trim() ? undefined : 'Enter a value.') })
-  return isCancel(value) ? undefined : value.trim()
+  const value = await text({
+    message,
+    ...(options.initialValue ? { initialValue: options.initialValue } : {}),
+    validate: input => (options.optional || input?.trim() ? undefined : 'Enter a value.'),
+  })
+  return isCancel(value) ? undefined : (value ?? '').trim()
 }
