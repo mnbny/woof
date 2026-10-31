@@ -203,9 +203,9 @@ function createWalker(graph: TokenGraph) {
       throw new TokenResolutionError(`Token ${token.path} is not a prompt.`)
     const authored = typeof token.value === 'string' ? token.value : token.value.$exec
     if (!isMarkedResourceReference(authored)) return { content: authored, parts: contentParts(authored), files: [] }
+    const provenance = location(authored, token)
     const cached = payloads.get(authored)
     if (cached) return { content: cached.content, parts: contentParts(cached.content), files: [cached.provenance] }
-    const provenance = location(authored, token)
     const checkoutRoot = graph.context.checkoutRoot
     const content = readMarkedResource(authored, checkoutRoot ? { repoRoot: checkoutRoot } : {}).content
     payloads.set(authored, { content, provenance })
