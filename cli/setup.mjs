@@ -2,9 +2,9 @@
 
 // Keep the link outside versioned Node installations.
 
-import { appendFile, chmod, lstat, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, rm, symlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 if (process.env.CI) {
@@ -44,36 +44,4 @@ console.log(`Linked woof to ${entry}${developing ? ' (development entry)' : ''}`
 
 if (!(process.env.PATH ?? '').split(':').includes(binDir)) {
   console.warn(`${binDir} is not on your PATH. Add it to run woof.`)
-}
-
-const shell = basename(process.env.SHELL ?? '')
-const rcFiles = { bash: '.bashrc', zsh: '.zshrc' }
-const rcFile = rcFiles[shell]
-const previousCompletionLine = `command -v woof >/dev/null && source <(woof complete ${shell}) || true`
-const completionLine =
-  shell === 'zsh'
-    ? 'command -v woof >/dev/null && command -v compdef >/dev/null && source <(woof complete zsh) || true'
-    : previousCompletionLine
-
-if (rcFile) {
-  const rcPath = join(homedir(), rcFile)
-  const rc = await readFile(rcPath, 'utf8').catch(() => '')
-  const lines = rc.split('\n')
-  const updated = lines.map(line => (line === previousCompletionLine ? completionLine : line)).join('\n')
-
-  if (updated !== rc) {
-    await writeFile(rcPath, updated)
-    console.log(`Updated ${shell} completions in ${rcPath}. Restart your shell to use them.`)
-  } else if (lines.includes(completionLine)) {
-    console.log(`Shell completions already enabled in ${rcPath}`)
-  } else {
-    const separator = rc === '' || rc.endsWith('\n') ? '' : '\n'
-    await appendFile(rcPath, `${separator}${completionLine}\n`)
-    console.log(`Enabled ${shell} completions in ${rcPath}. Restart your shell to use them.`)
-  }
-} else {
-  const name = shell || 'your shell'
-  console.log(
-    `No completion setup for ${name}. \`woof complete <shell>\` emits a script for zsh, bash, fish, or powershell; register it the way ${name} expects.`,
-  )
 }

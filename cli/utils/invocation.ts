@@ -22,19 +22,7 @@ export function parseInvocation(rawArgs: string[]) {
   const normalized = [...before.filter(arg => arg !== '--migrate'), ...after]
   const commandIndex = before.findIndex(arg => !arg.startsWith('-'))
   const command = commandIndex < 0 ? undefined : before[commandIndex]
-  if (command && command !== 'complete' && !Object.hasOwn(commandOptions, command))
-    throw new Error(`Unknown command: ${command}`)
-  if (command === 'complete') {
-    const rootFlags = before.slice(0, commandIndex).filter(arg => arg !== '--migrate')
-    if (rootFlags.some(arg => !['--agent', '--help', '-h', '--version', '-v'].includes(arg)))
-      throw new Error('Invalid completion arguments.')
-    const args = before.slice(commandIndex + 1).filter(arg => arg !== '--migrate')
-    const validHelp = args.length === 1 && ['--help', '-h', '--version', '-v'].includes(args[0]!)
-    const validShell = args.length === 1 && ['zsh', 'bash', 'fish', 'powershell', 'fig'].includes(args[0]!)
-    if (!(validHelp || validShell || (args.length === 0 && terminator >= 0)))
-      throw new Error('Completion requires a supported shell or -- followed by completion arguments.')
-    return { migrate, passive: true, command, args: normalized }
-  }
+  if (command && !Object.hasOwn(commandOptions, command)) throw new Error(`Unknown command: ${command}`)
   const preceding = commandIndex < 0 ? [...before, ...after] : before.slice(0, commandIndex)
   const following = commandIndex < 0 ? [] : [...before.slice(commandIndex + 1), ...after]
   const common = {

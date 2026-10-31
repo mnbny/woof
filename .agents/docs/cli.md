@@ -2,7 +2,7 @@
 
 ## Purpose and ownership
 
-The CLI owns argument parsing, startup order, command dispatch, shell completion, and shared presentation. Each command owns its operation, recovery, and exit status. Configuration, projects, tokens, scripts, sharing, and agent mode each have a brief.
+The CLI owns argument parsing, startup order, command dispatch, and shared presentation. Each command owns its operation, recovery, and exit status. Configuration, projects, tokens, scripts, sharing, and agent mode each have a brief.
 
 ## Commands
 
@@ -12,11 +12,11 @@ Global flags select agent mode, request explicit migration, and show help or the
 
 ## Invocation and startup
 
-Before startup, Woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator.
+Before startup, Woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag for every command. The commands do not read the flag.
 
 After these checks, startup checks the configuration and applies an explicit migration. The configuration brief describes these steps.
 
-- Help, version, and completion are passive. They do not create Woof home.
+- Help and version are passive. They do not create Woof home.
 - Unless migration is requested, readme skips all configuration checks. This keeps the guide readable when the configuration is broken.
 - An invalid invocation fails before Woof creates its home or runs a migration.
 
@@ -28,10 +28,6 @@ After these checks, startup checks the configuration and applies an explicit mig
 - A failure exits with status 1. An interactive cancellation exits with status 130.
 - If a human has no terminal, Woof returns the agent handoff and exits with status 1. Woof does not report a cancellation in this case.
 
-## Completion
-
-Shell completion is a hidden command. It emits completion scripts for supported shells. It does not create Woof home and does not evaluate resources.
-
 ## Distribution
 
-Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. A link script in the repository can put the bundle on the user's local path and enable shell completion. For development, the link script can link the source entry instead.
+Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. A link script in the repository can put the bundle on the user's local path. For development, the link script can link the source entry instead.

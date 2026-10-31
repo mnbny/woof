@@ -24,7 +24,7 @@ The repository keeps these areas separate: CLI behavior, shared utilities, agent
 ## Dependency roles
 
 - tsx runs the source. esbuild bundles the CLI. terser minifies the bundle into a stable artifact on one line.
-- citty defines the commands. Tab supplies shell completion. Clack and ansis supply terminal presentation.
+- citty defines the commands. Clack and ansis supply terminal presentation.
 - Valibot validates the configuration structure. Woof's own checks enforce reserved keys and token names.
 - Pico search ranks discovery matches. Picomatch matches worktree patterns. fflate reads and writes ZIP archives. diff shows the differences in import review.
 - TypeScript checks the source with strict shared compiler settings. ESLint and Prettier enforce code and formatting conventions. Vitest runs the tests.

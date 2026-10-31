@@ -1,6 +1,5 @@
-import type { CommandMeta, SubCommandsDef } from 'citty'
+import type { SubCommandsDef } from 'citty'
 
-import tab from '@bomb.sh/tab/citty'
 import { defineCommand, runMain } from 'citty'
 
 import manifest from '../package.json' with { type: 'json' }
@@ -33,7 +32,7 @@ const subCommands: SubCommandsDef = {
 const main = defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
+    migrate: { description: 'Migrate configuration to the current schema', type: 'boolean' },
   },
   meta: {
     name: manifest.name,
@@ -42,14 +41,6 @@ const main = defineCommand({
   },
   subCommands,
 })
-
-await tab(main)
-
-// Shells need this command, but it does not belong in the normal help listing.
-const completion = subCommands['complete']
-if (completion && typeof completion === 'object' && 'meta' in completion) {
-  completion.meta = { ...(completion.meta as CommandMeta), hidden: true }
-}
 
 try {
   const invocation = parseInvocation(process.argv.slice(2))
@@ -69,7 +60,7 @@ try {
   presentError({
     summary: 'Woof could not prepare the invocation.',
     details: error instanceof Error ? error.message : String(error),
-    recovery: `Review the arguments and ${getWoofHome('woof.config.json')}; use --migrate only for a supported legacy configuration.`,
+    recovery: `Review the arguments and ${getWoofHome('woof.config.json')}. If Woof reports a pending migration, retry with --migrate.`,
   })
   process.exitCode = 1
 }
