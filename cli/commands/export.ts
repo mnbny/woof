@@ -15,7 +15,7 @@ import { getWoofHome } from '../utils/paths.ts'
 import { presentError, presentResult } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
+import { createTokenGraph, validateTokenGraphForTransfer } from '../utils/tokens.ts'
 
 function writeUniqueArchive(project: string, archive: Uint8Array) {
   const directory = getWoofHome('exports')
@@ -98,7 +98,16 @@ export default defineCommand({
         'export payload',
       )
       const prunedContext = { ...context, root: { ...context.root, data: configuration } }
-      const validations = validateTokenGraph(createTokenGraph(prunedContext))
+      const rootOnlyContext = {
+        root: prunedContext.root,
+        candidates: [],
+        checkoutRoot: prunedContext.checkoutRoot,
+        selection: 'root' as const,
+      }
+      const validations = [
+        ...validateTokenGraphForTransfer(createTokenGraph(rootOnlyContext)),
+        ...validateTokenGraphForTransfer(createTokenGraph(prunedContext)),
+      ]
       const resources = new Map<string, BundleFile>()
       for (const validation of validations) {
         for (const token of validation.tokens) {
@@ -116,10 +125,22 @@ export default defineCommand({
 
       const archive = createBundleArchive(configuration, resources.values())
       const destination = writeUniqueArchive(projectName, archive)
+      const deferred = [
+        ...new Set(
+          validations
+            .flatMap(validation => validation.deferredRequirements ?? [])
+            .map(requirement => requirement.reference),
+        ),
+      ].sort()
       presentResult({
         summary: `Exported ${projectName} without executing scripts.`,
-        details: [`Project: ${projectName}`, `Archive: ${destination}`, `Resources: ${resources.size}`].join('\n'),
-        recovery: `Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
+        details: [
+          `Project: ${projectName}`,
+          `Archive: ${destination}`,
+          `Resources: ${resources.size}`,
+          `Checkout requirements: ${deferred.length ? deferred.join(', ') : 'None'}`,
+        ].join('\n'),
+        recovery: `${deferred.length ? `Checkout resources require normal validation in the target checkout: woof validate --project ${shellQuote(projectName)}. ` : ''}Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
       })
     } catch (error) {
       presentError({
