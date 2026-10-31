@@ -30,4 +30,4 @@ After these checks, startup checks the configuration and applies an explicit mig
 
 ## Distribution
 
-Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. A link script in the repository can put the bundle on the user's local path. For development, the link script can link the source entry instead.
+Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. The pack step builds the bundle. A link script in the repository puts the source entry on the user's local path.

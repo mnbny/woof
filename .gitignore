@@ -3,3 +3,4 @@
 .DS_Store
 .eslintcache
 node_modules/
+cli/woof.bundle.mjs

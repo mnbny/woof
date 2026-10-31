@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "tsx .tools/scripts/build.ts",
+    "prepack": "pnpm build",
     "test": "vitest run --config .tools/tests/vitest.config.ts",
     "validate": "tsx .tools/scripts/scripty.ts --sequential && pnpm build",
     "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
@@ -43,7 +44,6 @@
     "prettier": "3.9.10",
     "prettier-plugin-packagejson": "3.0.3",
     "prettier-plugin-sh": "0.20.2",
-    "terser": "5.51.2",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",

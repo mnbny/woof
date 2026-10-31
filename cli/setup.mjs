@@ -12,20 +12,10 @@ if (process.env.CI) {
   process.exit(0)
 }
 
-// A consumer clones the repository and runs nothing else, so the default entry is the bundle, which
-// needs no install. The development entry needs the repository's dependencies.
-const developing = process.argv.includes('--dev')
-const cliDirectory = dirname(fileURLToPath(import.meta.url))
-const entry = join(cliDirectory, developing ? 'woof.mjs' : 'woof.bundle.mjs')
+// The link runs the source entry, which needs the repository's dependencies.
+const entry = join(dirname(fileURLToPath(import.meta.url)), 'woof.mjs')
 const binDir = join(homedir(), '.local', 'bin')
 const link = join(binDir, 'woof')
-
-if (!(await lstat(entry).catch(() => null))) {
-  console.error(
-    `${entry} is missing. ${developing ? 'Run `pnpm build`.' : 'Re-clone, or run `pnpm install && pnpm build`.'}`,
-  )
-  process.exit(1)
-}
 
 await chmod(entry, 0o755)
 await mkdir(binDir, { recursive: true })
@@ -40,7 +30,7 @@ if (existing && !existing.isSymbolicLink()) {
 if (existing) await rm(link)
 await symlink(entry, link)
 
-console.log(`Linked woof to ${entry}${developing ? ' (development entry)' : ''}`)
+console.log(`Linked woof to ${entry}`)
 
 if (!(process.env.PATH ?? '').split(':').includes(binDir)) {
   console.warn(`${binDir} is not on your PATH. Add it to run woof.`)

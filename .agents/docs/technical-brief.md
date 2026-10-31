@@ -5,7 +5,7 @@
 Woof is written in TypeScript and runs on Node.js. Three entry points have the same behavior:
 
 - Source execution loads TypeScript through tsx. It resolves dependencies from the Woof checkout, so it works from any caller directory.
-- The standalone bundle is one generated module. It embeds the runtime code and the presentation templates. It needs no installed dependencies and no TypeScript loader. It is the only committed build artifact.
+- The standalone bundle is one generated module. It embeds the runtime code and the presentation templates. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
 - Local package execution runs the bundle from a packed tarball. It needs no global installation and no publication.
 
 Each invocation parses the arguments, runs the startup checks, and runs one command. The readme command skips the configuration checks. Woof keeps no daemon, persistent cache, or index between invocations.
@@ -23,7 +23,7 @@ The repository keeps these areas separate: CLI behavior, shared utilities, agent
 
 ## Dependency roles
 
-- tsx runs the source. esbuild bundles the CLI. terser minifies the bundle into a stable artifact on one line.
+- tsx runs the source. esbuild bundles and minifies the CLI.
 - citty defines the commands. Clack and ansis supply terminal presentation.
 - Valibot validates the configuration structure. Woof's own checks enforce reserved keys and token names.
 - Pico search ranks discovery matches. Picomatch matches worktree patterns. fflate reads and writes ZIP archives. diff shows the differences in import review.

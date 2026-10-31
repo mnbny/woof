@@ -2,7 +2,6 @@ import { build } from 'esbuild'
 import { writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import process from 'node:process'
-import { minify } from 'terser'
 
 const repoRoot = process.cwd()
 const entryPoint = join(repoRoot, 'cli', 'cli.ts')
@@ -24,6 +23,7 @@ async function main() {
     bundle: true,
     entryPoints: [entryPoint],
     format: 'esm',
+    minify: true,
     platform: 'node',
     target: TARGET,
     write: false,
@@ -33,20 +33,8 @@ async function main() {
 
   if (!output) throw new Error('esbuild produced no output file.')
 
-  // esbuild's own minifier rewrites an escaped newline into a template literal holding a real one,
-  // which costs a byte less and breaks the bundle across a thousand lines. terser escapes instead,
-  // so the committed artifact stays on one line and a source change stays a one-line diff.
-  const minified = await minify(output.text, {
-    compress: true,
-    format: { ascii_only: true },
-    mangle: true,
-    module: true,
-  })
-
-  if (!minified.code) throw new Error('terser produced no output.')
-
-  await writeFile(bundlePath, minified.code)
-  console.log(`Wrote ${relative(repoRoot, bundlePath)} (${minified.code.length} bytes).`)
+  await writeFile(bundlePath, output.text)
+  console.log(`Wrote ${relative(repoRoot, bundlePath)} (${output.text.length} bytes).`)
 }
 
 await main().catch((error: unknown) => {
