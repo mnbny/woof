@@ -28,10 +28,16 @@ export type ImportConflict = {
 export type ImportSourceState = { path: string; digest: string | null }
 
 type ProjectFile = { path: string; data: ProjectConfiguration }
+type PreparedSource = { target: string; source: string }
 type ImportPlanOptions = {
   cwd?: string
   home?: string
-  prepared?: { root: RootConfiguration; project?: ProjectConfiguration; migrationChanged: boolean }
+  prepared?: {
+    root: RootConfiguration
+    project?: ProjectConfiguration
+    migrationChanged: boolean
+    sources: { root: PreparedSource; project?: PreparedSource }
+  }
 }
 
 function digest(data: Uint8Array | string) {
@@ -395,6 +401,38 @@ function assertRawDestinationIsNotConfiguration(
   }
 }
 
+function assertPreparedSource(home: string, path: string, expected: PreparedSource) {
+  let target: string
+  let data: Uint8Array | undefined
+  try {
+    target = realpathSync(resolve(home, path))
+    data = readDestination(home, path)
+  } catch (error) {
+    throw new Error(`Prepared configuration ${path} changed during import review.`, { cause: error })
+  }
+  if (target !== expected.target || !data || !equalBytes(data, new TextEncoder().encode(expected.source)))
+    throw new Error(`Prepared configuration ${path} changed during import review; retry with current source data.`)
+}
+
+function assertPreparedSources(
+  prepared: NonNullable<ImportPlanOptions['prepared']>,
+  local: RootConfiguration,
+  bundle: WoofBundle,
+  home: string,
+  root: Uint8Array | undefined,
+) {
+  if (!prepared.sources?.root) throw new Error('Prepared migration is missing original source identity.')
+  if (realpathSync(resolve(home, 'woof.config.json')) !== prepared.sources.root.target || !root)
+    throw new Error('Prepared root configuration changed during import review; retry with current source data.')
+  if (!equalBytes(root, new TextEncoder().encode(prepared.sources.root.source)))
+    throw new Error('Prepared root configuration changed during import review; retry with current source data.')
+  if (!prepared.sources.project) return
+  const definition = local.$projects?.[bundle.projectName]
+  if (typeof definition !== 'string' || !definition.startsWith('<root>/'))
+    throw new Error('Prepared project configuration is no longer a home document; retry with current source data.')
+  assertPreparedSource(home, definition.slice('<root>/'.length), prepared.sources.project)
+}
+
 export function planImport(archive: Uint8Array, options: ImportPlanOptions = {}) {
   const cwd = options.cwd ?? process.cwd()
   const home = realpathSync(options.home ?? getWoofHome())
@@ -406,6 +444,7 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
   const local =
     options.prepared?.root ??
     parseConfigurationDocument(new TextDecoder().decode(rootSource.data), 'root', getWoofHome('woof.config.json'))
+  if (options.prepared) assertPreparedSources(options.prepared, local, bundle, home, rootSource.data)
   const selected = localProject(local, bundle, home, options.prepared?.project)
   const conflicts: ImportConflict[] = []
   mergeDefinition(local, bundle.configuration, 'token', {}, conflicts)

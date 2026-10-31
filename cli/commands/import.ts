@@ -170,7 +170,17 @@ export default defineCommand({
       const bundle = readBundleArchive(archive)
       assertImportContext(cwd)
 
-      let prepared: { root: RootConfiguration; project?: ProjectConfiguration; migrationChanged: boolean } | undefined
+      let prepared:
+        | {
+            root: RootConfiguration
+            project?: ProjectConfiguration
+            migrationChanged: boolean
+            sources: {
+              root: { target: string; source: string }
+              project?: { target: string; source: string }
+            }
+          }
+        | undefined
       if (values.migrate === true) {
         await initializeWoofHome()
         const rootData: unknown = JSON.parse(readFileSync(getWoofHome('woof.config.json'), 'utf8'))
@@ -192,6 +202,10 @@ export default defineCommand({
           root: rootDocument.migrated as RootConfiguration,
           ...(projectDocument ? { project: projectDocument.migrated as ProjectConfiguration } : {}),
           migrationChanged: documents.documents.some(document => document.changed),
+          sources: {
+            root: { target: rootDocument.target, source: rootDocument.source },
+            ...(projectDocument ? { project: { target: projectDocument.target, source: projectDocument.source } } : {}),
+          },
         }
       }
 
