@@ -8,8 +8,8 @@ The configuration domain owns Woof's JSON documents, their structure and version
 
 - The root configuration in Woof home holds shared tokens and an optional project registry.
 - A registered project is inline in the registry, or the registry refers to a separate project configuration in Woof home.
-- A repository configuration is one project object without a name, in a checkout. It has no registry wrapper.
-- A project holds tokens and optional metadata. The metadata lists checkout paths and worktree patterns.
+- A repository configuration is one project object without a name, in a checkout. It has no registry wrapper. It holds tokens only, because its checkout selects it.
+- A registered project holds tokens and optional metadata. The metadata lists checkout paths and worktree patterns.
 
 Every standalone document declares `$schemaVersion` 2. An inline project uses the version of the document that contains it. One physical file cannot be both the root configuration and a project configuration. Configuration references cannot form a cycle.
 

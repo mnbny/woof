@@ -23,7 +23,7 @@ Woof never persists a selection. Each invocation selects again.
 
 ## Metadata matching
 
-Project metadata lists checkout base paths and worktree patterns. Several developers can keep their own locations in one definition. A path that does not exist locally causes no failure.
+The metadata of a registered project lists checkout base paths and worktree patterns. Several developers can keep their own locations in one definition. A path that does not exist locally causes no failure.
 
 - Each path must be absolute or start from the user's home directory.
 - A base path matches the caller's directory and each directory below it.
