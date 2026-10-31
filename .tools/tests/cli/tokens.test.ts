@@ -71,13 +71,20 @@ test('rejects global dependencies, self-cycles and missing references before scr
   const marker = join(cli.project, 'computed-ran')
   await config(home, {
     $schemaVersion: 2,
-    globalPrompt: '{{projectOnly}} {{computed}}',
-    cyclePrompt: '{{cyclePrompt}}',
+    globalPrompt: '{{computed}} {{projectOnly}}',
+    cyclePrompt: '{{computed}} {{cycleNext}}',
+    cycleNext: '{{cyclePrompt}}',
+    selfCycle: '{{computed}} {{selfCycle}}',
+    missingPrompt: '{{computed}} {{absent}}',
     computed: { $type: 'node', $exec: `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')` },
     $projects: {
-      demo: { projectOnly: 'project value', cyclePrompt: '{{cyclePrompt}}' },
+      demo: { projectOnly: 'project value', selfCycle: '{{computed}} {{selfCycle}}' },
     },
   })
+
+  const validation = await run(cli, home, ['validate', 'computed'])
+  expect(validation.status).toBe(0)
+  expect(existsSync(marker)).toBe(false)
 
   const globalFailure = await run(cli, home, ['get', 'globalPrompt', '--project', 'demo'])
   expect(globalFailure.status).toBe(1)
@@ -89,9 +96,19 @@ test('rejects global dependencies, self-cycles and missing references before scr
   expect(cycleFailure.stdout).toContain('Circular token reference')
   expect(existsSync(marker)).toBe(false)
 
-  const validation = await run(cli, home, ['validate', 'cyclePrompt', '--project', 'demo'])
-  expect(validation.status).toBe(1)
-  expect(validation.stdout).toContain('Circular token reference')
+  const selfCycleFailure = await run(cli, home, ['get', 'selfCycle', '--project', 'demo'])
+  expect(selfCycleFailure.status).toBe(1)
+  expect(selfCycleFailure.stdout).toContain('Circular token reference')
+  expect(existsSync(marker)).toBe(false)
+
+  const missingFailure = await run(cli, home, ['get', 'missingPrompt'])
+  expect(missingFailure.status).toBe(1)
+  expect(missingFailure.stdout).toContain('Missing token absent')
+  expect(existsSync(marker)).toBe(false)
+
+  const cycleValidation = await run(cli, home, ['validate', 'cyclePrompt', '--project', 'demo'])
+  expect(cycleValidation.status).toBe(1)
+  expect(cycleValidation.stdout).toContain('Circular token reference')
   expect(existsSync(marker)).toBe(false)
 })
 
