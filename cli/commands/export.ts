@@ -36,7 +36,6 @@ function writeUniqueArchive(project: string, archive: Uint8Array) {
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    migrate: { description: 'Migrate supported legacy configuration explicitly', type: 'boolean' },
     project: { description: 'Registered project to export', type: 'string' },
   },
   meta: { description: 'Export a registered project and required resources', name: 'export' },
@@ -47,7 +46,6 @@ export default defineCommand({
         allowPositionals: true,
         options: {
           agent: { type: 'boolean' },
-          migrate: { type: 'boolean' },
           project: { type: 'string' },
         },
       })
@@ -68,8 +66,6 @@ export default defineCommand({
         throw new Error('Repository-defined projects cannot be exported; select a registered home project explicitly.')
       const definition = context.root.data.$projects?.[projectName]
       if (!definition) throw new Error(`Registered project ${projectName} has no exportable definition.`)
-      if (typeof definition === 'string' && !definition.startsWith('<root>/'))
-        throw new Error('Repository-defined project configuration cannot be exported. Use a home-registered project.')
 
       const originalConfiguration = validateConfigurationDocument(
         { ...context.root.data, $projects: { [projectName]: definition } },

@@ -146,8 +146,6 @@ function localProject(local: RootConfiguration, bundle: WoofBundle, home: string
   const definition = local.$projects?.[bundle.projectName]
   if (definition === undefined) return { definition, data: undefined, file: undefined, source: undefined }
   if (typeof definition === 'string') {
-    if (!definition.startsWith('<root>/'))
-      throw new Error(`Local project ${bundle.projectName} is repository-defined and cannot be imported.`)
     const path = definition.slice('<root>/'.length)
     const source = sourceState(home, path)
     if (!source.data) throw new Error(`Local selected project configuration is missing: ${path}`)
@@ -979,19 +977,10 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       projectFile,
       projectName: plan.bundle.projectName,
       initialProject: plan.selected.file,
-      initialFiles: new Map([...plan.snapshots].map(([path, value]) => [path, value.data])),
       sources: sourcePaths,
       externalSources: [...plan.external].map(([path, hash]) => ({ path, digest: hash })),
-      deferredProjects: [] as string[],
-      deferredRequirements: [] as string[],
     },
   }
-}
-
-export function assertImportSourcesCurrent(plan: ImportPlan) {
-  for (const source of plan.snapshots.values())
-    if (!isDeepStrictEqual(sourceState(plan.home, source.path), source))
-      throw new Error(`Import destination ${source.path} changed after review; stale decisions were not applied.`)
 }
 
 export function importReviewSources(plan: ImportPlan) {

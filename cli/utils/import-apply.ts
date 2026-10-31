@@ -282,12 +282,7 @@ export function applyImport(candidate: ReviewedImportCandidate) {
     if (digest(readFileSync(source.path)) !== source.digest)
       throw new Error(`Reuse source ${source.path} changed after review.`)
   const planned = changes(candidate, current)
-  if (!planned.length)
-    return {
-      ...report([], [], []),
-      deferredProjects: candidate.deferredProjects,
-      deferredRequirements: candidate.deferredRequirements,
-    }
+  if (!planned.length) return report([], [], [])
 
   const createdDirectories: string[] = []
   const staged: StagedChange[] = []
@@ -394,17 +389,13 @@ export function applyImport(candidate: ReviewedImportCandidate) {
   }
 
   const warnings = cleanupPaths(staged.flatMap(change => [change.staging, ...(change.backup ? [change.backup] : [])]))
-  return {
-    ...report(
-      completed.map(change => change.path),
-      [],
-      [],
-      staged
-        .filter(change => change.backup && warnings.some(warning => warning.includes(change.backup!)))
-        .map(change => change.backup!),
-      warnings,
-    ),
-    deferredProjects: candidate.deferredProjects,
-    deferredRequirements: candidate.deferredRequirements,
-  }
+  return report(
+    completed.map(change => change.path),
+    [],
+    [],
+    staged
+      .filter(change => change.backup && warnings.some(warning => warning.includes(change.backup!)))
+      .map(change => change.backup!),
+    warnings,
+  )
 }

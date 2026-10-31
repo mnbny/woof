@@ -156,7 +156,6 @@ export function selectProjectContext(
   options: {
     cwd?: string
     project?: string
-    inferredProject?: string
     loader?: ResourceLoader
   } = {},
 ) {
@@ -197,15 +196,6 @@ export function selectProjectContext(
 
   const candidatePath = realpathSync(cwd)
   const candidates = loadRegisteredProjects(root, loader).filter(project => metadataMatches(project, candidatePath))
-  const inferred = options.inferredProject
-  if (inferred && candidates.some(project => project.name === inferred))
-    return {
-      root,
-      project: loadRegistered(root, loader, inferred) as RegisteredProject | RepositoryProject,
-      candidates,
-      checkoutRoot,
-      selection: 'inference' as const,
-    }
   if (candidates.length === 1)
     return {
       root,
@@ -215,13 +205,5 @@ export function selectProjectContext(
       selection: 'metadata' as const,
     }
   if (candidates.length > 1) return { root, candidates, checkoutRoot, selection: 'ambiguous' as const }
-  if (inferred)
-    return {
-      root,
-      project: loadRegistered(root, loader, inferred) as RegisteredProject | RepositoryProject,
-      candidates,
-      checkoutRoot,
-      selection: 'inference' as const,
-    }
   return { root, candidates, checkoutRoot, selection: 'root' as const }
 }

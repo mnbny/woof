@@ -94,14 +94,6 @@ export function presentError({ summary, details, recovery }: PresentationInput) 
   if (recovery) log.info(recovery)
 }
 
-export function presentRecovery(summary: string, steps: string) {
-  if (agentPresentation()) {
-    process.stdout.write(renderAgentTemplate('recovery', { summary, steps }))
-    return
-  }
-  log.info(`${summary}\n\n${steps}`)
-}
-
 export async function chooseOption({
   message,
   options,

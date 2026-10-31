@@ -44,11 +44,6 @@ export function isMarkedResourceReference(reference: string) {
   return reference.startsWith('<root>/') || reference.startsWith('<repo>/')
 }
 
-export function assertSharedResourceReference(reference: string) {
-  if (reference.startsWith('<repo>/'))
-    throw new ResourceLoadError(reference, 'shared root definitions cannot depend on repository resources.')
-}
-
 function contained(root: string, file: string) {
   const path = relative(root, file)
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path))
@@ -125,8 +120,6 @@ export function createResourceLoader(options: { cwd?: string; repoRoot?: string 
   const active: string[] = []
 
   function loadConfiguration(reference: string, kind: ConfigurationKind, rootKind?: ResourceRootKind) {
-    if (kind === 'project' && !rootKind && !reference.startsWith('<root>/'))
-      throw new ResourceLoadError(reference, 'registered project references must begin with <root>/.')
     const location = rootKind ? directLocation(reference, rootKind, repoRoot) : markedLocation(reference, repoRoot)
     if (active.includes(location.file) || (kind === 'project' && cache.has(`root:${location.file}`)))
       throw new ResourceLoadError(
