@@ -2,13 +2,13 @@
 
 ## Purpose and ownership
 
-The token domain owns the effective catalog. It defines how definitions combine, how references resolve, how Woof checks and explains a resolution, and how callers discover resources. The configuration domain owns document structure. The projects domain owns project choice. The scripts domain owns computed execution.
+The token domain owns the effective catalog. It defines how definitions combine, how references resolve, how woof checks and explains a resolution, and how callers discover resources. The configuration domain owns document structure. The projects domain owns project choice. The scripts domain owns computed execution.
 
 ## Design-token lineage
 
-Woof models its token system on the format of the Design Tokens Community Group (DTCG). Woof adopts the concepts but not the file format. Woof documents are not DTCG interchange files, and DTCG tools cannot read them.
+woof models its token system on the format of the Design Tokens Community Group (DTCG). woof adopts the concepts but not the file format. woof documents are not DTCG interchange files, and DTCG tools cannot read them.
 
-| DTCG concept     | Woof equivalent                                             |
+| DTCG concept     | woof equivalent                                             |
 | ---------------- | ----------------------------------------------------------- |
 | Group            | Namespace                                                   |
 | Token value      | A plain string, or the execution value of a resource object |
@@ -19,7 +19,7 @@ Woof models its token system on the format of the Design Tokens Community Group 
 
 ### Tiers
 
-Authors arrange tokens in the usual design-token tiers. Woof does not enforce tiers. Any token can fill any role, and names carry no tier meaning.
+Authors arrange tokens in the usual design-token tiers. woof does not enforce tiers. Any token can fill any role, and names carry no tier meaning.
 
 - **Primitive** tokens hold content directly: a string, a prompt file, or a script. For example, each specific commit convention is a primitive.
 - **Semantic** tokens are aliases. A semantic token names a decision and points at a primitive. For example, the default commit convention is a semantic token.
@@ -31,12 +31,12 @@ Projects are modes, and the root is the base. A selected project overrides token
 
 ### Deliberate departures
 
-- References use double braces, and quadruple braces escape them. Woof uses double braces because instruction text often contains single braces.
+- References use double braces, and quadruple braces escape them. woof uses double braces because instruction text often contains single braces.
 - A reference can appear inside longer text, not only as a whole value.
 - Scripts can compute token values. DTCG values are always static.
 - Types describe content and runtimes, not visual value types. Values are text, not structured composites.
-- Tags are a Woof addition for discovery. Woof has no extension fields and no deprecation fields.
-- Woof-owned keys use the `$` prefix, as DTCG keys do. The set of reserved keys is Woof's own.
+- Tags are a woof addition for discovery. woof has no extension fields and no deprecation fields.
+- woof-owned keys use the `$` prefix, as DTCG keys do. The set of reserved keys is woof's own.
 
 ## Token model
 
@@ -52,11 +52,11 @@ Root definitions form the base. The selected project overlays whole tokens, incl
 - References resolve late, against the effective view. For this reason, project overrides apply in all parts of a composition.
 - Shared definitions must resolve without a project. They cannot depend on project-only tokens or repository resources.
 - A missing target, a namespace target, or a cycle causes a failure. Self-reference is a cycle. It does not reuse a parent value.
-- Woof never scans script source or script output for references.
+- woof never scans script source or script output for references.
 
 ## Preflight and provenance
 
-Before any script runs, each resolution walks the complete reachable graph. The walk loads prompt files and checks declared script files. If the walk fails, Woof reports the reference chain.
+Before any script runs, each resolution walks the complete reachable graph. The walk loads prompt files and checks declared script files. If the walk fails, woof reports the reference chain.
 
 Preflight records the provenance of each reachable token: origin, source, root, overridden definition, metadata, references, and resolved files. Explanation and validation use preflight and do not run scripts.
 

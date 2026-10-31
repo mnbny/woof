@@ -4,7 +4,7 @@ Read [.agents/docs/index.md](./.agents/docs/index.md).
 
 After a feature or change reaches its logical conclusion, use `woof-living-docs` to review the relevant living documentation. Update it only where needed. Do not do this preemptively.
 
-Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) to learn how Woof started and where the owner wants Woof to go. The vision is not a specification. The project, domain, and command briefs describe current behavior. The questions brief holds open decisions. Do not infer additional requirements from the vision, the project name, or the MAACS reference project.
+Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) to learn how woof started and where the owner wants woof to go. The vision is not a specification. The project, domain, and command briefs describe current behavior. The questions brief holds open decisions. Do not infer additional requirements from the vision, the project name, or the MAACS reference project.
 
 ## Run Validations Smartly
 

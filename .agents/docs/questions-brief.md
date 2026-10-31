@@ -8,7 +8,7 @@ This brief holds product and policy questions that need an owner decision. The d
 
 ### Unmatched project context
 
-If no project matches the caller's directory, Woof resolves the root definitions alone. In the original direction, selection ended with a question to the user. A decision can define whether an unmatched directory returns the choice to the caller instead.
+If no project matches the caller's directory, woof resolves the root definitions alone. In the original direction, selection ended with a question to the user. A decision can define whether an unmatched directory returns the choice to the caller instead.
 
 ### Layered overrides
 
@@ -38,7 +38,7 @@ If a composite token references a script, each lookup runs that script. A conven
 
 ### Portability
 
-POSIX is the supported target for process cleanup. Woof makes no claim of equivalent process-tree behavior on other operating systems. That behavior needs separate validation before any commitment to portability.
+POSIX is the supported target for process cleanup. woof makes no claim of equivalent process-tree behavior on other operating systems. That behavior needs separate validation before any commitment to portability.
 
 ## Interaction and authoring
 
@@ -48,4 +48,4 @@ General lookup reaches every resource. No familiar shortcuts exist, such as a di
 
 ### Authoring interfaces
 
-Woof creates empty project configurations, adds tokens, and edits the content, description, and tags of a token. People edit in a local browser page. Authors rename, move, and remove tokens directly in the source files. No hosted service, provider tooling, semantic search, or other authoring system exists. Their scope and priority are owner decisions. These decisions include which other authoring operations go through Woof.
+woof creates empty project configurations, adds tokens, and edits the content, description, and tags of a token. People edit in a local browser page. Authors rename, move, and remove tokens directly in the source files. No hosted service, provider tooling, semantic search, or other authoring system exists. Their scope and priority are owner decisions. These decisions include which other authoring operations go through woof.

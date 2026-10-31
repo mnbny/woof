@@ -38,12 +38,12 @@ Add each document using this format:
 
 #### [project-vision.md](./project-vision.md)
 
-- Description: How Woof started and where the owner wants Woof to go: problems, founding ideas, and future ideas. Update only at the owner's request. Exclude from routine living-documentation maintenance.
+- Description: How woof started and where the owner wants woof to go: problems, founding ideas, and future ideas. Update only at the owner's request. Exclude from routine living-documentation maintenance.
 - Tags: `vision`
 
 #### [project-brief.md](./project-brief.md)
 
-- Description: Woof's current purpose, product model, scope, and shared vocabulary.
+- Description: woof's current purpose, product model, scope, and shared vocabulary.
 - Tags: `scope`, `vocabulary`
 
 #### [technical-brief.md](./technical-brief.md)
@@ -58,7 +58,7 @@ Add each document using this format:
 
 #### [cli-command-readme.md](./cli-command-readme.md)
 
-- Description: User-guide output for people and agents who want to learn what Woof does.
+- Description: User-guide output for people and agents who want to learn what woof does.
 - Tags: `readme`
 
 #### [cli-command-init.md](./cli-command-init.md)

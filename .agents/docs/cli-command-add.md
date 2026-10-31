@@ -14,11 +14,11 @@ Add creates one token in the shared tokens, in a registered project, or in the r
 
 ## Content
 
-Woof saves text inline. One line that names an existing file becomes a file reference instead:
+woof saves text inline. One line that names an existing file becomes a file reference instead:
 
-- A file in Woof home keeps its place.
+- A file in woof home keeps its place.
 - For a project token, a file in the checkout keeps its place.
-- Woof copies other files into the resources area of Woof home, because a reference must stay inside a root.
+- woof copies other files into the resources area of woof home, because a reference must stay inside a root.
 
 A prompt without a description or tags is saved as a plain string. Other tokens are saved as resource objects.
 

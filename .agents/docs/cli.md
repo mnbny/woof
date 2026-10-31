@@ -12,13 +12,13 @@ Global flags select agent mode, request explicit migration, and show help or the
 
 ## Invocation and startup
 
-Before startup, Woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag for every command. The commands do not read the flag.
+Before startup, woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag for every command. The commands do not read the flag.
 
 After these checks, startup checks the configuration and applies an explicit migration. The configuration brief describes these steps.
 
-- Help and version are passive. They do not create Woof home.
+- Help and version are passive. They do not create woof home.
 - Unless migration is requested, readme skips all configuration checks. This keeps the guide readable when the configuration is broken.
-- An invalid invocation fails before Woof creates its home or runs a migration.
+- An invalid invocation fails before woof creates its home or runs a migration.
 
 ## Presentation and exit status
 
@@ -26,7 +26,7 @@ After these checks, startup checks the configuration and applies an explicit mig
 - Agent mode prints only text from markdown templates. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template.
 - Payloads, results, and reports go to standard output. Warnings, migration notices, the execution skill recommendation, and script error output go to standard error.
 - A failure exits with status 1. An interactive cancellation exits with status 130.
-- If a human has no terminal, Woof returns the agent handoff and exits with status 1. Woof does not report a cancellation in this case.
+- If a human has no terminal, woof returns the agent handoff and exits with status 1. woof does not report a cancellation in this case.
 
 ## Distribution
 

@@ -2,7 +2,7 @@
 
 ## Purpose and ownership
 
-Agent mode lets the current coding agent use Woof without terminal questions. A command returns a result, candidates, recovery guidance, or the decision that it needs to continue. Each command keeps ownership of its operation.
+Agent mode lets the current coding agent use woof without terminal questions. A command returns a result, candidates, recovery guidance, or the decision that it needs to continue. Each command keeps ownership of its operation.
 
 ## Caller detection
 
@@ -32,4 +32,4 @@ Results, handoffs, errors, and recovery guidance go to standard output. A failur
 
 ## Execution skill recommendation
 
-At the end of each agent-mode run, Woof looks for the woof-execution skill in the Claude and shared agent skill directories of the user's home. If no copy exists, or an installed copy has an older version than the skill in the package, Woof writes a recommendation to standard error. The recommendation tells the agent to inform the user, gives the install source and locations, and requires the user's approval before installation. Human mode never shows the recommendation.
+At the end of each agent-mode run, woof looks for the woof-execution skill in the Claude and shared agent skill directories of the user's home. If no copy exists, or an installed copy has an older version than the skill in the package, woof writes a recommendation to standard error. The recommendation tells the agent to inform the user, gives the install source and locations, and requires the user's approval before installation. Human mode never shows the recommendation.

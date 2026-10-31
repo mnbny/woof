@@ -14,13 +14,13 @@ Edit changes the content, description, or tags of one token. People edit in a lo
 
 - Inline content changes in the configuration.
 - A prompt file changes in place. An override keeps its text inline, so the shared file stays the same.
-- A script file stays outside Woof. Edit shows the file, and changes only the description and tags.
+- A script file stays outside woof. Edit shows the file, and changes only the description and tags.
 
 Edit runs the same checks as add, and writes nothing until all checks pass. Edit also refuses a change when the token changed after it was opened.
 
 ## People
 
-A person without change flags picks the token from a searchable list and chooses the layer when needed. Then Woof opens a local page in the default browser and shows its address. The page shows the description, the tags, and the content. A second tab shows a Markdown preview. Raw HTML in the preview shows as text. For a script file, the page lists commands that open the file in common editors.
+A person without change flags picks the token from a searchable list and chooses the layer when needed. Then woof opens a local page in the default browser and shows its address. The page shows the description, the tags, and the content. A second tab shows a Markdown preview. Raw HTML in the preview shows as text. For a script file, the page lists commands that open the file in common editors.
 
 A failed save shows the reason on the page and keeps the changes. A save or a cancellation closes the page server. The page also closes after 30 minutes without activity.
 
