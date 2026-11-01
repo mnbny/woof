@@ -2,7 +2,7 @@
 <p align="center">Design tokens for your coding agent's instructions.</p>
 
 <p align="center">
-  <img width="240" height="240" alt="image" src="https://github.com/user-attachments/assets/d31f6463-f17d-4229-af75-f915adbcef7e" />
+  <img width="240" height="240" alt="image" src="https://github.com/user-attachments/assets/2a079bf2-b98b-42a3-aea2-156798055599" />
 </p>
 
 My prompts, conventions, skills, and scripts were everywhere: copied between repos, stashed in ignored folders, slowly drifting apart. Every new project started the same way. Dig up the last agent file, copy it, fix the few lines that differ. All of it Markdown, and Markdown doesn't compose.
@@ -506,6 +506,6 @@ Design notes for contributors and agents live in [`.agents/docs/`](.agents/docs/
 <table>
   <tr>
     <td>After this interaction, I refer to my agents as woof.</td>
-    <td><!-- screenshot --></td>
+    <td><img width="256" height="182" alt="telegram-cloud-photo-size-1-4954272345791073203-m" src="https://github.com/user-attachments/assets/d390675f-cf99-4acc-bca8-95a2a6076432" /></td>
   </tr>
 </table>
