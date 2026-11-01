@@ -1,4 +1,5 @@
 import type { TokenContent, TokenDraft, TokenTarget, TokenType } from '../utils/authoring.ts'
+import type { RegisteredProject } from '../utils/projects.ts'
 
 import { defineCommand } from 'citty'
 import { readFileSync } from 'node:fs'
@@ -14,17 +15,19 @@ import {
   targetLabel,
   TOKEN_TYPES,
 } from '../utils/authoring.ts'
-import { shellQuote } from '../utils/display.ts'
+import { fieldsText, hintText, inlineCodeText, mutedText, shellQuote } from '../utils/display.ts'
+import { getWoofHome } from '../utils/paths.ts'
 import {
   chooseOption,
   enterMultiline,
   enterText,
+  presentCancel,
   presentError,
   presentResult,
   presentSelection,
 } from '../utils/presentation.ts'
-import { insideWoofHome, repositoryConfiguration, selectProjectContext } from '../utils/projects.ts'
-import { createResourceLoader, detectCheckoutRoot } from '../utils/resources.ts'
+import { checkoutPath, loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
+import { createResourceLoader } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
 import { aliasTarget, createTokenGraph } from '../utils/tokens.ts'
 
@@ -44,6 +47,16 @@ function targetFlag(target: TokenTarget) {
   if (target.kind === 'shared') return '--shared'
   if (target.kind === 'repository') return '--repo'
   return `--project ${shellQuote(target.name)}`
+}
+
+type TargetChoice = { target: TokenTarget; label: string; hint?: string }
+
+function targetChoice(target: TokenTarget, hint: string | undefined): TargetChoice {
+  return { target, label: targetLabel(target), ...(hint ? { hint } : {}) }
+}
+
+function projectChoice(project: RegisteredProject) {
+  return targetChoice({ kind: 'project', name: project.name }, checkoutPath(project))
 }
 
 function splitList(value: string) {
@@ -98,20 +111,19 @@ export default defineCommand({
 
       const loader = createResourceLoader({ cwd })
       const context = selectProjectContext({ cwd, loader })
-      const checkout = detectCheckoutRoot(cwd)
-      const targets: TokenTarget[] = [
-        { kind: 'shared' },
-        ...(checkout && !insideWoofHome(cwd) && repositoryConfiguration(checkout)
-          ? [{ kind: 'repository' as const }]
-          : []),
-        ...Object.keys(context.root.data.$projects ?? {}).map(name => ({ kind: 'project' as const, name })),
+      // A detected project narrows the targets to shared tokens and that project. Otherwise each project is a target.
+      const choices: TargetChoice[] = [
+        targetChoice({ kind: 'shared' }, getWoofHome('woof.config.json')),
+        ...('project' in context && context.project
+          ? [
+              context.project.kind === 'repository'
+                ? targetChoice({ kind: 'repository' }, context.checkoutRoot)
+                : projectChoice(context.project),
+            ]
+          : (context.selection === 'ambiguous' ? context.candidates : loadRegisteredProjects(context.root, loader)).map(
+              projectChoice,
+            )),
       ]
-      const current: TokenTarget | undefined =
-        'project' in context && context.project
-          ? context.project.kind === 'repository'
-            ? { kind: 'repository' }
-            : { kind: 'project', name: context.project.name }
-          : undefined
 
       let target: TokenTarget | undefined = values.shared
         ? { kind: 'shared' }
@@ -119,7 +131,7 @@ export default defineCommand({
           ? { kind: 'repository' }
           : values.project !== undefined
             ? { kind: 'project', name: values.project }
-            : targets.length === 1
+            : choices.length === 1
               ? { kind: 'shared' }
               : undefined
       let path = positionals[0]
@@ -139,11 +151,8 @@ export default defineCommand({
           const graph = createTokenGraph(context)
           const namespaces =
             [...new Set([...graph.rootNamespaces, ...graph.projectNamespaces])].sort().join('\n') || 'none'
-          const targetList = targets
-            .map(
-              option =>
-                `${targetFlag(option)}  ${targetLabel(option)}${current && targetKey(current) === targetKey(option) ? ' (current selection)' : ''}`,
-            )
+          const targetList = choices
+            .map(choice => `${targetFlag(choice.target)}  ${choice.label}${choice.hint ? `: ${choice.hint}` : ''}`)
             .join('\n')
           const command = [
             'woof add',
@@ -160,7 +169,7 @@ export default defineCommand({
             {
               summary: `woof needs more input to add a token: ${missing.join(', ')}.`,
               details: `${command}\n\nTargets:\n${targetList}\n\nExisting namespaces:\n${namespaces}`,
-              recovery: 'Retry with the complete command. Nothing was written.',
+              recovery: 'Retry with the complete command.',
             },
             {
               template: 'add-draft',
@@ -206,27 +215,27 @@ export default defineCommand({
         })
       }
 
-      const cancel = () => {
-        process.exitCode = 130
-      }
+      const cancel = () => presentCancel('Add cancelled. Nothing was changed.')
       const retry = (error: unknown) => presentError({ summary: message(error) }, null)
 
       if (!target) {
         const selected = await chooseOption({
           message: 'Where should the token live?',
-          options: targets.map(option => ({
-            value: targetKey(option),
-            label: targetLabel(option),
-            ...(current && targetKey(current) === targetKey(option) ? { hint: 'current selection' } : {}),
+          options: choices.map(choice => ({
+            value: targetKey(choice.target),
+            label: choice.label,
+            ...(choice.hint ? { hint: choice.hint } : {}),
           })),
         })
         if (!selected) return cancel()
-        target = targets.find(option => targetKey(option) === selected)!
+        target = choices.find(choice => targetKey(choice.target) === selected)!.target
       }
 
       for (;;) {
         if (path === undefined) {
-          path = await enterText('Token path, such as conventions.commit.default')
+          path = await enterText(
+            `Token path ${mutedText('(e.g.')} ${inlineCodeText('conventions.commit.default')}${mutedText(')')}`,
+          )
           if (path === undefined) return cancel()
         }
         try {
@@ -251,7 +260,7 @@ export default defineCommand({
       let content: TokenContent
       for (;;) {
         if (rawContent === undefined) {
-          rawContent = await enterMultiline('Content: paste the text, or one line with a file path')
+          rawContent = await enterMultiline(`Content ${hintText('paste text or a file path')}`)
           if (rawContent === undefined) return cancel()
         }
         try {
@@ -265,12 +274,12 @@ export default defineCommand({
       }
 
       if (values.description === undefined) {
-        const entered = await enterText('Description (optional)', { optional: true })
+        const entered = await enterText(`Description ${hintText('optional')}`, { optional: true })
         if (entered === undefined) return cancel()
         description = entered || undefined
       }
       if (!tags.length) {
-        const entered = await enterText('Tags, separated by commas (optional)', { optional: true })
+        const entered = await enterText(`Tags ${hintText('comma separated - optional')}`, { optional: true })
         if (entered === undefined) return cancel()
         tags = splitList(entered)
       }
@@ -282,7 +291,6 @@ export default defineCommand({
         {
           summary: 'woof could not add the token.',
           details,
-          recovery: 'Correct the reported problems, then retry. No configuration was changed.',
         },
         { template: 'add-error', values: { details } },
       )
@@ -309,16 +317,16 @@ export default defineCommand({
       const command = `woof get ${shellQuote(draft.path)}${project}`
       presentResult(
         {
-          summary: `Added ${draft.path}.`,
-          details: [
-            `Configuration: ${file}`,
-            `Type: ${type}`,
-            `Content: ${content}`,
-            `Description: ${description}`,
-            `Tags: ${tags}`,
-            `Overrides a shared token: ${override}`,
-          ].join('\n'),
-          recovery: `Check it with ${command}.`,
+          summary: `Added ${inlineCodeText(draft.path)}.`,
+          details: fieldsText([
+            ['Configuration', file],
+            ['Type', type],
+            ['Content', content],
+            ['Description', description],
+            ['Tags', tags],
+            ['Overrides a shared token', override],
+          ]),
+          recovery: `Check it with ${inlineCodeText(command)}.`,
         },
         {
           template: 'add-result',

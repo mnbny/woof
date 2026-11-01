@@ -19,5 +19,3 @@ Targets:
 Then run this command with the approved values. Put the content between the WOOF lines, so that it goes to standard input:
 
 {{command}}
-
-Nothing was written.
