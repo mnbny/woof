@@ -1,6 +1,17 @@
-# woof
 
-Design tokens for your coding agent's instructions.
+
+
+
+<h1 align="center">woof</h1>
+<p align="center">Design tokens for your coding agent's instructions.</p>
+
+<p align="center">
+  <img width="240" height="240" alt="image" src="https://github.com/user-attachments/assets/d31f6463-f17d-4229-af75-f915adbcef7e" />
+</p>
+
+
+
+
 
 My prompts, conventions, skills, and scripts were everywhere: copied between repos, stashed in ignored folders, slowly drifting apart. Every new project started the same way. Dig up the last agent file, copy it, fix the few lines that differ. All of it Markdown, and Markdown doesn't compose.
 
