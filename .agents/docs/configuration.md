@@ -21,6 +21,14 @@ Every standalone document declares `$schemaVersion` 2. An inline project uses th
 - A resource object declares a type and an execution value. A description, tags, and a boolean privacy field are optional. Privacy controls export of the content. A prompt takes one string. A script takes one string or a nonempty list of strings.
 - A failure names the source file and the failing path. woof never drops valid ad hoc content.
 
+## Structure views
+
+Tree shows where definitions belong without their content. The full view includes shared tokens and all registered projects. A project view includes only that project's definitions, without inherited shared tokens. Repository configurations have a separate project view.
+
+The view uses branch lines to show namespaces, project wrappers, and empty namespaces. Visible keys follow their definition order, including the position of the project registry. Names that JavaScript treats as array indices appear first in numeric order. Each token becomes a marker that distinguishes a script from a prompt or alias. Project metadata and document versions are omitted.
+
+References to project configuration files expand into project structure. Tree does not read token payload files, evaluate references, or run scripts. An exact dotted path is relative to the selected scope. It selects a branch or leaf and preserves its parent keys. A missing path fails without a search.
+
 ## Resource references
 
 `<root>` resolves against woof home. `<repo>` resolves against the detected checkout. The file that declares a reference does not change either root.

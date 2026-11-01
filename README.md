@@ -120,6 +120,7 @@ Then put them to work:
 - **"Use the woof token for code review."** It fetches the matching token and follows its instructions.
 - **"Use woof to commit this."** It finds your commit convention and follows it.
 - **"Set up woof for this repo."** It creates the repo's woof configuration, committed or private. Your call.
+- **"Show me my shared git tokens."** Your agent shows an outline, with `...` for prompts and aliases and `###` for scripts.
 
 ## Under the hood
 
@@ -379,6 +380,7 @@ Your agent runs these as `npx @mnbny/woof <command>`. Add `--help` to any comman
 | --- | --- | --- |
 | `woof readme` | Prints this guide. Agents run it first. | — |
 | `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>` |
+| `woof tree [path]` | Shows token structure without content | `--project <name>` or `--repo` |
 | `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
 | `woof edit [path]` | Changes a token's content, description, tags, or privacy | `--content`, `--description`, `--tag`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
 | `woof init [location]` | Creates a repo config or a private project | `--repo`, or `--name <name>` with `--base-path` and `--worktree-path` |
@@ -396,7 +398,8 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - `--tag`, `--base-path`, and `--worktree-path` repeat: `--tag git --tag commits`.
 - In `edit`, an empty `--description` or `--tag` removes it. `--shared` changes a shared token for every project, and `--override` overrides it in the selected project only.
 - `--private` on `add` or `edit` sets `$private: true`. `edit --no-private` removes the field. Other edits preserve the privacy setting. Disabling privacy alone on an already public definition makes no change.
-- A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone.
+- In `tree`, `--project` and `--repo` show only that project's own definitions. An optional exact path selects a branch or leaf.
+- A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone. Tree paths instead start at the selected scope.
 
 #### Agent mode and exit status
 

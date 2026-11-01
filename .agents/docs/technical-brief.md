@@ -35,7 +35,7 @@ The bundle embeds every runtime library. For this reason, all packages are devel
 ## Cross-cutting conventions
 
 - woof stages each write to configuration and woof home files. Before the write, woof checks the source state again. woof keeps the original bytes and modes for rollback.
-- Startup checks, discovery, explanation, validation, export, and import never run scripts.
+- Startup checks, discovery, structure views, explanation, validation, export, and import never run scripts.
 - Human mode and agent mode run the same operations. They differ only in presentation.
 - All text that agent mode prints comes from a markdown template. Code supplies only the values. Human mode keeps its wording in the code.
 - POSIX is the supported target for process cleanup. Other operating systems have weaker guarantees.

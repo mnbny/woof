@@ -113,8 +113,8 @@ Add each document using this format:
 
 #### [configuration.md](./configuration.md)
 
-- Description: Configuration documents, structure rules, resource references, home lifecycle, versions, and migration.
-- Tags: `configuration`, `schema`, `migration`
+- Description: Configuration documents, structure rules and views, resource references, home lifecycle, versions, and migration.
+- Tags: `configuration`, `schema`, `tree`, `migration`
 
 #### [projects.md](./projects.md)
 

@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof token for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
 metadata:
-  version: 8
+  version: 9
 ---
 
 # woof execution
@@ -18,6 +18,7 @@ Keep the user's task, scope, and constraints. When the request is clear, use the
 | Command    | Purpose                                                               |
 | ---------- | --------------------------------------------------------------------- |
 | `get`      | Find tokens, or resolve a token to its payload.                       |
+| `tree`     | Show configuration structure without token content.                   |
 | `add`      | Add a token, such as a convention from the conversation.              |
 | `edit`     | Change the content, description, or tags of a token.                  |
 | `projects` | List registered projects and show what the current directory selects. |
@@ -82,3 +83,7 @@ woof cannot rename, move, retype, or remove a token. For these changes, edit the
 ## Share a project
 
 To share a registered project, run `woof export --project '<name>' --agent`. To receive a project, run `woof import '<archive>' --agent`. Import adds new items by itself. It asks for one decision for each conflict: an item that exists on both sides and differs. Each decision belongs to the user. Do not write a decision that the user did not make.
+
+## Inspect the structure
+
+When the user wants to see the configuration structure, use `woof tree --agent`. An optional path narrows the view, such as `woof tree 'git' --agent`. Use `--project '<name>'` or `--repo` for project definitions only.

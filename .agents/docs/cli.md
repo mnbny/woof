@@ -6,9 +6,9 @@ The CLI owns argument parsing, startup order, command dispatch, and shared prese
 
 ## Commands
 
-The commands are readme, init, add, edit, get, projects, explain, validate, export, and import. Each command has a brief.
+The commands are readme, init, add, edit, get, tree, projects, explain, validate, export, and import. Command briefs describe individual operations. The configuration brief owns structure views.
 
-Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified address that names a project has the same effect as that option. If the address and the option select different projects, the command fails.
+Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified token address that names a project has the same effect as that option. If the address and the option select different projects, the command fails. Tree paths are relative to the selected scope instead.
 
 ## Invocation and startup
 
@@ -26,7 +26,9 @@ After these checks, startup checks the configuration and applies an explicit mig
   - Each choice has a label and a muted hint. For a scope, the hint gives the path that the choice stands for on this machine. For an action, the hint says in plain words what the action does. A hint gives information, not a status. In an action picker, the most common action comes first, so it is the default.
   - The choices fit the context. If woof detects a project, the choices are the shared tokens and that project. If not, the choices are all registered projects, or the matching projects if several match.
   - A text question or a picker is a short noun, such as "Token to get" or "Project to use". A text question can have a muted note, such as an example or "optional".
-  - A token address that is missing or inexact opens the token search picker, with the address as the search. A missing project opens a project picker.
+  - Get, edit, and explain open the token search picker for a missing or inexact address. Validate opens it for an inexact address. A supplied address becomes the search. A missing project opens a project picker.
+  - Tree offers a full view or a project view. The project view uses the detected project, or a project picker. Explicit paths and scopes skip the picker. Tree has no namespace picker.
+  - In a terminal with color, tree keys and connectors share a color for each nesting level. Vertical guides keep their ancestor level's color. The colors repeat at deeper levels. Markers keep their default color. Agent output has no color.
   - Token paths, project names, file paths in errors, example values, flags, and commands show as inline code in questions, errors, summaries, and follow-up hints.
   - A token list marks the scope of each token with a badge: global for a shared token, project for a token of the selected project. A script token also has a badge with its runtime. Badge colors come from the 256-color palette, so every color terminal shows them the same.
   - Result details are fields. Their values align in one column and are muted.
