@@ -16,6 +16,7 @@ woof has no dependency installer. woof does not analyze script dependencies.
 
 ## Execution
 
+- A private placeholder returns the request for a value without starting a runtime. If an execution list contains a placeholder entry, none of its entries run.
 - A marked execution value runs as a file. Any other value runs as inline source.
 - Scripts run as child processes in the checkout of the selected project. The projects domain decides that checkout. Without that checkout, scripts run in the checkout or the directory of the caller.
 - Array entries run in sequence. Each entry starts from the same directory and environment. The first failure stops the remaining entries. Directory and environment changes do not pass to the next entry.

@@ -9,6 +9,7 @@ export type PromptResource = {
   $exec: string
   $description?: string
   $tags?: string[]
+  $private?: boolean
 }
 
 export type ScriptResource = {
@@ -16,6 +17,7 @@ export type ScriptResource = {
   $exec: string | string[]
   $description?: string
   $tags?: string[]
+  $private?: boolean
 }
 
 export type Resource = PromptResource | ScriptResource
@@ -56,6 +58,7 @@ const promptResourceSchema = v.strictObject({
   $exec: v.string(),
   $description: v.exactOptional(v.string()),
   $tags: v.exactOptional(v.array(v.string())),
+  $private: v.exactOptional(v.boolean()),
 })
 
 const scriptResourceSchema = v.strictObject({
@@ -63,6 +66,7 @@ const scriptResourceSchema = v.strictObject({
   $exec: v.union([v.string(), v.pipe(v.array(v.string()), v.minLength(1))]),
   $description: v.exactOptional(v.string()),
   $tags: v.exactOptional(v.array(v.string())),
+  $private: v.exactOptional(v.boolean()),
 })
 
 export const resourceSchema = v.union([promptResourceSchema, scriptResourceSchema])

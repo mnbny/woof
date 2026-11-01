@@ -18,7 +18,7 @@ Every standalone document declares `$schemaVersion` 2. An inline project uses th
 - woof-owned keys start with `$`. An unknown reserved key causes a failure.
 - Token names use case-sensitive ASCII letters, digits, underscores, and hyphens. woof rejects prototype-sensitive names explicitly.
 - A value is a string, a namespace, or a resource object. Other scalars and generic arrays are not valid.
-- A resource object declares a type and an execution value. A description and tags are optional. A prompt takes one string. A script takes one string or a nonempty list of strings.
+- A resource object declares a type and an execution value. A description, tags, and a boolean privacy field are optional. Privacy controls export of the content. A prompt takes one string. A script takes one string or a nonempty list of strings.
 - A failure names the source file and the failing path. woof never drops valid ad hoc content.
 
 ## Resource references

@@ -20,6 +20,7 @@ Get is the main way to use a token. It resolves an exact address into its payloa
 ## Output and exit status
 
 - Get writes the payload to standard output exactly as resolved, without decoration, in both modes.
+- If resolution reaches a private placeholder, get warns once for that token on standard error. The resolved payload asks the user to supply the missing value. The warning does not change the exit status.
 - If the tokens of a repository project depend on woof home tokens or files, get writes one warning to standard error.
 - In the picker, each row shows the path, a scope badge, and the runtime of a script. The focused row adds the description and tags.
 - In the candidate list, each candidate takes one line: its path, a scope badge (global or project), a runtime badge if it is a script, its description, and tags. One command that resolves a candidate follows the list. The command keeps the project and agent mode.

@@ -15,6 +15,7 @@ import {
   presentNotice,
   presentSelection,
   presentWarning,
+  renderTemplateFile,
   writePayload,
 } from '../utils/presentation.ts'
 import { checkoutPath, selectProjectContext } from '../utils/projects.ts'
@@ -22,7 +23,10 @@ import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
 
-function warnOnRepositoryHomeDependencies(explanation: ReturnType<typeof preflightToken>) {
+function warnOnPreflight(explanation: ReturnType<typeof preflightToken>) {
+  for (const token of explanation.tokens)
+    if (token.privatePlaceholder)
+      presentWarning('private-warning', { message: renderTemplateFile('private-value', { path: token.path }) })
   if (explanation.project?.kind !== 'repository') return
   if (!explanation.tokens.some(token => token.origin === 'project')) return
   const usesHome = explanation.tokens.some(
@@ -139,7 +143,7 @@ export default defineCommand({
           graph,
           query,
           createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-          warnOnRepositoryHomeDependencies,
+          warnOnPreflight,
         )
         writePayload(output)
         return
@@ -157,7 +161,7 @@ export default defineCommand({
             graph,
             selected,
             createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-            warnOnRepositoryHomeDependencies,
+            warnOnPreflight,
           ),
         )
         return

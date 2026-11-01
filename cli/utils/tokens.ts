@@ -3,6 +3,8 @@ import type { ConfigurationSource, ResourceLocation } from './resources.ts'
 import type { Resource, ScriptResource, TokenNamespace, TokenValue } from './schema.ts'
 
 import { inlineCodeText } from './display.ts'
+import { renderTemplateFile } from './presentation.ts'
+import { hasPrivatePlaceholder, PRIVATE_MARKER } from './private.ts'
 import {
   isMarkedResourceReference,
   readMarkedResource,
@@ -94,7 +96,11 @@ export function createTokenGraph(context: ProjectContext) {
 
 type TokenGraph = ReturnType<typeof createTokenGraph>
 
-type ContentPart = { kind: 'literal'; text: string } | { kind: 'reference'; path: string }
+type ContentPart = { kind: 'literal'; text: string } | { kind: 'reference'; path: string } | { kind: 'private' }
+
+export function internalMarker(path: string) {
+  return /^-[^{}\s]*-$/.test(path)
+}
 
 function contentParts(content: string) {
   const parts: ContentPart[] = []
@@ -111,7 +117,7 @@ function contentParts(content: string) {
       const close = content.indexOf('}}}}', index + 4)
       if (close !== -1) {
         const path = content.slice(index + 4, close)
-        if (ADDRESS.test(path) && content[close + 4] !== '}') {
+        if ((ADDRESS.test(path) || internalMarker(path)) && content[close + 4] !== '}') {
           literal(`{{${path}}}`)
           index = close + 4
           continue
@@ -123,12 +129,14 @@ function contentParts(content: string) {
       if (close !== -1) {
         const path = content.slice(index + 2, close)
         if (
-          ADDRESS.test(path) &&
+          (ADDRESS.test(path) || internalMarker(path)) &&
           content[index - 1] !== '$' &&
           content[index - 1] !== '{' &&
           content[close + 2] !== '}'
         ) {
-          parts.push({ kind: 'reference', path })
+          if (`{{${path}}}` === PRIVATE_MARKER) parts.push({ kind: 'private' })
+          else if (internalMarker(path)) literal(`{{${path}}}`)
+          else parts.push({ kind: 'reference', path })
           index = close + 2
           continue
         }
@@ -152,7 +160,7 @@ export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<st
       const close = content.indexOf('}}}}', index + 4)
       if (close !== -1) {
         const path = content.slice(index + 4, close)
-        if (ADDRESS.test(path) && content[close + 4] !== '}') {
+        if ((ADDRESS.test(path) || internalMarker(path)) && content[close + 4] !== '}') {
           output += content.slice(index, close + 4)
           index = close + 4
           continue
@@ -165,6 +173,7 @@ export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<st
         const path = content.slice(index + 2, close)
         if (
           ADDRESS.test(path) &&
+          !internalMarker(path) &&
           content[index - 1] !== '$' &&
           content[index - 1] !== '{' &&
           content[close + 2] !== '}'
@@ -241,6 +250,7 @@ function createWalker(graph: TokenGraph) {
       tags: string[] | undefined
       references: string[]
       files: ResourceLocation[]
+      privatePlaceholder: boolean
       overridden: { path: string; source: ConfigurationSource } | undefined
     }
   >()
@@ -311,8 +321,10 @@ function createWalker(graph: TokenGraph) {
 
     const references: string[] = []
     const files: ResourceLocation[] = []
+    let privatePlaceholder: boolean
     if (typeof token.value === 'string' || token.value.$type === 'prompt') {
       const loaded = prompt(token)
+      privatePlaceholder = loaded.parts.some(part => part.kind === 'private')
       files.push(...loaded.files)
       for (const part of loaded.parts)
         if (part.kind === 'reference') {
@@ -321,8 +333,10 @@ function createWalker(graph: TokenGraph) {
           visit(part.path, [...chain, path])
         }
     } else {
+      privatePlaceholder = hasPrivatePlaceholder(token.value)
       const executions = Array.isArray(token.value.$exec) ? token.value.$exec : [token.value.$exec]
       for (const exec of executions) {
+        if (privatePlaceholder) break
         if (!isMarkedResourceReference(exec)) continue
         files.push(location(exec, token))
       }
@@ -335,6 +349,7 @@ function createWalker(graph: TokenGraph) {
       ...metadata(token),
       references,
       files,
+      privatePlaceholder,
       overridden: token.overridden ? { path: token.overridden.path, source: token.overridden.source } : undefined,
     })
   }
@@ -345,6 +360,7 @@ function createWalker(graph: TokenGraph) {
     const pending = (async () => {
       const token = graph.tokens.get(path)!
       if (typeof token.value !== 'string' && token.value.$type !== 'prompt') {
+        if (hasPrivatePlaceholder(token.value)) return renderTemplateFile('private-value', { path })
         if (!evaluateScript)
           throw new TokenResolutionError(`Computed token ${inlineCodeText(path)} requires an evaluation hook.`)
         const resource = token.value as ScriptResource
@@ -359,6 +375,7 @@ function createWalker(graph: TokenGraph) {
       let output = ''
       for (const part of loaded.parts) {
         if (part.kind === 'literal') output += part.text
+        else if (part.kind === 'private') output += renderTemplateFile('private-value', { path })
         else output += await evaluate(part.path)
       }
       return output

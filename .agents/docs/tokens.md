@@ -54,6 +54,16 @@ Root definitions form the base. The selected project overlays whole tokens, incl
 - A missing target, a namespace target, or a cycle causes a failure. Self-reference is a cycle. It does not reuse a parent value.
 - woof never scans script source or script output for references.
 
+## Private values and internal markers
+
+A resource can mark its content as private. The flag controls export only. Local lookup returns the value as usual. The flag belongs to the whole token, so a project override supplies its own privacy setting.
+
+Export replaces private content with a reserved marker. Double braces with a dash inside each end delimit internal markers. Marker names contain no braces or whitespace. These markers do not refer to tokens. Quadruple braces escape a marker for a literal example.
+
+Token creation and import remapping reject addresses that would produce internal markers instead of token references.
+
+When resolution reaches a private marker, the result names the token and asks the user to supply its value. Lookup also warns on standard error. Aliases and compositions carry the same message. A placeholder is valid content and does not stop resolution. Replacing the marker stops the warning, while the privacy flag stays set for future exports.
+
 ## Preflight and provenance
 
 Before any script runs, each resolution walks the complete reachable graph. The walk loads prompt files and checks declared script files. If the walk fails, woof reports the reference chain.
