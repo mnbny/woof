@@ -12,6 +12,7 @@ import importProject from './commands/import.ts'
 import init from './commands/init.ts'
 import projects from './commands/projects.ts'
 import readme from './commands/readme.ts'
+import tree from './commands/tree.ts'
 import validate from './commands/validate.ts'
 import { parseInvocation } from './utils/invocation.ts'
 import { getWoofHome } from './utils/paths.ts'
@@ -38,6 +39,7 @@ const subCommands: SubCommandsDef = {
   init,
   projects,
   readme,
+  tree,
   validate,
 }
 

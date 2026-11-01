@@ -29,6 +29,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
   explain: { project: { type: 'string' } },
   validate: { project: { type: 'string' } },
   projects: {},
+  tree: { project: { type: 'string' }, repo: { type: 'boolean' } },
   export: { project: { type: 'string' } },
   import: { decisions: { type: 'string' } },
   init: {
@@ -73,6 +74,8 @@ export function parseInvocation(rawArgs: string[]) {
     const values = parsed.values as Record<string, unknown>
     if (command === 'edit' && values['private'] && values['no-private'])
       throw new Error('Choose --private or --no-private, not both.')
+    if (command === 'tree' && values['repo'] && values['project'] !== undefined)
+      throw new Error('Choose --repo or --project, not both.')
     const count = parsed.positionals.length
     if (command === 'import' && count !== 1) throw new Error('import requires exactly one argument.')
     // Without an address, explain offers a picker to a person and asks an agent for the address.
@@ -80,6 +83,7 @@ export function parseInvocation(rawArgs: string[]) {
     if ((command === 'projects' || command === 'export' || command === 'readme') && count !== 0)
       throw new Error(`${command} accepts no positional arguments.`)
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
+    if (command === 'tree' && count > 1) throw new Error('tree accepts at most one path.')
     if ((command === 'add' || command === 'edit') && count > 1)
       throw new Error(`${command} accepts at most one token path.`)
     if (command === 'init' && count > (values['repo'] ? 1 : 0))
