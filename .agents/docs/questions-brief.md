@@ -34,7 +34,7 @@ Scripts receive no arguments or parameters from the caller. A decision can defin
 
 ### Action scripts in compositions
 
-If a composite token references a script, each lookup runs that script. A convention can define whether scripts with side effects belong in compositions or only in explicit requests.
+If a composite token immediately references a script, each lookup runs that script. A convention can define whether scripts with side effects belong in compositions or only in explicit requests.
 
 ### Portability
 

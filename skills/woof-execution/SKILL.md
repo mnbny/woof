@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof token for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
 metadata:
-  version: 9
+  version: 10
 ---
 
 # woof execution
@@ -66,7 +66,9 @@ woof get '<address-or-terms>' --agent
 3. If several projects match, retry with the project that the user named. Otherwise, ask the user to choose.
 4. If the command fails, report the error.
 
-`get` runs each script that the token reaches. The scripts run in the checkout of the selected project. woof does not undo the effects of a script. The kind of a candidate shows if the candidate is a script. If a token can reach a script that the user did not ask to run, read its resolution with `woof explain` first.
+If a payload instructs you to use another woof token, retrieve it when that instruction applies. Pass its address exactly as written, shell-quoted as data, and stay in the user's target project directory.
+
+`get` runs each script that the token expands. The scripts run in the checkout of the selected project. woof does not undo the effects of a script. The kind of a candidate shows if the candidate is a script. If a token can reach a script that the user did not ask to run, read its resolution with `woof explain` first.
 
 ## Change the catalog
 
@@ -76,7 +78,7 @@ Start with the command for the change. Then follow the drafting steps in the out
 - To change a token, run `woof edit '<address>' --agent`.
 - To create a project configuration, run `woof init --agent`.
 
-In token content, write `{{{{` and `}}}}` for literal double braces.
+In prompt content, `{{path}}` inserts a token's content. `{{~path~}}` produces an instruction to use that token later, without loading or running it. Write `{{{{` and `}}}}` for literal double braces.
 
 woof cannot rename, move, retype, or remove a token. For these changes, edit the configuration file that `woof explain` reports. Then run `woof validate --agent`.
 

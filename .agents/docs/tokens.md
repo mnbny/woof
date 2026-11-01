@@ -48,10 +48,13 @@ Root definitions form the base. The selected project overlays whole tokens, incl
 
 ## References
 
-- Double braces reference a token. Quadruple braces emit literal double braces once, with no additional lookup.
+- Double braces reference a token immediately and insert its resolved content. A tilde inside each end of the double braces marks a deferred reference. Quadruple braces escape either form and internal markers, with no lookup.
+- A deferred reference produces an instruction to use the target token. It does not insert the target's content. The author supplies any conditions, and the agent retrieves the target when the instruction applies. Surrounding prose and backticks do not change the rendered instruction.
+- Deferred instructions qualify the address with the selected registered project, including for inherited shared targets. Repository-project and root-context addresses stay unqualified. Their later lookup must use the same project context.
 - References resolve late, against the effective view. For this reason, project overrides apply in all parts of a composition.
 - Shared definitions must resolve without a project. They cannot depend on project-only tokens or repository resources.
-- A missing target, a namespace target, or a cycle causes a failure. Self-reference is a cycle. It does not reuse a parent value.
+- Both reference kinds require an existing token target. Namespaces are not targets. Only cycles made entirely of immediate references fail. Deferred cycles and deferred self-references do not expand content and are valid.
+- A token that contains only a deferred reference is a prompt, not an alias.
 - woof never scans script source or script output for references.
 
 ## Private values and internal markers
@@ -66,9 +69,11 @@ When resolution reaches a private marker, the result names the token and asks th
 
 ## Preflight and provenance
 
-Before any script runs, each resolution walks the complete reachable graph. The walk loads prompt files and checks declared script files. If the walk fails, woof reports the reference chain.
+Before any script runs, each resolution walks its immediate references. The walk loads prompt files and checks declared script files. For a deferred reference, it checks only that the target exists and obeys shared-definition independence. It does not load the target's files, follow its references, or warn about its private placeholder. Authoring and explanation use the same boundary.
 
-Preflight records the provenance of each reachable token: origin, source, root, overridden definition, metadata, references, and resolved files. Explanation and validation use preflight and do not run scripts.
+Validation follows both reference kinds and checks every reachable token without running scripts. Each immediate expansion has its own cycle check, so deferred cycles do not cause false failures. Errors reached through deferred references include the dependency path. Export uses the same walk after privacy redaction.
+
+Preflight records each expanded token's origin, source, overridden definition, metadata, immediate and deferred references, and resolved files. Explanation lists deferred targets without descending into them.
 
 ## Discovery
 

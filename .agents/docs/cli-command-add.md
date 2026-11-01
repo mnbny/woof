@@ -29,7 +29,7 @@ Add checks the configuration with the new token in place. Nothing is written unt
 
 - The path must be free in its document. A path cannot pass through an existing token.
 - The changed document must be valid, and every project that the change reaches must still combine with the shared tokens.
-- The references and files of the new token must resolve. A shared token cannot depend on project tokens or checkout files.
+- The new token's immediate references and files must resolve. Deferred targets must exist, but their content is not checked. A shared token cannot depend on project tokens or checkout files.
 
 A project token at the path of a shared token is an override. Add reports it.
 

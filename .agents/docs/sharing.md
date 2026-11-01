@@ -6,8 +6,8 @@ Sharing moves a registered project between woof homes through a portable archive
 
 ## Archives
 
-- An archive is a standard ZIP file without a manifest. It holds the selected project's tokens and only the shared dependencies reachable from those tokens. References follow the effective view, so overridden root definitions and unrelated tokens are omitted. An empty project exports no shared tokens. Pruning changes only the archive. It never changes the source registry.
-- Shared dependencies that rely on a project override travel as project tokens. This also applies to their callers. Independent shared dependencies stay in the root configuration, so the exported shared catalog can resolve without the project.
+- An archive is a standard ZIP file without a manifest. It holds the selected project's tokens and only their reachable shared dependencies, through immediate and deferred references. References follow the effective view, so overridden root definitions and unrelated tokens are omitted. An empty project exports no shared tokens. Pruning changes only the archive. It never changes the source registry.
+- Shared dependencies that rely on a project override through either reference kind travel as project tokens. This also applies to their callers, including deferred cycles. Independent shared dependencies stay in the root configuration, so the exported shared catalog can resolve without the project.
 - The archive includes only the files that the retained tokens declare, plus the project's configuration file, if one exists. Included payload bytes stay unchanged. An unchanged project configuration also keeps its original bytes.
 - Export copies project files under `<repo>` into a project-specific directory. The exported references point to the copies. Export does not copy the checkout or undeclared script dependencies.
 
@@ -54,7 +54,7 @@ Project metadata and project override bindings allow only keep or take.
 
 ## Remapping
 
-Accepted renames and reuses remap references only in imported content. Local references keep their meaning, unless their own definitions are replaced. A project override stays bound to the address of its shared token. If reuse selects another definition, a project alias keeps this binding. woof never rewrites escaped examples or script bodies.
+Accepted renames and reuses remap both reference kinds only in imported content, including prompt files. Local references keep their meaning, unless their own definitions are replaced. A project override stays bound to the address of its shared token. If reuse selects another definition, a project alias keeps this binding. Reuse rejects cycles of immediate references, but permits deferred cycles. woof never rewrites escaped examples or script bodies.
 
 ## Decisions
 

@@ -193,7 +193,9 @@ References work anywhere in text:
 }
 ```
 
-woof applies overrides first, then resolves references, so an override reaches every composite. Write `{{{{` and `}}}}` for literal double braces. A missing token or a loop fails before anything runs.
+woof applies overrides first, then resolves references, so an override reaches every composite. Write `{{{{` and `}}}}` for literal double braces. A missing token or a cycle of immediate references fails before any script runs.
+
+For an instruction your agent should fetch later, write `If you need the commit rules, {{~git.commit~}}.` woof turns the marker into an instruction to use that token. Your agent fetches it when needed.
 
 ### Scripts
 
@@ -358,6 +360,18 @@ And `acme`'s repo config:
 | `$basePaths` | `$metadata` | Paths that select the project, including everything below them |
 | `$worktreePaths` | `$metadata` | Patterns that match the current directory or one of its parents |
 
+#### Template strings
+
+| Form | Meaning |
+| --- | --- |
+| `{{path}}` | Inserts the resolved token content. Referenced scripts run during lookup. |
+| `{{~path~}}` | Writes an instruction to use the token later. Checks that it exists without loading or running it. |
+| `{{-woof:private-}}` | Marks private content omitted during export. Lookup asks for a replacement value. |
+| `{{-…-}}` | Reserved for internal markers. Unknown markers stay literal. |
+| `{{{{path}}}}` | Outputs literal `{{path}}`. The same escaping works for deferred references and internal markers. |
+
+Deferred instructions include the project name when a registered project is selected. Repository-project and shared-only lookups keep plain addresses; retrieve those from the same project context. Validation checks deferred dependencies fully, export includes them, and import updates their addresses when remapped. Only immediate reference cycles fail.
+
 #### Rules
 
 - Token names use ASCII letters, digits, `_`, and `-`, and they're case-sensitive. Dots join names into a path.
@@ -367,7 +381,7 @@ And `acme`'s repo config:
 - Paths in `$basePaths` and `$worktreePaths` are absolute or start with `~/`. woof ignores paths that don't exist on your machine, so teammates can list their own.
 - Shared tokens must resolve without a project. They can't reference project-only tokens or `<repo>` files.
 - An override replaces the whole token, including its description and tags. A project can't replace a shared namespace with a token, or a token with a namespace.
-- A missing reference or a cycle fails before any script runs. A token that references itself is a cycle.
+- A missing target or a cycle of immediate references fails before any script runs. A token that inserts its own value is a cycle.
 - `{{-...-}}` is reserved for internal markers. Add and import remapping reject token addresses that produce this syntax, such as `-draft-`. Write `{{{{-woof:private-}}}}` to show the private marker literally.
 - A checkout holds one repo config: `woof.config.json`, `.agents/woof.config.json`, or `.claude/woof.config.json`. Two different files fail.
 - Every config file declares `"$schemaVersion": 2`. woof never upgrades a file on its own. When it asks for a migration, rerun the command with `--migrate`.
@@ -481,11 +495,11 @@ What woof doesn't do yet:
 
 What woof does on purpose:
 
-- An override replaces the whole token. To build on a shared value, reference its pieces from your override. A token can't reference itself.
+- An override replaces the whole token. To build on a shared value, reference its pieces from your override. A token can't insert its own value.
 - A change to a shared token reaches every project at once, the way a design token does. There's no version pinning.
 - Repo configs travel through Git. Only private projects export.
 - Script output is plain text. woof never looks for references in it.
-- A composite that references a script runs it on every lookup, so keep scripts with side effects out of composites.
+- An immediate reference to a script runs it on every lookup, so keep scripts with side effects out of those compositions.
 - Scripts run as you, with no sandbox, timeout, or undo. Before you get tokens from an unfamiliar repo, check its config with `woof explain`.
 - Search matches names, descriptions, and tags as text. It isn't semantic, so good descriptions pay off.
 - woof borrows design-token ideas, not the DTCG file format, so DTCG tools can't read woof files.

@@ -13,7 +13,7 @@ Get is the main way to use a token. It resolves an exact address into its payloa
 ## Flow
 
 1. Get selects the project context. If several projects match, a human chooses in a picker. Other callers receive the project names and one retry command.
-2. If the query is an exact address and search is not forced, get preflights the graph. Then get runs the scripts that the resolution needs and writes the payload.
+2. If the query is an exact address and search is not forced, get preflights its immediate references and checks that deferred targets exist. Then get runs the scripts that the resolution needs and writes the payload. Deferred references produce instructions for later retrieval without loading or running their targets.
 3. Otherwise, a human at a terminal searches all tokens in one picker. If the caller gave a query, the picker starts with the query in the search. Forced search behaves the same. The list shows the project tokens first. The search matches every word against the path, description, tags, and alias target. Get resolves the chosen token like an exact address.
 4. An agent caller or a caller without a terminal receives the candidates from discovery instead. Agent guidance favors a project token that fits the request. A shared token remains a choice when it fits clearly better or the user requests it.
 
@@ -21,7 +21,7 @@ Get is the main way to use a token. It resolves an exact address into its payloa
 
 - Get writes the payload to standard output exactly as resolved, without decoration, in both modes.
 - If resolution reaches a private placeholder, get warns once for that token on standard error. The resolved payload asks the user to supply the missing value. The warning does not change the exit status.
-- If the tokens of a repository project depend on woof home tokens or files, get writes one warning to standard error.
+- If the expanded tokens of a repository project depend on woof home tokens or files, get writes one warning to standard error. Direct deferred targets count when they are shared tokens or declare a woof home file. Their transitive dependencies are checked only when those targets are retrieved.
 - In the picker, each row shows the path, a scope badge, and the runtime of a script. The focused row adds the description and tags.
 - The candidate list shows project matches first. Each candidate takes one line: its path, a scope badge (global or project), a runtime badge if it is a script, its description, and tags. One command that resolves a candidate follows the list. The command keeps the project and agent mode.
 - An alias has no description of its own. People see the description and tags of the token that the alias resolves to. The search matches them. Agents see the alias target.

@@ -11,12 +11,12 @@ Validate takes an optional token address. It also takes an optional registered p
 ## Behavior
 
 - Without an address, validate preflights every token in the selected effective view. The view is the root alone, a repository project, or a registered project.
-- With an address, validate preflights only the reachable graph of that token.
-- Preflight checks references, cycles, the independence of shared definitions, and declared files. It never runs scripts.
+- With an address, validate checks the token's reachable graph through both immediate and deferred references.
+- Preflight checks references, immediate cycles, the independence of shared definitions, and declared files. Deferred cycles are valid. It never runs scripts.
 - Validate checks only the selected view. Each other registered project needs a separate run.
 
 ## Output and exit status
 
 On success, validate states that the catalog is valid. With an address, it states that the token is valid, and gives the number of tokens that the token references. It also reports the selected project with the reason for the selection.
 
-Without an address, validate reports every token problem at once, so that one pass of fixes can succeed. With an address, it reports the problem of that token. Each problem names the token and its configuration file, or the reference chain. If validate finds a problem, it exits with status 1. A configuration that cannot load stops validation. The guidance then recommends a correction.
+Validate reports problems across the selected graph in one run. Each problem names the token and its configuration file, or the reference chain. Errors in deferred dependencies include the path from the requested token. If validate finds a problem, it exits with status 1. A configuration that cannot load stops validation. The guidance then recommends a correction.

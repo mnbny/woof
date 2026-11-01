@@ -14,7 +14,7 @@ woof is a local command-line application. It helps developers and coding agents 
 - Resources can be shared, private, or outside a repository. Callers address them the same way in each case. Folder layout has no restrictions.
 - Discovery uses token paths and optional metadata. Callers choose a resource before they read its body or run it.
 - Registered projects move between homes as portable archives with explicit import review. Repository projects move through Git.
-- Convention over configuration guides the design. If a reference is missing or forms a cycle, resolution fails before any computed side effect.
+- Convention over configuration guides the design. If a reference is missing or immediate references form a cycle, resolution fails before any computed side effect.
 
 ## Scope
 
