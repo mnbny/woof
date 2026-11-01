@@ -1,4 +1,3 @@
-import type { RegisteredProject } from '../utils/projects.ts'
 import type { preflightToken } from '../utils/tokens.ts'
 
 import { defineCommand } from 'citty'
@@ -6,9 +5,19 @@ import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
 import { discoverResources } from '../utils/discovery.ts'
-import { shellQuote } from '../utils/display.ts'
-import { chooseOption, presentError, presentSelection, presentWarning, writePayload } from '../utils/presentation.ts'
-import { selectProjectContext } from '../utils/projects.ts'
+import { inlineCodeText, mutedText, runtimeBadge, scopeBadge, shellQuote } from '../utils/display.ts'
+import {
+  aliasedMetadata,
+  chooseOption,
+  chooseToken,
+  presentCancel,
+  presentError,
+  presentNotice,
+  presentSelection,
+  presentWarning,
+  writePayload,
+} from '../utils/presentation.ts'
+import { checkoutPath, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
@@ -24,22 +33,29 @@ function warnOnRepositoryHomeDependencies(explanation: ReturnType<typeof preflig
   if (usesHome) presentWarning('get-home-dependencies')
 }
 
+// Each candidate takes one line. The command that resolves a candidate follows the list once.
 function candidateText(
+  graph: ReturnType<typeof createTokenGraph>,
   candidates: ReturnType<typeof discoverResources>,
-  project: RegisteredProject | undefined,
   agent: boolean,
 ) {
+  // People get the paths in one column. Agents read plain text without alignment.
+  const width = agent ? 0 : Math.max(...candidates.map(candidate => candidate.path.length))
+  // Agents learn that an alias resolves to another token. People see what the alias is for.
+  const all = discoverResources(graph)
   return candidates
     .map(candidate => {
+      const { description, tags } = agent ? candidate : aliasedMetadata(candidate, all)
       const metadata = [
-        candidate.target ? `alias of ${candidate.target}` : candidate.kind,
-        candidate.description,
-        candidate.tags?.length ? `tags: ${candidate.tags.join(', ')}` : undefined,
+        candidate.target && agent ? `alias of ${candidate.target}` : undefined,
+        description,
+        tags?.length ? `tags: ${tags.join(', ')}` : undefined,
       ]
         .filter(Boolean)
         .join('  ')
-      const followUp = `woof get ${shellQuote(candidate.path)}${project ? ` --project ${shellQuote(project.name)}` : ''}${agent ? ' --agent' : ''}`
-      return `${candidate.path}  ${metadata}\n  ${followUp}`
+      const runtime = candidate.target ? '' : runtimeBadge(candidate.kind)
+      const badges = `${scopeBadge(candidate.origin)}${runtime ? ` ${runtime}` : ''}`
+      return `${agent ? '- ' : ''}${candidate.path.padEnd(width)}  ${badges}${metadata ? `  ${mutedText(metadata)}` : ''}`
     })
     .join('\n')
 }
@@ -71,7 +87,7 @@ export default defineCommand({
         positionals.length === 1 && query.startsWith('$projects.') ? splitProjectAddress(query) : undefined
       if (qualified?.project && values.project && qualified.project !== values.project)
         throw new Error(
-          `Qualified address selects ${qualified.project}, which contradicts --project ${values.project}.`,
+          `Qualified address selects ${inlineCodeText(qualified.project)}, which contradicts ${inlineCodeText(`--project ${values.project}`)}.`,
         )
       const explicitProject = qualified?.project ?? values.project
       const search = values.search === true
@@ -87,28 +103,31 @@ export default defineCommand({
         const candidates = context.candidates
         if (!agent && process.stdout.isTTY) {
           const selected = await chooseOption({
-            message: 'Select the project for this lookup',
-            options: candidates.map(candidate => ({ value: candidate.name, label: candidate.name })),
+            message: 'Project to use',
+            options: candidates.map(candidate => {
+              const path = checkoutPath(candidate)
+              return { value: candidate.name, label: candidate.name, ...(path ? { hint: path } : {}) }
+            }),
           })
-          if (!selected) {
-            process.exitCode = 130
-            return
-          }
+          if (!selected) return presentCancel('Lookup cancelled.')
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
+          // The projects come as a list of names, and the command to retry follows once.
           const details = candidates
             .map(candidate => {
-              const retry = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
-              return `${candidate.name}\n  ${retry}`
+              const path = checkoutPath(candidate)
+              const name = `${agent ? '- ' : ''}${candidate.name}`
+              return path ? `${name}  ${mutedText(path)}` : name
             })
             .join('\n')
+          const command = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project NAME${agent ? ' --agent' : ''}`
           presentSelection(
             {
-              summary: 'Multiple projects match this lookup. Select one explicitly.',
+              summary: 'Several projects match this directory.',
               details,
-              recovery: 'Retry with one exact --project value. No selection was persisted.',
+              recovery: `Retry with ${inlineCodeText(command)}, with NAME replaced by the project name.`,
             },
-            { template: 'get-ambiguous', values: { candidates: details } },
+            { template: 'get-ambiguous', values: { projects: details, command } },
           )
           process.exitCode = 1
           return
@@ -129,59 +148,58 @@ export default defineCommand({
         return
       }
 
-      const candidates = discoverResources(graph, exactPath)
-      const project = context.project?.kind === 'registered' ? context.project : undefined
-      const details = candidateText(candidates, project, agent)
-      if (search || !query || agent || !process.stdout.isTTY || candidates.length === 0) {
-        const template = search
-          ? candidates.length
-            ? 'get-search'
-            : 'get-search-empty'
-          : candidates.length
-            ? 'get-candidates'
-            : 'get-no-match'
-        presentSelection(
-          {
-            summary: candidates.length ? 'Matching resources' : 'No resources matched this lookup.',
-            details,
-            recovery: search
-              ? 'Use an exact follow-up command to retrieve a selected resource. Discovery never executes a match.'
-              : 'Use an exact token address or broaden the discovery terms, then retry.',
-          },
-          { template, values: { candidates: details } },
+      // A person at a terminal searches every token in one picker, with the terms already typed in. Choosing a token
+      // resolves it. Agents and callers without a terminal receive the list of candidates instead.
+      if (!agent && process.stdout.isTTY && graph.tokens.size) {
+        const selected = await chooseToken({
+          message: 'Token to get',
+          tokens: discoverResources(graph),
+          query: exactPath,
+        })
+        if (!selected) return presentCancel('Lookup cancelled.')
+        writePayload(
+          await resolveToken(
+            graph,
+            selected,
+            createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
+            warnOnRepositoryHomeDependencies,
+          ),
         )
-        if (!search && query) process.exitCode = 1
         return
       }
 
-      const selected = await chooseOption({
-        message: 'Select a resource to resolve',
-        options: candidates.map(candidate => ({
-          value: candidate.path,
-          label: candidate.path,
-          ...(candidate.target
-            ? { hint: `alias of ${candidate.target}` }
-            : candidate.description
-              ? { hint: candidate.description }
-              : {}),
-        })),
-      })
-      if (!selected) {
-        process.exitCode = 130
-        return
-      }
-      const selectedCandidate = candidates.find(candidate => candidate.path === selected)!
-      const output = await resolveToken(
-        graph,
-        selectedCandidate.path,
-        createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-        warnOnRepositoryHomeDependencies,
+      const candidates = discoverResources(graph, exactPath)
+      const project = context.project?.kind === 'registered' ? context.project : undefined
+      const details = candidateText(graph, candidates, agent)
+      const projectFlag = project ? ` --project ${shellQuote(project.name)}` : ''
+      const command = `woof get 'PATH'${projectFlag}${agent ? ' --agent' : ''}`
+      const searchCommand = `woof get 'TERMS' --search${projectFlag}${agent ? ' --agent' : ''}`
+      const template = search
+        ? candidates.length
+          ? 'get-search'
+          : 'get-search-empty'
+        : candidates.length
+          ? 'get-candidates'
+          : 'get-no-match'
+      presentSelection(
+        {
+          summary: candidates.length
+            ? search
+              ? 'Matching resources'
+              : 'No token has this exact address. These resources match:'
+            : 'No resources matched this lookup.',
+          details,
+          recovery: candidates.length
+            ? `Get a token with ${inlineCodeText(command)}.`
+            : `Search with other terms: ${inlineCodeText(searchCommand)}.`,
+        },
+        { template, values: { candidates: details, command, search: searchCommand } },
       )
-      writePayload(output)
+      if (!search && query) process.exitCode = 1
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)
       if (controller.signal.aborted) {
-        presentError(
+        presentNotice(
           {
             summary: 'woof lookup was cancelled.',
             details,
@@ -195,8 +213,7 @@ export default defineCommand({
           {
             summary: 'woof could not complete the lookup.',
             details,
-            recovery:
-              'Review the reported source and recovery details. Use woof get --search to inspect candidates, or retry with an exact token address and explicit project selection.',
+            recovery: `Search the tokens with ${inlineCodeText('woof get')}.`,
           },
           { template: 'get-error', values: { details } },
         )
