@@ -96,10 +96,16 @@ export function createTokenGraph(context: ProjectContext) {
 
 type TokenGraph = ReturnType<typeof createTokenGraph>
 
-type ContentPart = { kind: 'literal'; text: string } | { kind: 'reference'; path: string } | { kind: 'private' }
+type ContentPart =
+  { kind: 'literal'; text: string } | { kind: 'reference' | 'deferred'; path: string } | { kind: 'private' }
 
 export function internalMarker(path: string) {
   return /^-[^{}\s]*-$/.test(path)
+}
+
+function deferredPath(value: string) {
+  const path = value.slice(1, -1)
+  return value.startsWith('~') && value.endsWith('~') && ADDRESS.test(path) ? path : undefined
 }
 
 function contentParts(content: string) {
@@ -117,7 +123,7 @@ function contentParts(content: string) {
       const close = content.indexOf('}}}}', index + 4)
       if (close !== -1) {
         const path = content.slice(index + 4, close)
-        if ((ADDRESS.test(path) || internalMarker(path)) && content[close + 4] !== '}') {
+        if ((ADDRESS.test(path) || internalMarker(path) || deferredPath(path)) && content[close + 4] !== '}') {
           literal(`{{${path}}}`)
           index = close + 4
           continue
@@ -128,14 +134,16 @@ function contentParts(content: string) {
       const close = content.indexOf('}}', index + 2)
       if (close !== -1) {
         const path = content.slice(index + 2, close)
+        const deferred = deferredPath(path)
         if (
-          (ADDRESS.test(path) || internalMarker(path)) &&
+          (ADDRESS.test(path) || internalMarker(path) || deferred) &&
           content[index - 1] !== '$' &&
           content[index - 1] !== '{' &&
           content[close + 2] !== '}'
         ) {
           if (`{{${path}}}` === PRIVATE_MARKER) parts.push({ kind: 'private' })
           else if (internalMarker(path)) literal(`{{${path}}}`)
+          else if (deferred) parts.push({ kind: 'deferred', path: deferred })
           else parts.push({ kind: 'reference', path })
           index = close + 2
           continue
@@ -152,6 +160,10 @@ export function tokenReferencePaths(content: string) {
   return contentParts(content).flatMap(part => (part.kind === 'reference' ? [part.path] : []))
 }
 
+export function tokenReferences(content: string) {
+  return contentParts(content).flatMap(part => (part.kind === 'reference' || part.kind === 'deferred' ? [part] : []))
+}
+
 export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<string, string>) {
   let output = ''
   let index = 0
@@ -160,7 +172,7 @@ export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<st
       const close = content.indexOf('}}}}', index + 4)
       if (close !== -1) {
         const path = content.slice(index + 4, close)
-        if ((ADDRESS.test(path) || internalMarker(path)) && content[close + 4] !== '}') {
+        if ((ADDRESS.test(path) || internalMarker(path) || deferredPath(path)) && content[close + 4] !== '}') {
           output += content.slice(index, close + 4)
           index = close + 4
           continue
@@ -171,14 +183,15 @@ export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<st
       const close = content.indexOf('}}', index + 2)
       if (close !== -1) {
         const path = content.slice(index + 2, close)
+        const deferred = deferredPath(path)
         if (
-          ADDRESS.test(path) &&
-          !internalMarker(path) &&
+          ((ADDRESS.test(path) && !internalMarker(path)) || deferred) &&
           content[index - 1] !== '$' &&
           content[index - 1] !== '{' &&
           content[close + 2] !== '}'
         ) {
-          output += `{{${mappings.get(path) ?? path}}}`
+          const target = mappings.get(deferred ?? path) ?? deferred ?? path
+          output += deferred ? `{{~${target}~}}` : `{{${target}}}`
           index = close + 2
           continue
         }
@@ -249,11 +262,13 @@ function createWalker(graph: TokenGraph) {
       description: string | undefined
       tags: string[] | undefined
       references: string[]
+      deferred: string[]
       files: ResourceLocation[]
       privatePlaceholder: boolean
       overridden: { path: string; source: ConfigurationSource } | undefined
     }
   >()
+  const inspected: typeof traces = new Map()
   const payloads = new Map<string, { content: string; provenance: ResourceLocation }>()
   const evaluations = new Map<string, Promise<string>>()
 
@@ -312,14 +327,14 @@ function createWalker(graph: TokenGraph) {
     throw new TokenResolutionError(`Token ${inlineCodeText(path)} does not exist.${reference}`)
   }
 
-  function visit(path: string, chain: string[]) {
-    if (chain.includes(path))
-      throw new TokenResolutionError(`Circular token reference: ${inlineCodeText([...chain, path].join(' -> '))}`)
+  function inspect(path: string) {
+    const cached = inspected.get(path)
+    if (cached) return cached
     const token = graph.tokens.get(path)
-    if (!token) return missing(path, chain, chain.length ? graph.tokens.get(chain.at(-1)!) : undefined)
-    if (traces.has(path)) return
+    if (!token) return missing(path, [], undefined)
 
     const references: string[] = []
+    const deferred: string[] = []
     const files: ResourceLocation[] = []
     let privatePlaceholder: boolean
     if (typeof token.value === 'string' || token.value.$type === 'prompt') {
@@ -327,11 +342,8 @@ function createWalker(graph: TokenGraph) {
       privatePlaceholder = loaded.parts.some(part => part.kind === 'private')
       files.push(...loaded.files)
       for (const part of loaded.parts)
-        if (part.kind === 'reference') {
-          references.push(part.path)
-          if (token.origin === 'root' && !graph.rootTokens.has(part.path)) missing(part.path, [...chain, path], token)
-          visit(part.path, [...chain, path])
-        }
+        if (part.kind === 'reference') references.push(part.path)
+        else if (part.kind === 'deferred') deferred.push(part.path)
     } else {
       privatePlaceholder = hasPrivatePlaceholder(token.value)
       const executions = Array.isArray(token.value.$exec) ? token.value.$exec : [token.value.$exec]
@@ -342,16 +354,38 @@ function createWalker(graph: TokenGraph) {
       }
     }
 
-    traces.set(path, {
+    const trace = {
       path,
       origin: token.origin,
       source: token.source,
       ...metadata(token),
       references,
+      deferred,
       files,
       privatePlaceholder,
       overridden: token.overridden ? { path: token.overridden.path, source: token.overridden.source } : undefined,
-    })
+    }
+    inspected.set(path, trace)
+    return trace
+  }
+
+  function check(path: string, chain: string[]) {
+    const token = graph.tokens.get(path)
+    if (!token) return missing(path, chain, chain.length ? graph.tokens.get(chain.at(-1)!) : undefined)
+    const trace = inspect(path)
+    for (const target of [...trace.references, ...trace.deferred])
+      if (!graph.tokens.has(target) || (token.origin === 'root' && !graph.rootTokens.has(target)))
+        missing(target, [...chain, path], token)
+    return trace
+  }
+
+  function visit(path: string, chain: string[]) {
+    if (chain.includes(path))
+      throw new TokenResolutionError(`Circular token reference: ${inlineCodeText([...chain, path].join(' -> '))}`)
+    if (traces.has(path)) return
+    const trace = check(path, chain)
+    for (const target of trace.references) visit(target, [...chain, path])
+    traces.set(path, trace)
   }
 
   async function evaluate(path: string): Promise<string> {
@@ -376,7 +410,11 @@ function createWalker(graph: TokenGraph) {
       for (const part of loaded.parts) {
         if (part.kind === 'literal') output += part.text
         else if (part.kind === 'private') output += renderTemplateFile('private-value', { path })
-        else output += await evaluate(part.path)
+        else if (part.kind === 'deferred') {
+          const project = graph.context.project
+          const address = project?.kind === 'registered' ? `$projects.${project.name}.${part.path}` : part.path
+          output += renderTemplateFile('deferred-reference', { path: address })
+        } else output += await evaluate(part.path)
       }
       return output
     })()
@@ -387,6 +425,8 @@ function createWalker(graph: TokenGraph) {
   let evaluateScript: TokenEvaluator | undefined
   return {
     visit,
+    inspect,
+    check,
     evaluate,
     setEvaluator(evaluator: TokenEvaluator | undefined) {
       evaluateScript = evaluator
@@ -433,7 +473,37 @@ export async function resolveToken(
   return walker.evaluate(path)
 }
 
-export function validateTokenGraph(graph: TokenGraph, address?: string) {
-  if (address) return [preflightToken(graph, address)]
-  return [...graph.tokens.keys()].map(path => preflightToken(graph, path))
+export function preflightTokenGraph(graph: TokenGraph, addresses: string[]) {
+  const walker = createWalker(graph)
+  const pending = addresses.map(address => ({ path: graphAddress(graph, address), chain: '', expand: true }))
+  const seen = new Set<string>()
+  const expanded = new Set<string>()
+  const tokens: ReturnType<typeof walker.inspect>[] = []
+  const problems = new Map<string, string>()
+  for (const { path, chain, expand } of pending) {
+    try {
+      if (!seen.has(path)) {
+        seen.add(path)
+        const token = walker.inspect(path)
+        tokens.push(token)
+        for (const [targets, arrow, expandTarget] of [
+          [token.references, '->', false],
+          [token.deferred, '~>', true],
+        ] as const)
+          for (const target of targets)
+            if (graph.tokens.has(target))
+              pending.push({ path: target, chain: `${chain || path} ${arrow} ${target}`, expand: expandTarget })
+        if (!expand) walker.check(path, [])
+      }
+      // Expanding each immediate child again would repeat errors already reported by its ancestors.
+      if (expand && !expanded.has(path)) {
+        expanded.add(path)
+        walker.visit(path, [])
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!problems.has(message)) problems.set(message, chain ? `${inlineCodeText(chain)}: ${message}` : message)
+    }
+  }
+  return { tokens, problems: [...problems.values()] }
 }
