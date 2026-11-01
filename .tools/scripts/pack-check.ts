@@ -49,6 +49,14 @@ function main() {
     )
     check(!extra.length, `The package holds nothing else${extra.length ? `. Extra: ${extra.join(', ')}` : ''}`)
 
+    // npm rewrites a manifest that it considers invalid only at publish time, so a dry run is the
+    // one place to see it. The dry run uploads nothing.
+    const dryRun = spawnSync('npm', ['publish', '--dry-run', '--ignore-scripts'], { cwd: repoRoot, encoding: 'utf8' })
+    check(
+      !dryRun.stderr.includes('auto-corrected'),
+      `npm publishes the manifest unchanged${dryRun.stderr.includes('auto-corrected') ? `. Run npm pkg fix:\n${dryRun.stderr}` : ''}`,
+    )
+
     // A fresh home, woof home, and npm cache, so the run sees what a first-time user sees.
     const work = join(temp, 'work')
     mkdirSync(work)
