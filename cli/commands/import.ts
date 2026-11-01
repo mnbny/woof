@@ -4,27 +4,29 @@ import type { ImportChoice, ImportConflict } from '../utils/import-plan.ts'
 import { defineCommand } from 'citty'
 import { createPatch } from 'diff'
 import { createHash } from 'node:crypto'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { shellQuote } from '../utils/display.ts'
+import { diffText, hintText, inlineCodeText, listFieldText, mutedText, shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
 import { importReviewSources, planImport, reviewImport, verifyImportReviewSources } from '../utils/import-plan.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import {
   chooseOption,
   enterText,
+  presentCancel,
   presentCode,
   presentConflict,
   presentError,
+  presentNotice,
   presentResult,
   presentWarning,
   renderTemplateFile,
 } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
-import { createResourceLoader, detectCheckoutRoot } from '../utils/resources.ts'
+import { createResourceLoader } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
 import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
 
@@ -37,28 +39,70 @@ function binaryText(value: Uint8Array) {
 }
 
 function reviewText(value: unknown) {
+  if (value === undefined) return ''
   return value instanceof Uint8Array ? binaryText(value) : text(value)
 }
 
-function conflictDiff(conflict: ImportConflict) {
-  if (conflict.kind === 'file') {
-    const decoder = new TextDecoder('utf-8', { fatal: true })
-    try {
-      return createPatch(
-        conflict.path,
-        decoder.decode(conflict.existing as Uint8Array),
-        decoder.decode(conflict.incoming as Uint8Array),
-        'Existing',
-        'Incoming',
-        { context: 3 },
-      )
-    } catch {
-      return `${reviewText(conflict.existing)}\n${reviewText(conflict.incoming)}`
-    }
+// The diff shows the changed lines with their context. Its file header repeats the item, so it is left out. A missing
+// side is empty, so an addition shows only added lines.
+function patch(before: string, after: string) {
+  return createPatch('', before, after, '', '', { context: 3 })
+    .split('\n')
+    .slice(4)
+    .filter(line => !line.startsWith('\\ No newline'))
+    .join('\n')
+    .trimEnd()
+}
+
+const KIND_LABELS: Record<ImportConflict['kind'], string> = {
+  token: 'shared token',
+  'project-token': 'project token',
+  file: 'file',
+  project: 'project',
+}
+
+function reusableItems(item: ImportConflict): { address: string; description?: string }[] {
+  return item.candidateDetails ?? (item.candidates ?? []).map(address => ({ address }))
+}
+
+function fileDiff(existing: Uint8Array | undefined, incoming: Uint8Array | undefined) {
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  try {
+    return patch(
+      existing === undefined ? '' : decoder.decode(existing),
+      incoming === undefined ? '' : decoder.decode(incoming),
+    )
+  } catch {
+    return [reviewText(existing), reviewText(incoming)].filter(Boolean).join('\n')
   }
-  return createPatch(conflict.path, text(conflict.existing), text(conflict.incoming), 'Existing', 'Incoming', {
-    context: 3,
-  })
+}
+
+// A token reads as its fields, then its content as text, so that a long prompt diffs line by line.
+function tokenText(value: unknown) {
+  if (value === undefined) return ''
+  if (typeof value === 'string') return `${value}\n`
+  if (!value || typeof value !== 'object' || !('$exec' in value)) return text(value)
+  const token = value as { $type?: string; $exec: string | string[]; $description?: string; $tags?: string[] }
+  return `${[
+    ...(token.$type ? [`Type: ${token.$type}`] : []),
+    ...(token.$description !== undefined ? [`Description: ${token.$description}`] : []),
+    ...(token.$tags?.length ? [`Tags: ${token.$tags.join(', ')}`] : []),
+    '',
+    ...(Array.isArray(token.$exec) ? token.$exec : [token.$exec]),
+  ].join('\n')}\n`
+}
+
+// A token shows its definition, then each file whose content differs, under the file reference.
+function conflictDiff(conflict: ImportConflict) {
+  if (conflict.kind === 'file')
+    return fileDiff(conflict.existing as Uint8Array | undefined, conflict.incoming as Uint8Array | undefined)
+  if (conflict.kind === 'project') return patch(reviewText(conflict.existing), reviewText(conflict.incoming))
+  return [
+    patch(tokenText(conflict.existing), tokenText(conflict.incoming)),
+    ...(conflict.files ?? []).map(file => `${file.reference}\n${fileDiff(file.existing, file.incoming)}`),
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 type DecisionDocument = {
@@ -154,28 +198,19 @@ function validateImportedCatalog(cwd: string) {
   return findings
 }
 
-function assertImportContext(cwd: string) {
-  const checkout = detectCheckoutRoot(cwd)
-  if (!checkout) return
-  for (const candidate of ['woof.config.json', '.agents/woof.config.json', '.claude/woof.config.json']) {
-    try {
-      if (statSync(realpathSync(join(checkout, candidate))).isFile())
-        throw new Error('Repository-defined projects cannot be imported. Use a registered home-project context.')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
-      throw error
-    }
-  }
+// Each list shows one entry per line, and an empty list is left out.
+function outcomeText(report: ImportApplyReport) {
+  return [
+    ...listFieldText('Completed', report.completed, 'Completed'),
+    ...listFieldText('Restored', report.restored, 'Restored'),
+    ...listFieldText('Pending', report.pending, 'Pending'),
+    ...listFieldText('Recovery', report.recovery, 'Recovery'),
+    ...listFieldText('Warning', report.warnings),
+  ].join('\n')
 }
 
 function outcome(report: ImportApplyReport) {
-  return renderTemplateFile('import-report', {
-    completed: report.completed.join(', ') || 'None',
-    restored: report.restored.join(', ') || 'None',
-    pending: report.pending.join(', ') || 'None',
-    recovery: report.recovery.join(', ') || 'None',
-    warnings: report.warnings.join('; ') || 'None',
-  })
+  return renderTemplateFile('import-report', { fields: outcomeText(report) })
 }
 
 function presentBackup(backup: string | undefined) {
@@ -209,13 +244,14 @@ export default defineCommand({
       const decisionsPath = values.decisions ? resolve(cwd, values.decisions) : undefined
       const agent = values.agent === true || Boolean(isAgent())
       const archive = readFileSync(archivePath)
-      assertImportContext(cwd)
 
       const plan = planImport(archive, { cwd })
       const prior = decisionsPath ? readDecisions(decisionsPath, plan) : undefined
       const choices: Record<string, ImportChoice> = { ...(prior?.choices ?? {}) }
       let recorded = prior?.conflicts ?? []
       const invalidated: string[] = []
+      // A decision that a later choice reopened goes back to the user, even for an item that is new here.
+      const reopened = new Set<string>()
       let reviewed: ReturnType<typeof reviewImport>
       try {
         reviewed = reviewImport(plan, choices)
@@ -223,6 +259,7 @@ export default defineCommand({
         const id = prior?.next?.id
         if (!id || !choices[id]) throw error
         delete choices[id]
+        reopened.add(id)
         invalidated.push(
           `${recorded.find(item => item.id === id)?.path ?? id}: ${error instanceof Error ? error.message : String(error)}`,
         )
@@ -246,6 +283,7 @@ export default defineCommand({
         if (!changed.length) break
         for (const id of changed) {
           invalidated.push(recorded.find(item => item.id === id)?.path ?? id)
+          reopened.add(id)
           delete choices[id]
         }
         reviewed = reviewImport(plan, choices)
@@ -254,19 +292,35 @@ export default defineCommand({
       for (;;) {
         if (reviewed.status === 'ready') break
         const item = reviewed.next
+        // Only a conflict needs a decision. An item that does not exist here yet is taken without a review, unless it
+        // matches a local item that it could reuse, needs a new path, was reopened, or an earlier take of it failed.
+        const added = item.existing === undefined && item.incoming !== undefined && !item.candidates?.length
+        if ((added || item.derived) && !item.requiredNewPath && !reopened.has(item.id) && !item.invalid) {
+          choices[item.id] = 'take'
+          reviewed = reviewImport(plan, choices)
+          continue
+        }
         const diff = conflictDiff(item)
         const notice = item.notice ? `\n${item.notice}` : ''
         const reusable = item.candidates?.length
-          ? `\n${renderTemplateFile('import-reusable', { candidates: JSON.stringify(item.candidateDetails ?? item.candidates) })}`
+          ? `\n${renderTemplateFile('import-reusable', {
+              candidates: reusableItems(item)
+                .map(({ address, description }) =>
+                  agent
+                    ? `- ${address}${description ? `: ${description}` : ''}`
+                    : `- ${inlineCodeText(address)}${description ? `  ${mutedText(description)}` : ''}`,
+                )
+                .join('\n'),
+            })}`
           : ''
         const rechecks = invalidated.length
           ? `\n${renderTemplateFile('import-rechecks', { items: invalidated.join(', ') })}`
           : ''
         presentConflict(
           {
-            summary: `Review ${item.kind} ${item.path}`,
-            details: `${diff}${notice}${reusable}${rechecks}`,
-            recovery: 'Choose explicitly. No import files change until every item is reviewed.',
+            summary: `Review ${KIND_LABELS[item.kind]} ${inlineCodeText(item.path)}`,
+            details: diffText(diff),
+            notes: `${notice}${reusable}${rechecks}`.trim(),
           },
           null,
         )
@@ -282,7 +336,7 @@ export default defineCommand({
             {
               template: 'import-decision',
               values: {
-                kind: item.kind,
+                kind: KIND_LABELS[item.kind],
                 path: item.path,
                 diff,
                 notice,
@@ -297,45 +351,69 @@ export default defineCommand({
           process.exitCode = 1
           return
         }
+        // Taking the archive's version comes first, so it is the default.
+        const local = item.existing !== undefined
+        const file = item.kind === 'file' || item.kind === 'project'
         const options = [
+          ...(!item.requiredNewPath && item.incoming !== undefined
+            ? [
+                {
+                  value: 'take',
+                  label: 'Take incoming',
+                  hint: local ? "replace yours with the archive's version" : "import the archive's version",
+                },
+              ]
+            : []),
           ...(!item.requiredNewPath
             ? [
-                { value: 'keep', label: 'Keep existing' },
-                ...(item.incoming !== undefined ? [{ value: 'take', label: 'Take incoming' }] : []),
+                {
+                  value: 'keep',
+                  label: 'Keep existing',
+                  hint: local ? "keep yours and skip the archive's version" : 'do not import it',
+                },
               ]
             : []),
           ...((item.incoming !== undefined || item.requiredNewPath) && item.path !== '$metadata' && !item.keepTakeOnly
-            ? [{ value: 'add', label: 'Add as new' }]
+            ? [
+                {
+                  value: 'add',
+                  label: 'Add as new',
+                  hint: `import it at a new ${file ? 'path' : 'address'}${local ? ' and keep yours' : ''}`,
+                },
+              ]
             : []),
-          ...(item.candidates?.length && !item.keepTakeOnly ? [{ value: 'reuse', label: 'Reuse existing' }] : []),
+          ...(item.candidates?.length && !item.keepTakeOnly
+            ? [
+                {
+                  value: 'reuse',
+                  label: 'Reuse existing',
+                  hint: `use your identical ${file ? 'file' : 'token'} instead of importing it`,
+                },
+              ]
+            : []),
         ]
-        const selected = await chooseOption({ message: `${item.path}: choose an action`, options })
-        if (!selected) {
-          process.exitCode = 130
-          return
-        }
+        const selected = await chooseOption({ message: `${inlineCodeText(item.path)}: choose an action`, options })
+        if (!selected) return presentCancel('Import cancelled. Nothing was changed.')
         let choice: ImportChoice
         if (selected === 'keep' || selected === 'take') choice = selected
         else if (selected === 'add') {
           const address = await enterText(
             item.kind === 'token' || (item.kind === 'project-token' && item.path !== '$metadata')
-              ? 'Enter an unused token address'
-              : 'Enter an unused path under woof home',
+              ? `Token address ${hintText('unused')}`
+              : `Path under woof home ${hintText('unused')}`,
           )
-          if (!address) {
-            process.exitCode = 130
-            return
-          }
+          if (!address) return presentCancel('Import cancelled. Nothing was changed.')
           choice = { action: 'add', address }
         } else if (selected === 'reuse') {
           const address = await chooseOption({
-            message: 'Select the identical existing item',
-            options: (item.candidates ?? []).map(value => ({ value, label: value })),
+            message: item.kind === 'file' ? 'File to reuse' : 'Token to reuse',
+            options: reusableItems(item).map(({ address, description }) => ({
+              value: address,
+              label: address,
+              ...(description ? { hint: description } : {}),
+            })),
           })
-          if (!address) {
-            process.exitCode = 130
-            return
-          }
+          if (!address) return presentCancel('Import cancelled. Nothing was changed.')
           choice = { action: 'reuse', address }
         } else throw new Error(`Unsupported import choice: ${selected}`)
         recorded = reviewed.issues
@@ -366,6 +444,7 @@ export default defineCommand({
           if (!changed.length) break
           for (const id of changed) {
             invalidated.push(recorded.find(entry => entry.id === id)?.path ?? id)
+            reopened.add(id)
             delete choices[id]
           }
           reviewed = reviewImport(plan, choices)
@@ -388,22 +467,31 @@ export default defineCommand({
       const rechecked = invalidated.length
         ? `\n${renderTemplateFile('import-rechecked', { items: invalidated.join(', ') })}`
         : ''
-      const validation = renderTemplateFile(findings.length ? 'import-validation-findings' : 'import-validation-passed')
-      presentResult(
-        {
-          summary: result.completed.length
-            ? `Imported ${plan.bundle.projectName} without executing scripts.`
-            : 'Import review passed; no files needed changes.',
-          details: `${report}${rechecked}`,
-          recovery: validation,
-        },
-        result.completed.length
-          ? {
-              template: 'import-imported',
-              values: { project: plan.bundle.projectName, report, rechecked, validation },
-            }
-          : { template: 'import-unchanged', values: { report, rechecked, validation } },
-      )
+      const validation = findings.length ? renderTemplateFile('import-validation-findings') : ''
+
+      // An import that changed nothing is a notice. Success reports a change.
+      if (result.completed.length)
+        presentResult(
+          {
+            summary: `Imported ${inlineCodeText(plan.bundle.projectName)}.`,
+            details: `${outcomeText(result)}${rechecked}`,
+            ...(validation ? { recovery: validation } : {}),
+          },
+          {
+            template: 'import-imported',
+            values: {
+              project: plan.bundle.projectName,
+              report,
+              rechecked,
+              validation: validation ? `\n\n${validation}` : '',
+            },
+          },
+        )
+      else
+        presentNotice(
+          { summary: 'Nothing was imported. Each item already matched or was kept.', details: rechecked.trim() },
+          { template: 'import-unchanged', values: { rechecked } },
+        )
       presentBackup(result.backup)
       if (findings.length) {
         const configurationBroken = findings.some(finding =>
@@ -422,9 +510,8 @@ export default defineCommand({
       presentError(
         {
           summary: 'woof could not complete the import.',
-          details: `${message}${report}`,
-          recovery:
-            'Review the archive and destination state, then retry with explicit choices. Incomplete review changes nothing; retained recovery artifacts remain available when reported.',
+          details: error instanceof ImportApplyError ? `${message}\n${outcomeText(error.report)}` : message,
+          ...(error instanceof ImportApplyError ? { recovery: 'The report above lists what changed.' } : {}),
         },
         { template: 'import-error', values: { details: message, report } },
       )
