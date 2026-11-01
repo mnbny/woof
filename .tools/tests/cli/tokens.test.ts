@@ -103,7 +103,7 @@ test('rejects global dependencies, self-cycles and missing references before scr
 
   const missingFailure = await run(cli, home, ['get', 'missingPrompt'])
   expect(missingFailure.status).toBe(1)
-  expect(missingFailure.stdout).toContain('Missing token absent')
+  expect(missingFailure.stdout).toMatch(/Token\s+absent\s+does not exist/)
   expect(existsSync(marker)).toBe(false)
 
   const cycleValidation = await run(cli, home, ['validate', 'cyclePrompt', '--project', 'demo'])
@@ -134,7 +134,7 @@ test('keeps discovery metadata-only and reuses one literal computed result per r
   const discovered = await run(cli, home, ['get', 'computed', '--search'])
   expect(discovered.status).toBe(0)
   expect(discovered.stdout).toContain('Computed verification')
-  expect(discovered.stdout).toContain("woof get 'computed'")
+  expect(discovered.stdout).toContain("woof get 'PATH'")
   expect(existsSync(counter)).toBe(false)
 
   const resolved = await run(cli, home, ['get', 'twice'])

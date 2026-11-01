@@ -390,7 +390,12 @@ test('exports referenced checkout files without changing the source or running s
   const marker = join(directory, 'repo-export-ran')
   await mkdir(checkout, { recursive: true })
   execFileSync('git', ['init', '-q', checkout])
-  const sourceProject = { $schemaVersion: 2, script: { $type: 'node', $exec: '<repo>/scripts/run.js' } }
+  // The project's base path is the checkout, so <repo> resolves there.
+  const sourceProject = {
+    $schemaVersion: 2,
+    $metadata: { $basePaths: [checkout] },
+    script: { $type: 'node', $exec: '<repo>/scripts/run.js' },
+  }
   await config(home, { $schemaVersion: 2, $projects: { demo: '<root>/project.json' } })
   const sourceProjectBytes = Buffer.from(`${JSON.stringify(sourceProject, null, 2)}\r\n`)
   const sourceScriptBytes = Buffer.from(`require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')\r\n`)

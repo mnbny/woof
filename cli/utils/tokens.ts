@@ -2,7 +2,13 @@ import type { selectProjectContext } from './projects.ts'
 import type { ConfigurationSource, ResourceLocation } from './resources.ts'
 import type { Resource, ScriptResource, TokenNamespace, TokenValue } from './schema.ts'
 
-import { isMarkedResourceReference, readMarkedResource, resolveResourceLocation } from './resources.ts'
+import { inlineCodeText } from './display.ts'
+import {
+  isMarkedResourceReference,
+  readMarkedResource,
+  resolveResourceLocation,
+  ResourceLoadError,
+} from './resources.ts'
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
 type LeafValue = string | Resource
@@ -63,13 +69,17 @@ export function createTokenGraph(context: ProjectContext) {
 
   for (const [path, token] of project.tokens) {
     if (root.namespaces.has(path))
-      throw new TokenResolutionError(`Project token ${path} is a leaf but the shared definition is a namespace.`)
+      throw new TokenResolutionError(
+        `Project token ${inlineCodeText(path)} is a leaf but the shared definition is a namespace.`,
+      )
     const overridden = root.tokens.get(path)
     project.tokens.set(path, { ...token, overridden })
   }
   for (const path of project.namespaces)
     if (root.tokens.has(path))
-      throw new TokenResolutionError(`Project namespace ${path} conflicts with a shared leaf of the same name.`)
+      throw new TokenResolutionError(
+        `Project namespace ${inlineCodeText(path)} conflicts with a shared leaf of the same name.`,
+      )
 
   const tokens = new Map(root.tokens)
   for (const [path, token] of project.tokens) tokens.set(path, token)
@@ -173,12 +183,12 @@ export function rewriteTokenReferences(content: string, mappings: ReadonlyMap<st
 
 export function splitProjectAddress(address: string) {
   if (!address.startsWith('$projects.')) {
-    if (!ADDRESS.test(address)) throw new TokenResolutionError(`Invalid token address: ${address}`)
+    if (!ADDRESS.test(address)) throw new TokenResolutionError(`Invalid token address: ${inlineCodeText(address)}`)
     return { path: address }
   }
   const [, project, ...segments] = address.split('.')
   if (!project || !SEGMENT.test(project) || !segments.length || segments.some(segment => !SEGMENT.test(segment)))
-    throw new TokenResolutionError(`Invalid qualified project address: ${address}`)
+    throw new TokenResolutionError(`Invalid qualified project address: ${inlineCodeText(address)}`)
   return { project, path: segments.join('.') }
 }
 
@@ -188,7 +198,7 @@ function graphAddress(graph: TokenGraph, address: string) {
     const selected = graph.context.project
     if (selected?.kind !== 'registered' || selected.name !== parsed.project)
       throw new TokenResolutionError(
-        `Address ${address} contradicts the selected project; select ${parsed.project} explicitly instead of mixing scopes.`,
+        `Address ${inlineCodeText(address)} contradicts the selected project; select ${inlineCodeText(parsed.project)} explicitly instead of mixing scopes.`,
       )
   }
   return parsed.path
@@ -239,37 +249,62 @@ function createWalker(graph: TokenGraph) {
 
   function location(reference: string, token: EffectiveToken) {
     if (token.origin === 'root' && reference.startsWith('<repo>/'))
-      throw new TokenResolutionError(`Global token ${token.path} cannot depend on repository resource ${reference}.`)
+      throw new TokenResolutionError(
+        `Global token ${inlineCodeText(token.path)} cannot depend on repository resource ${inlineCodeText(reference)}.`,
+      )
     const checkoutRoot = graph.context.checkoutRoot
-    return resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {})
+    const project = graph.context.project
+    if (reference.startsWith('<repo>/') && !checkoutRoot)
+      throw new TokenResolutionError(
+        `${inlineCodeText(token.path)} reads ${inlineCodeText(reference)}, but ${project?.name ? `project ${inlineCodeText(project.name)} has no base path on this machine` : 'no checkout is available'}.`,
+      )
+    return load(token, () => resolveResourceLocation(reference, checkoutRoot ? { repoRoot: checkoutRoot } : {}))
+  }
+
+  // A file that cannot load is a problem of the token that names it.
+  function load<Result>(token: EffectiveToken, run: () => Result) {
+    try {
+      return run()
+    } catch (error) {
+      if (!(error instanceof ResourceLoadError)) throw error
+      throw new TokenResolutionError(
+        `${inlineCodeText(token.path)} in ${inlineCodeText(token.source.file)} cannot load ${inlineCodeText(error.reference)}: ${error.detail}`,
+      )
+    }
   }
 
   function prompt(token: EffectiveToken) {
     if (typeof token.value !== 'string' && token.value.$type !== 'prompt')
-      throw new TokenResolutionError(`Token ${token.path} is not a prompt.`)
+      throw new TokenResolutionError(`Token ${inlineCodeText(token.path)} is not a prompt.`)
     const authored = typeof token.value === 'string' ? token.value : token.value.$exec
     if (!isMarkedResourceReference(authored)) return { content: authored, parts: contentParts(authored), files: [] }
     const provenance = location(authored, token)
     const cached = payloads.get(authored)
     if (cached) return { content: cached.content, parts: contentParts(cached.content), files: [cached.provenance] }
     const checkoutRoot = graph.context.checkoutRoot
-    const content = readMarkedResource(authored, checkoutRoot ? { repoRoot: checkoutRoot } : {}).content
+    const content = load(token, () =>
+      readMarkedResource(authored, checkoutRoot ? { repoRoot: checkoutRoot } : {}),
+    ).content
     payloads.set(authored, { content, provenance })
     return { content, parts: contentParts(content), files: [provenance] }
   }
 
   function missing(path: string, chain: string[], token: EffectiveToken | undefined): never {
-    const qualified = [...chain, path].join(' -> ')
+    const referrer = chain.at(-1)
+    const file = token ? ` in ${inlineCodeText(token.source.file)}` : ''
+    const reference = referrer ? ` ${inlineCodeText(referrer)}${file} references it.` : ''
     if (graph.rootNamespaces.has(path) || graph.projectNamespaces.has(path))
-      throw new TokenResolutionError(`Token path ${path} is a namespace, not a resolvable value: ${qualified}`)
+      throw new TokenResolutionError(`${inlineCodeText(path)} is a namespace, not a token.${reference}`)
     if (token?.origin === 'root' && graph.context.project && !graph.rootTokens.has(path))
-      throw new TokenResolutionError(`Global token ${token.path} depends on project-only token ${path}: ${qualified}`)
-    throw new TokenResolutionError(`Missing token ${path}: ${qualified}`)
+      throw new TokenResolutionError(
+        `Shared token ${inlineCodeText(token.path)} depends on project-only token ${inlineCodeText(path)}.`,
+      )
+    throw new TokenResolutionError(`Token ${inlineCodeText(path)} does not exist.${reference}`)
   }
 
   function visit(path: string, chain: string[]): void {
     if (chain.includes(path))
-      throw new TokenResolutionError(`Circular token reference: ${[...chain, path].join(' -> ')}`)
+      throw new TokenResolutionError(`Circular token reference: ${inlineCodeText([...chain, path].join(' -> '))}`)
     const token = graph.tokens.get(path)
     if (!token) return missing(path, chain, chain.length ? graph.tokens.get(chain.at(-1)!) : undefined)
     if (traces.has(path)) return
@@ -310,13 +345,14 @@ function createWalker(graph: TokenGraph) {
     const pending = (async () => {
       const token = graph.tokens.get(path)!
       if (typeof token.value !== 'string' && token.value.$type !== 'prompt') {
-        if (!evaluateScript) throw new TokenResolutionError(`Computed token ${path} requires an evaluation hook.`)
+        if (!evaluateScript)
+          throw new TokenResolutionError(`Computed token ${inlineCodeText(path)} requires an evaluation hook.`)
         const resource = token.value as ScriptResource
         const executions = Array.isArray(resource.$exec) ? resource.$exec : [resource.$exec]
         const locations = executions.map(exec => (isMarkedResourceReference(exec) ? location(exec, token) : undefined))
         const output = await evaluateScript({ token, resource, locations })
         if (typeof output !== 'string')
-          throw new TokenResolutionError(`Computed token ${path} returned non-text output.`)
+          throw new TokenResolutionError(`Computed token ${inlineCodeText(path)} returned non-text output.`)
         return output
       }
       const loaded = prompt(token)

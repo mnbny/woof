@@ -19,12 +19,20 @@ export type ConfigurationSource = ResourceLocation & { kind: ConfigurationKind }
 
 export class ResourceLoadError extends Error {
   readonly reference: string
+  readonly detail: string
 
   constructor(reference: string, detail: string, options?: ErrorOptions) {
     super(`Could not load ${reference}: ${detail}`, options)
     this.name = 'ResourceLoadError'
     this.reference = reference
+    this.detail = detail
   }
+}
+
+// A missing file is the common case, so it reads plainly.
+function failure(error: unknown) {
+  if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'the file does not exist.'
+  return error instanceof Error ? error.message : String(error)
 }
 
 export function detectCheckoutRoot(cwd = process.cwd()) {
@@ -59,8 +67,7 @@ function physicalFile(root: string, candidate: string, reference: string) {
     return { file, root: physicalRoot }
   } catch (error) {
     if (error instanceof ResourceLoadError) throw error
-    const message = error instanceof Error ? error.message : String(error)
-    throw new ResourceLoadError(reference, message, { cause: error })
+    throw new ResourceLoadError(reference, failure(error), { cause: error })
   }
 }
 
@@ -100,8 +107,7 @@ function directLocation(file: string, rootKind: ResourceRootKind, repoRoot: stri
     return { file: physical, root, rootKind, markedPath: file }
   } catch (error) {
     if (error instanceof ResourceLoadError) throw error
-    const message = error instanceof Error ? error.message : String(error)
-    throw new ResourceLoadError(file, message, { cause: error })
+    throw new ResourceLoadError(file, failure(error), { cause: error })
   }
 }
 
