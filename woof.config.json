@@ -56,5 +56,13 @@
         "$tags": ["conversational", "voice", "ai-tells"]
       }
     }
+  },
+  "npm": {
+    "release": {
+      "$type": "prompt",
+      "$exec": "# Release woof to npm\n\nUse this when the owner asks to release a new version of woof. A release is public and permanent: npm never accepts the same version twice. Ask the owner before each step that leaves this machine.\n\n1. Confirm that the working tree is clean, the branch is `master`, and it matches `origin/master`.\n2. Run `pnpm validate` and `pnpm test`. Stop if either fails.\n3. Agree on the version with the owner. Before 1.0, use a minor bump for features and breaking changes, and a patch bump for fixes.\n4. If the execution skill changed since the last release tag, confirm that its `metadata.version` went up. woof uses that number to tell users that their installed copy is outdated.\n5. Set the version with `npm version <version> --no-git-tag-version`.\n6. Run `pnpm pack:check`. Stop if it fails.\n7. Commit the version change by the woof `git.commit` token, with the subject `Release <version>`. Tag the commit `v<version>`.\n8. Ask the owner to run `npm publish` in their own terminal, because npm asks for their two-factor confirmation. The package publishes as public, and the pack step builds the bundle first.\n9. From a directory outside the repo, run `npx --yes @mnbny/woof@<version> --version`. It must print the new version.\n10. After the owner approves, push the commit and the tag with `git push origin master v<version>`.",
+      "$description": "Publish a new woof version to npm",
+      "$tags": ["release", "npm", "publish"]
+    }
   }
 }
