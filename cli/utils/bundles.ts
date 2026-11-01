@@ -149,7 +149,7 @@ type DirectoryEntry = {
   special: boolean
 }
 
-function centralDirectory(archive: Uint8Array): Omit<DirectoryEntry, 'name'>[] {
+function centralDirectory(archive: Uint8Array) {
   const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength)
   let end = -1
   for (let offset = archive.byteLength - 22; offset >= Math.max(0, archive.byteLength - 65_557); offset -= 1) {
@@ -318,7 +318,7 @@ export function createBundleArchive(configuration: RootConfiguration, resources:
   return archive
 }
 
-// A backup mirrors woof home paths, so extracting it over woof home restores those files.
+/** A backup mirrors woof home paths, so extracting it over woof home restores those files. */
 export function createBackupArchive(files: Iterable<BundleFile>) {
   return zipSync(Object.fromEntries(indexedFiles(files)) as Zippable, { level: 6 })
 }

@@ -7,7 +7,7 @@ import * as v from 'valibot'
 
 import { CURRENT_SCHEMA_VERSION, projectConfigurationSchema, rootConfigurationSchema } from './schema.ts'
 
-// A repository configuration is a project document without metadata, because its checkout already selects it.
+/** A repository configuration is a project document without metadata, because its checkout already selects it. */
 export type ConfigurationKind = 'root' | 'project' | 'repository'
 
 export class ConfigurationVersionError extends Error {
@@ -220,7 +220,7 @@ export function readConfigurationDocument(file: string, kind: ConfigurationKind)
   return kind === 'root' ? parseConfigurationDocument(text, kind, file) : parseConfigurationDocument(text, kind, file)
 }
 
-// Writing a staged copy and renaming it replaces the file in one step and keeps its mode.
+/** Writing a staged copy and renaming it replaces the file in one step and keeps its mode. */
 export function replaceFileContent(target: string, content: string | Uint8Array) {
   const staging = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`)
   const { mode } = statSync(target)

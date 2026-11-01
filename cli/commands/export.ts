@@ -53,7 +53,6 @@ export default defineCommand({
         throw new Error(`Export accepts no positional arguments; use ${inlineCodeText('--project NAME')}.`)
       const agent = values.agent === true || Boolean(isAgent())
       let projectName = values.project
-      // A person at a terminal picks the registered project. Other callers name it.
       if (!projectName && !agent && process.stdout.isTTY) {
         const loader = createResourceLoader({ cwd: process.cwd() })
         const projects = loadRegisteredProjects(loader.loadRootConfiguration(), loader)

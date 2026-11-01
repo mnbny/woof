@@ -59,7 +59,7 @@ export function targetLabel(target: TokenTarget) {
   return `${target.name} tokens (project)`
 }
 
-// The place that a target stands for on this machine: the shared configuration or the project checkout.
+/** The place that a target stands for on this machine: the shared configuration or the project checkout. */
 export function targetPath(target: TokenTarget, cwd: string) {
   if (target.kind === 'shared') return getWoofHome('woof.config.json')
   if (target.kind === 'repository') return detectCheckoutRoot(cwd)
@@ -166,8 +166,10 @@ export function assertTokenPath(path: string) {
     )
 }
 
-// A single line that names an existing file becomes a file reference. woof home files and, for project tokens,
-// checkout files keep their place. Other files are copied into woof home, because a reference must stay inside a root.
+/**
+ * A single line that names an existing file becomes a file reference. woof home files and, for project tokens,
+ * checkout files keep their place. Other files are copied into woof home, because a reference must stay inside a root.
+ */
 export function readTokenContent(content: string, options: { cwd: string; target: TokenTarget; path: string }) {
   if (!content.trim()) throw new Error('The token content is empty.')
   if (content.includes('\n') || isMarkedResourceReference(content)) return { exec: content }
@@ -196,8 +198,10 @@ export function readTokenContent(content: string, options: { cwd: string; target
   return { exec: `<root>/${copy}`, file, copy }
 }
 
-// Checks the configuration with the token in place: its document, every project graph that the change reaches, and
-// the references and files of the new token. Returns the changed document and whether the token overrides a shared one.
+/**
+ * Checks the configuration with the token in place: its document, every project graph that the change reaches, and
+ * the references and files of the new token. Returns the changed document and whether the token overrides a shared one.
+ */
 export function checkToken(
   draft: Omit<TokenDraft, 'type' | 'content' | 'description' | 'tags'> & { value: TokenValue; replace?: boolean },
   cwd: string,
@@ -301,7 +305,7 @@ export async function saveToken(draft: TokenDraft, cwd: string) {
 }
 
 export type TokenLayer = 'definition' | 'override'
-// The script references replace those of the token, such as for an override with its own copy of the files.
+/** The script references replace those of the token, such as for an override with its own copy of the files. */
 export type TokenEdit = { content?: string; description?: string; tags?: string[]; exec?: string | string[] }
 
 function digest(files: string[]) {
@@ -314,8 +318,10 @@ function projectTarget(project: RegisteredProject | RepositoryProject): TokenTar
   return project.kind === 'repository' ? { kind: 'repository' } : { kind: 'project', name: project.name }
 }
 
-// Finds the definition behind the token that the caller sees. A prompt file is edited in place. A script file is
-// edited outside woof, so its content is fixed here.
+/**
+ * Finds the definition behind the token that the caller sees. A prompt file is edited in place. A script file is
+ * edited outside woof, so its content is fixed here.
+ */
 export function describeToken(address: string, options: { cwd: string; project?: string | undefined }) {
   const loader = createResourceLoader({ cwd: options.cwd })
   const context = selectProjectContext({
@@ -427,8 +433,10 @@ export async function editToken(
   })
 }
 
-// An override of a script gets its own copy of the script files, so a change to the copy stays in the project. A
-// repository keeps the copies next to its configuration, and a registered project keeps them in woof home.
+/**
+ * An override of a script gets its own copy of the script files, so a change to the copy stays in the project. A
+ * repository keeps the copies next to its configuration, and a registered project keeps them in woof home.
+ */
 export function copyScriptForOverride(address: string, options: { cwd: string; project?: string | undefined }) {
   const token = describeToken(address, options)
   const target = token.override

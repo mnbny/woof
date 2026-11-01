@@ -43,9 +43,9 @@ export type ImportConflict = {
   keepTakeOnly?: boolean
   invalid?: boolean
   notice?: string
-  // The item follows from earlier decisions, so it needs no decision of its own.
+  /** The item follows from earlier decisions, so it needs no decision of its own. */
   derived?: boolean
-  // The files of a token whose content differs, so the review can show them.
+  /** The files of a token whose content differs, so the review can show them. */
   files?: { reference: string; existing?: Uint8Array; incoming?: Uint8Array }[]
 }
 export type ImportSourceState = { path: string; digest: string | null; physical: string | null }

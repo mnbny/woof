@@ -92,7 +92,6 @@ function tokenText(value: unknown) {
   ].join('\n')}\n`
 }
 
-// A token shows its definition, then each file whose content differs, under the file reference.
 function conflictDiff(conflict: ImportConflict) {
   if (conflict.kind === 'file')
     return fileDiff(conflict.existing as Uint8Array | undefined, conflict.incoming as Uint8Array | undefined)
@@ -198,7 +197,6 @@ function validateImportedCatalog(cwd: string) {
   return findings
 }
 
-// Each list shows one entry per line, and an empty list is left out.
 function outcomeText(report: ImportApplyReport) {
   return [
     ...listFieldText('Completed', report.completed, 'Completed'),

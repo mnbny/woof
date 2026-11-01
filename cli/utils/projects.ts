@@ -147,7 +147,7 @@ function globMatches(pattern: string, candidate: string, project: string) {
   }
 }
 
-// The name of the selected project and the reason for the selection, as the summaries show them.
+/** The name of the selected project and the reason for the selection, as the summaries show them. */
 export function selectedProjectText(context: ReturnType<typeof selectProjectContext>) {
   const project = 'project' in context ? context.project : undefined
   if (!project) return undefined
@@ -156,16 +156,17 @@ export function selectedProjectText(context: ReturnType<typeof selectProjectCont
   return `${project.name} (its paths match this directory)`
 }
 
-// Whether the base paths or worktree patterns of a registered project cover the directory.
-// A project can list a checkout path for each machine, so the path is the one that exists here.
+/** A project can list a checkout path for each machine, so the path is the one that exists here. */
 export function checkoutPath(project: Pick<RegisteredProject, 'name' | 'data'>) {
   return (project.data.$metadata?.$basePaths ?? [])
     .map(value => normalizedMetadataPath(value, project.name))
     .find(value => existsSync(value))
 }
 
-// <repo> always belongs to the selected project. Inside its paths, the current checkout is its checkout. Outside them,
-// its base path on this machine stands in. Without one, the project has no checkout here.
+/**
+ * <repo> always belongs to the selected project. Inside its paths, the current checkout is its checkout. Outside them,
+ * its base path on this machine stands in. Without one, the project has no checkout here.
+ */
 export function namedProjectCheckout(
   project: Pick<RegisteredProject, 'name' | 'data'>,
   cwd: string,

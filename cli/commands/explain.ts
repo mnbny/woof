@@ -68,7 +68,6 @@ export default defineCommand({
           if (!selected) return presentCancel('Explanation cancelled.')
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          // The projects come as a list of names, and the command to retry follows once.
           const details = candidates
             .map(candidate => {
               const path = checkoutPath(candidate)
@@ -91,7 +90,6 @@ export default defineCommand({
       }
 
       const graph = createTokenGraph(context)
-      // A person at a terminal picks the token when the address is missing or inexact.
       if (!agent && process.stdout.isTTY && !graph.tokens.has(qualified?.path ?? query)) {
         const selected = await chooseToken({ message: 'Token to explain', tokens: discoverResources(graph), query })
         if (!selected) return presentCancel('Explanation cancelled.')
@@ -101,7 +99,7 @@ export default defineCommand({
         throw new Error(`Name the token to explain. Find it with ${inlineCodeText("woof get 'TERMS' --search")}.`)
       const explanation = explainToken(graph, query)
       const project = selectedProjectText(context) ?? 'none (shared tokens only)'
-      // The requested token comes first, then each token that it references, in the order of the references.
+      // The trace lists each token after its references, so the order starts again from the requested token.
       const traces = new Map(explanation.tokens.map(token => [token.path, token]))
       const ordered: typeof explanation.tokens = []
       const walk = (path: string) => {

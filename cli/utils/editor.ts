@@ -61,9 +61,11 @@ function readBody(request: IncomingMessage) {
   })
 }
 
-// Any site in the browser can send requests to a local port. Only requests with the address host, the page origin,
-// and the secret path reach the session. The page runs only its own script, and loads styles only from daisyUI.
-// The announcement can return a cleanup. It runs as soon as the session ends, before other interrupt listeners print.
+/**
+ * Any site in the browser can send requests to a local port. Only requests with the address host, the page origin,
+ * and the secret path reach the session. The page runs only its own script, and loads styles only from daisyUI.
+ * The announcement can return a cleanup. It runs as soon as the session ends, before other interrupt listeners print.
+ */
 export function runEditor<Result>(
   session: EditorSession,
   announce: (url: string) => ((outcome: EditorOutcome<Result>['outcome']) => void) | void,

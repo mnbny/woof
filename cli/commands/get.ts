@@ -33,13 +33,11 @@ function warnOnRepositoryHomeDependencies(explanation: ReturnType<typeof preflig
   if (usesHome) presentWarning('get-home-dependencies')
 }
 
-// Each candidate takes one line. The command that resolves a candidate follows the list once.
 function candidateText(
   graph: ReturnType<typeof createTokenGraph>,
   candidates: ReturnType<typeof discoverResources>,
   agent: boolean,
 ) {
-  // People get the paths in one column. Agents read plain text without alignment.
   const width = agent ? 0 : Math.max(...candidates.map(candidate => candidate.path.length))
   // Agents learn that an alias resolves to another token. People see what the alias is for.
   const all = discoverResources(graph)
@@ -112,7 +110,6 @@ export default defineCommand({
           if (!selected) return presentCancel('Lookup cancelled.')
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          // The projects come as a list of names, and the command to retry follows once.
           const details = candidates
             .map(candidate => {
               const path = checkoutPath(candidate)
@@ -148,8 +145,6 @@ export default defineCommand({
         return
       }
 
-      // A person at a terminal searches every token in one picker, with the terms already typed in. Choosing a token
-      // resolves it. Agents and callers without a terminal receive the list of candidates instead.
       if (!agent && process.stdout.isTTY && graph.tokens.size) {
         const selected = await chooseToken({
           message: 'Token to get',

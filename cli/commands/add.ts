@@ -51,7 +51,7 @@ function targetFlag(target: TokenTarget) {
 
 type TargetChoice = { target: TokenTarget; label: string; hint?: string }
 
-function targetChoice(target: TokenTarget, hint: string | undefined): TargetChoice {
+function targetChoice(target: TokenTarget, hint: string | undefined) {
   return { target, label: targetLabel(target), ...(hint ? { hint } : {}) }
 }
 

@@ -71,7 +71,6 @@ export default defineCommand({
         throw new Error(`Choose ${inlineCodeText('--shared')} or ${inlineCodeText('--override')}, not both.`)
 
       let path = positionals[0]
-      // A person at a terminal picks the token when the path is missing or inexact.
       if (interactive) {
         const graph = createTokenGraph(
           selectProjectContext({ cwd, loader: createResourceLoader({ cwd }), ...(project ? { project } : {}) }),

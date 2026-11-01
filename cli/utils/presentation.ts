@@ -25,7 +25,7 @@ export function renderTemplate(template: string, values: Record<string, Template
   })
 }
 
-// Every line that agent mode prints comes from a file in the templates directory.
+/** Every line that agent mode prints comes from a file in the templates directory. */
 export function renderTemplateFile(name: string, values: Record<string, TemplateValue> = {}) {
   const template = readFileSync(getWoofRoot('cli', 'templates', `${name}.md`), 'utf8')
   return renderTemplate(template, values).replace(/\n$/, '')
@@ -59,7 +59,7 @@ function writeCodeBlock(code: string) {
   log.message(codeBlockText(code), { spacing: 0, withGuide: false })
 }
 
-// A notice reports an outcome that changed nothing, such as a cancellation or an edit without changes.
+/** A notice reports an outcome that changed nothing, such as a cancellation or an edit without changes. */
 export function presentNotice({ summary, details, recovery }: PresentationInput, agent: AgentTemplate) {
   if (agentPresentation()) return writeAgentTemplate(agent)
   log.warn(summary)
@@ -67,13 +67,12 @@ export function presentNotice({ summary, details, recovery }: PresentationInput,
   if (recovery) log.info(recovery)
 }
 
-// A cancellation changes nothing, so it is a notice. It exits with status 130.
+/** A cancellation changes nothing, so it is a notice. It exits with status 130. */
 export function presentCancel(summary: string) {
   presentNotice({ summary }, null)
   process.exitCode = 130
 }
 
-// The diff is code. Notes about the item follow it as text.
 export function presentConflict(
   { summary, details, notes, recovery }: PresentationInput & { notes?: string },
   agent: AgentTemplate,
@@ -92,7 +91,7 @@ export function presentError({ summary, details, recovery }: PresentationInput, 
   if (recovery) log.info(recovery)
 }
 
-// People copy the value, so it reads as code. Agents get the value from their template.
+/** People copy the value, so it reads as code. Agents get the value from their template. */
 export function presentCode(message: string, code: string, agent: AgentTemplate) {
   if (agentPresentation()) return writeAgentTemplate(agent)
   log.info(message)
@@ -111,12 +110,12 @@ export async function chooseOption({
   return isCancel(selected) ? undefined : selected
 }
 
-// Warnings read the same for people and agents, so both modes use the template.
+/** Warnings read the same for people and agents, so both modes use the template. */
 export function presentWarning(template: string, values: Record<string, TemplateValue> = {}) {
   process.stderr.write(`${renderTemplateFile(template, values)}\n`)
 }
 
-// Enter adds a line, so pasted text with blank lines cannot submit early. Tab reaches the submit button.
+/** Enter adds a line, so pasted text with blank lines cannot submit early. Tab reaches the submit button. */
 export async function enterMultiline(message: string) {
   if (agentPresentation() || !isTTY()) return undefined
   const value = await multiline({
@@ -143,7 +142,7 @@ export type TokenChoice = {
 // The prompt wraps a row at the terminal width less its gutter, and it measures the gutter with its escape codes.
 const HINT_RESERVE = 24
 
-// An alias has no description of its own, so people see the description and tags of the token that it resolves to.
+/** An alias has no description of its own, so people see the description and tags of the token that it resolves to. */
 export function aliasedMetadata<Token extends TokenChoice>(token: Token, tokens: Token[]) {
   let current: TokenChoice | undefined = token
   for (const seen = new Set<string>(); current?.target && !seen.has(current.path);) {
@@ -153,9 +152,11 @@ export function aliasedMetadata<Token extends TokenChoice>(token: Token, tokens:
   return { description: current?.description, tags: current?.tags }
 }
 
-// A searchable list of tokens. The search starts with the given terms and matches every word against the path, the
-// description, the tags, and the alias target. A row shows the path, the scope, and the runtime of a script. The hint
-// of the focused row gives the description and tags, cut to one line.
+/**
+ * A searchable list of tokens. The search starts with the given terms and matches every word against the path, the
+ * description, the tags, and the alias target. A row shows the path, the scope, and the runtime of a script. The hint
+ * of the focused row gives the description and tags, cut to one line.
+ */
 export async function chooseToken({
   message,
   tokens,
@@ -196,7 +197,7 @@ export async function chooseToken({
   return isCancel(selected) ? undefined : selected
 }
 
-// An optional prompt returns an empty string for no answer and undefined only for a cancellation.
+/** An optional prompt returns an empty string for no answer and undefined only for a cancellation. */
 export async function enterText(message: string, options: { initialValue?: string; optional?: boolean } = {}) {
   if (agentPresentation() || !isTTY()) return undefined
   const value = await text({
@@ -207,9 +208,11 @@ export async function enterText(message: string, options: { initialValue?: strin
   return isCancel(value) ? undefined : (value ?? '').trim()
 }
 
-// The browser opens after a short countdown, so the person can read the address first. The returned stop ends the
-// spinner with a message, or clears it. Clack's spinner reads keys in raw mode and exits on Ctrl+C by itself, so this
-// one leaves the input alone and Ctrl+C reaches the interrupt handler of the command.
+/**
+ * The browser opens after a short countdown, so the person can read the address first. The returned stop ends the
+ * spinner with a message, or clears it. Clack's spinner reads keys in raw mode and exits on Ctrl+C by itself, so this
+ * one leaves the input alone and Ctrl+C reaches the interrupt handler of the command.
+ */
 export function browserCountdown(open: () => void, seconds = 3) {
   const output = process.stdout
   let message = `Opening browser in ${seconds}s`

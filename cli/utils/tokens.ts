@@ -96,7 +96,7 @@ type TokenGraph = ReturnType<typeof createTokenGraph>
 
 type ContentPart = { kind: 'literal'; text: string } | { kind: 'reference'; path: string }
 
-function contentParts(content: string): ContentPart[] {
+function contentParts(content: string) {
   const parts: ContentPart[] = []
   function literal(text: string) {
     if (!text) return
@@ -209,7 +209,7 @@ function metadata(token: EffectiveToken) {
   return { description: token.value.$description, tags: token.value.$tags }
 }
 
-// A string whose whole value is one reference is an alias.
+/** A string whose whole value is one reference is an alias. */
 export function aliasTarget(value: string) {
   const parts = contentParts(value)
   const first = parts[0]
@@ -302,7 +302,7 @@ function createWalker(graph: TokenGraph) {
     throw new TokenResolutionError(`Token ${inlineCodeText(path)} does not exist.${reference}`)
   }
 
-  function visit(path: string, chain: string[]): void {
+  function visit(path: string, chain: string[]) {
     if (chain.includes(path))
       throw new TokenResolutionError(`Circular token reference: ${inlineCodeText([...chain, path].join(' -> '))}`)
     const token = graph.tokens.get(path)

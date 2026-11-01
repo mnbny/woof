@@ -60,7 +60,6 @@ export default defineCommand({
           if (!selected) return presentCancel('Validation cancelled.')
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
-          // The projects come as a list of names, and the command to retry follows once.
           const details = candidates
             .map(candidate => {
               const path = checkoutPath(candidate)
@@ -83,7 +82,6 @@ export default defineCommand({
       }
 
       const graph = createTokenGraph(context)
-      // A person at a terminal picks the token when the address is inexact. Without an address, validate checks all.
       if (query && !agent && process.stdout.isTTY && !graph.tokens.has(qualified?.path ?? query)) {
         const selected = await chooseToken({ message: 'Token to validate', tokens: discoverResources(graph), query })
         if (!selected) return presentCancel('Validation cancelled.')

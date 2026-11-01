@@ -97,7 +97,7 @@ function markedLocation(reference: string, repoRoot: string | undefined): Resour
   return { file, root, rootKind, markedPath: reference }
 }
 
-function directLocation(file: string, rootKind: ResourceRootKind, repoRoot: string | undefined): ResourceLocation {
+function directLocation(file: string, rootKind: ResourceRootKind, repoRoot: string | undefined) {
   const markedRoot = rootKind === 'root' ? getWoofHome() : repoRoot
   if (!markedRoot) throw new ResourceLoadError(file, 'no active checkout or worktree supplies the configuration root.')
   try {

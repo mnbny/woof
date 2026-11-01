@@ -40,24 +40,23 @@ export function mutedText(text: string) {
   return plain() ? text : ansis.dim(text)
 }
 
-// A note beside a prompt message, muted like the hint of a select option.
+/** A note beside a prompt message, muted like the hint of a select option. */
 export function hintText(text: string) {
   return mutedText(`(${text})`)
 }
 
-// The values start in one column and stay muted, so the labels lead.
+/** The values start in one column and stay muted, so the labels lead. */
 export function fieldsText(fields: [label: string, value: string][]) {
   if (plain()) return fields.map(([label, value]) => `${label}: ${value}`).join('\n')
   const width = Math.max(...fields.map(([label]) => label.length))
   return fields.map(([label, value]) => `${`${label}:`.padEnd(width + 2)}${mutedText(value)}`).join('\n')
 }
 
-// A badge names a category beside a label.
 export function badgeText(label: string, color: string) {
   return plain() ? `[${label}]` : ansis.bgHex(color).black(` ${label} `)
 }
 
-// People read one value per line. Agents read the values on one line. A field without values is left out.
+/** People read one value per line. Agents read the values on one line. A field without values is left out. */
 export function listFieldText(label: string, values: string[], plural = `${label}s`) {
   if (!values.length) return []
   const name = values.length === 1 ? label : plural
@@ -65,12 +64,12 @@ export function listFieldText(label: string, values: string[], plural = `${label
   return [`${name}:`, ...values.map(value => `  - ${mutedText(value)}`)]
 }
 
-// A script runs when it resolves, so its runtime shows in a badge of its own. A prompt has no runtime badge.
+/** A script runs when it resolves, so its runtime shows in a badge of its own. A prompt has no runtime badge. */
 export function runtimeBadge(kind: string) {
   return kind === 'prompt' ? '' : badgeText(kind, '#ffd787')
 }
 
-// Added lines are green and removed lines are red, as in other diff tools. The colors are 256-color palette entries.
+/** Added lines are green and removed lines are red, as in other diff tools. The colors are 256-color palette entries. */
 export function diffText(diff: string) {
   if (plain()) return diff
   return diff
@@ -87,7 +86,7 @@ export function diffText(diff: string) {
     .join('\n')
 }
 
-// A registered project that is stored in the root configuration is inline.
+/** A registered project that is stored in the root configuration is inline. */
 export function inlineBadge() {
   return badgeText('inline', '#dadada')
 }
@@ -95,7 +94,7 @@ export function inlineBadge() {
 // Each color is an entry of the 256-color palette, so terminals without true color show it unchanged.
 const SCOPE_COLORS = { global: '#dadada', project: '#afd7ff' }
 
-// A shared token is global. A token of the selected project, including an override, belongs to the project.
+/** A shared token is global. A token of the selected project, including an override, belongs to the project. */
 export function scopeBadge(origin: 'root' | 'project') {
   const scope = origin === 'root' ? 'global' : 'project'
   return badgeText(scope, SCOPE_COLORS[scope])
