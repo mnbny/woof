@@ -1,0 +1,7 @@
+sam    import globex.woof.zip
+
+agent  › woof import globex.woof.zip
+         Your git.commit is different from theirs.
+         Keep yours, take theirs, or save theirs under a new name?
+
+sam    keep mine

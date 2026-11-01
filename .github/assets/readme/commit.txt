@@ -1,0 +1,10 @@
+you    use woof to commit this
+
+agent  › woof get "commit convention"
+         found git.commit, your commit convention
+       › woof get git.commit
+         Follow the seven rules of a great commit message:
+         1. Separate the subject from the body with a blank line.
+         2. Keep the subject under 50 characters.
+         ...
+       › git commit -m "Add export command"

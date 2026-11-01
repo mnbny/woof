@@ -1,0 +1,10 @@
+you    save that review checklist to woof
+
+agent  › woof get "review checklist" --search
+         nothing similar yet
+         Draft: review.checklist, "PR review checklist". Save it?
+
+you    yes
+
+agent  › woof add review.checklist …
+         Saved.
