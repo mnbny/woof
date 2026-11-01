@@ -122,6 +122,7 @@ export default defineCommand({
             ...[
               ...fieldsText(fields).split('\n'),
               ...listFieldText('Reference', [...new Set(token.references)]),
+              ...listFieldText('Deferred reference', [...new Set(token.deferred)]),
               ...listFieldText(
                 'Resource',
                 token.files.map(file => `${file.markedPath} -> ${file.file}`),

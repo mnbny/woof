@@ -23,7 +23,7 @@ import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
 
-function warnOnPreflight(explanation: ReturnType<typeof preflightToken>) {
+function warnOnPreflight(explanation: ReturnType<typeof preflightToken>, graph: ReturnType<typeof createTokenGraph>) {
   for (const token of explanation.tokens)
     if (token.privatePlaceholder)
       presentWarning('private-warning', { message: renderTemplateFile('private-value', { path: token.path }) })
@@ -32,7 +32,13 @@ function warnOnPreflight(explanation: ReturnType<typeof preflightToken>) {
   const usesHome = explanation.tokens.some(
     token =>
       token.origin === 'root' ||
-      (token.origin === 'project' && token.files.some(file => file.markedPath.startsWith('<root>/'))),
+      (token.origin === 'project' && token.files.some(file => file.markedPath.startsWith('<root>/'))) ||
+      token.deferred.some(path => {
+        const target = graph.tokens.get(path)!
+        if (target.origin === 'root') return true
+        const content = typeof target.value === 'string' ? target.value : target.value.$exec
+        return (Array.isArray(content) ? content : [content]).some(value => value.startsWith('<root>/'))
+      }),
   )
   if (usesHome) presentWarning('get-home-dependencies')
 }
@@ -143,7 +149,7 @@ export default defineCommand({
           graph,
           query,
           createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-          warnOnPreflight,
+          explanation => warnOnPreflight(explanation, graph),
         )
         writePayload(output)
         return
@@ -161,7 +167,7 @@ export default defineCommand({
             graph,
             selected,
             createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-            warnOnPreflight,
+            explanation => warnOnPreflight(explanation, graph),
           ),
         )
         return

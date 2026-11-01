@@ -28,6 +28,161 @@ function run(cli: Cli, home: string, args: string[]) {
   })
 }
 
+test('renders deferred instructions without loading targets and preserves project context', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'deferred-home')
+  const effect = join(directory, 'deferred-script-ran')
+  await config(home, {
+    $schemaVersion: 2,
+    plain: 'inline',
+    caller: '<root>/caller.txt',
+    helper: '<root>/missing.txt',
+    script: {
+      $type: 'node',
+      $exec: `require('fs').writeFileSync(${JSON.stringify(effect)}, 'ran'); process.stdout.write('{{~helper~}}')`,
+    },
+    private: { $type: 'prompt', $exec: '{{-woof:private-}}', $private: true },
+    malformed: '{{~unfinished{{~helper~}}',
+    guarded: '${{~helper~}} {{{~helper~}}} {{~ helper ~}} {{~missing}}',
+    deferredOnly: '{{~helper~}}',
+    $projects: { demo: { helper: 'project helper', $metadata: { $basePaths: [cli.project] } } },
+  })
+  await put(
+    join(home, 'caller.txt'),
+    '{{plain}}; if needed, {{~helper~}}. use woof token {{~script~}}; `{{~private~}}`; {{{{~helper~}}}}',
+  )
+  const instruction = (path: string) => `use the woof token \`${path}\``
+  const expected = (prefix = '') =>
+    `inline; if needed, ${instruction(prefix + 'helper')}. use woof token ${instruction(prefix + 'script')}; \`${instruction(prefix + 'private')}\`; {{~helper~}}`
+  const outside = await cli.run(process.execPath, [cli.entry, 'get', 'caller', '--agent'], directory, {
+    WOOF_HOME: home,
+  })
+  expect(outside).toMatchObject({ status: 0, stdout: expected() })
+  expect(outside.stderr).not.toContain('needs a value')
+  for (const flags of [[], ['--project', 'demo'], ['--project', 'demo', '--agent']]) {
+    const result = await run(cli, home, ['get', 'caller', ...flags])
+    expect(result).toMatchObject({ status: 0, stdout: expected('$projects.demo.') })
+    expect(result.stderr).not.toContain('needs a value')
+  }
+  expect(
+    await cli.run(process.execPath, [cli.entry, 'get', '$projects.demo.helper', '--agent'], directory, {
+      WOOF_HOME: home,
+    }),
+  ).toMatchObject({ status: 0, stdout: 'project helper' })
+  expect(await run(cli, home, ['get', 'malformed', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: '{{~unfinished' + instruction('$projects.demo.helper'),
+  })
+  expect(await run(cli, home, ['get', 'guarded', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: '${{~helper~}} {{{~helper~}}} {{~ helper ~}} {{~missing}}',
+  })
+  const explain = await run(cli, home, ['explain', 'caller', '--agent'])
+  expect(explain.status).toBe(0)
+  expect(explain.stdout).toContain('Deferred references: helper, script, private')
+  expect(explain.stdout).not.toContain('missing.txt')
+  expect(explain.stderr).not.toContain('needs a value')
+  const discovery = await run(cli, home, ['get', 'deferredOnly', '--search', '--agent'])
+  expect(discovery.stdout).not.toContain('alias of')
+  expect(existsSync(effect)).toBe(false)
+  expect(await run(cli, home, ['get', 'script', '--agent'])).toMatchObject({ status: 0, stdout: '{{~helper~}}' })
+  expect(existsSync(effect)).toBe(true)
+})
+
+test('validates deferred dependency chains while allowing deferred cycles and checking targets before effects', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'deferred-validation-home')
+  const effect = join(directory, 'must-not-run')
+  await config(home, {
+    $schemaVersion: 2,
+    start: '{{immediate}} {{~brokenFile~}} {{~brokenScript~}} {{~brokenChain~}}',
+    immediate: '{{~start~}}',
+    brokenFile: '<root>/missing.txt',
+    brokenScript: { $type: 'node', $exec: '<root>/missing.js' },
+    brokenChain: '{{absent}}',
+    effect: { $type: 'node', $exec: `require('fs').writeFileSync(${JSON.stringify(effect)}, 'ran')` },
+    invalid: '{{effect}} {{~absent~}}',
+    namespace: { token: 'text' },
+    invalidNamespace: '{{~namespace~}}',
+    invalidShared: '{{~onlyProject~}}',
+    valid: '{{next}}',
+    next: '{{~valid~}} {{~next~}} {{~effect~}}',
+    badCycle: '{{~cycle~}}',
+    cycle: '{{cycle}}',
+    $projects: { demo: { onlyProject: 'local' } },
+  })
+  expect((await run(cli, home, ['get', 'start', '--agent'])).status).toBe(0)
+  expect((await run(cli, home, ['explain', 'start', '--agent'])).status).toBe(0)
+  const validation = await run(cli, home, ['validate', 'start', '--agent'])
+  expect(validation.status).toBe(1)
+  for (const target of ['brokenFile', 'brokenScript', 'brokenChain'])
+    expect(validation.stdout).toContain(`start ~> ${target}`)
+  expect(validation.stdout).toContain('missing.txt')
+  expect(validation.stdout).toContain('missing.js')
+  expect(validation.stdout).toContain('absent')
+  expect(validation.stdout).not.toContain('Circular token reference')
+  expect((await run(cli, home, ['validate', 'valid', '--agent'])).status).toBe(0)
+  expect((await run(cli, home, ['validate', 'badCycle', '--agent'])).stdout).toContain('Circular token reference')
+  for (const path of ['invalid', 'invalidNamespace', 'invalidShared']) {
+    const result = await run(cli, home, ['get', path, '--project', 'demo', '--agent'])
+    expect(result.status).toBe(1)
+  }
+  expect(existsSync(effect)).toBe(false)
+  expect((await run(cli, home, ['edit', 'start', '--content', 'Updated {{~brokenFile~}}', '--agent'])).status).toBe(0)
+  expect(
+    (
+      await run(cli, home, [
+        'add',
+        'newCaller',
+        '--content',
+        '{{~brokenScript~}}',
+        '--type',
+        'prompt',
+        '--shared',
+        '--agent',
+      ])
+    ).status,
+  ).toBe(0)
+})
+
+test('reports each underlying validation failure once across immediate and deferred paths', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'validation-count-home')
+  await config(home, {
+    $schemaVersion: 2,
+    fileChain: '{{middle}}',
+    middle: '{{brokenFile}}',
+    brokenFile: '<root>/missing.txt',
+    both: '{{middle}} {{~brokenFile~}}',
+    cycleChain: '{{a}}',
+    a: '{{b}}',
+    b: '{{a}}',
+    branches: '{{middle}} {{brokenReference}}',
+    brokenReference: '{{absent}}',
+  })
+  for (const path of ['fileChain', 'both', 'cycleChain']) {
+    const result = await run(cli, home, ['validate', path, '--agent'])
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('woof found 1 problem.')
+    const problem = path === 'cycleChain' ? /Circular token reference/g : /cannot load/g
+    expect(result.stdout.match(problem)).toHaveLength(1)
+  }
+  const branches = await run(cli, home, ['validate', 'branches', '--agent'])
+  expect(branches.status).toBe(1)
+  expect(branches.stdout).toContain('woof found 2 problems.')
+  expect(branches.stdout).toContain('missing.txt')
+  expect(branches.stdout).toContain('absent')
+})
+
 test('applies project overrides after merging while preserving inherited lookup', async ({
   cli,
   directory,

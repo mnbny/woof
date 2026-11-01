@@ -14,7 +14,7 @@ import {
 } from '../utils/presentation.ts'
 import { checkoutPath, selectedProjectText, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, preflightToken, splitProjectAddress } from '../utils/tokens.ts'
+import { createTokenGraph, preflightToken, preflightTokenGraph, splitProjectAddress } from '../utils/tokens.ts'
 
 export default defineCommand({
   args: {
@@ -88,35 +88,20 @@ export default defineCommand({
         query = selected
       }
       const project = selectedProjectText(context) ?? 'none (shared tokens only)'
-      if (query) {
-        let explanation
-        try {
-          explanation = preflightToken(graph, query)
-        } catch (error) {
-          // A broken token is a problem in the configuration. An unknown address stays an invocation error.
-          if (!graph.tokens.has(qualified?.path ?? query)) throw error
-          return fail('woof found 1 problem.', error instanceof Error ? error.message : String(error), 'it')
-        }
-        const path = explanation.requested
-        const references = explanation.tokens.length - 1
+      const path = query ? splitProjectAddress(query).path : undefined
+      // Unknown addresses are invocation errors, not problems in a stored token.
+      if (path && !graph.tokens.has(path)) preflightToken(graph, query)
+      const validation = preflightTokenGraph(graph, query ? [query] : [...graph.tokens.keys()])
+      const problems = validation.problems
+      if (problems.length) {
+        const count = problems.length === 1 ? '1 problem' : `${problems.length} problems`
+        const details = problems.length === 1 ? problems[0]! : problems.map(problem => `- ${problem}`).join('\n')
+        return fail(`woof found ${count}.`, details, problems.length === 1 ? 'it' : 'them')
+      }
+      if (path) {
+        const references = validation.tokens.length - 1
         const referenced = references === 1 ? '1 referenced token' : `${references} referenced tokens`
         return valid(`${inlineCodeText(path)} is valid${references ? `, with ${referenced}` : ''}.`, project)
-      }
-
-      // The complete catalog reports every token problem at once, so one pass of fixes can succeed.
-      const problems = new Set<string>()
-      for (const path of graph.tokens.keys()) {
-        try {
-          preflightToken(graph, path)
-        } catch (error) {
-          problems.add(error instanceof Error ? error.message : String(error))
-        }
-      }
-      if (problems.size) {
-        const count = problems.size === 1 ? '1 problem' : `${problems.size} problems`
-        const details =
-          problems.size === 1 ? [...problems][0]! : [...problems].map(problem => `- ${problem}`).join('\n')
-        return fail(`woof found ${count}.`, details, problems.size === 1 ? 'it' : 'them')
       }
       const count = graph.tokens.size
       valid(
