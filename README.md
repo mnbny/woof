@@ -112,6 +112,7 @@ Next, fill it up. woof is only as good as the tokens you give it, so start with 
 Then put them to work:
 
 - **"What does woof have for code review?"** It searches names, descriptions, and tags, and shows you what fits.
+- **"Use the woof token for code review."** It fetches the matching token and follows its instructions.
 - **"Use woof to commit this."** It finds your commit convention and follows it.
 - **"Set up woof for this repo."** It creates the repo's woof configuration, committed or private. Your call.
 
