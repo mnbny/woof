@@ -48,4 +48,4 @@ General lookup reaches every resource. No familiar shortcuts exist, such as a di
 
 ### Authoring interfaces
 
-woof creates empty project configurations, adds tokens, and edits the content, description, and tags of a token. People edit in a local browser page. Authors rename, move, and remove tokens directly in the source files. No hosted service, provider tooling, semantic search, or other authoring system exists. Their scope and priority are owner decisions. These decisions include which other authoring operations go through woof.
+woof creates empty project configurations and adds tokens. It edits the content, description, tags, and export privacy of a token. People edit in a local browser page. Authors rename, move, and remove tokens directly in the source files. No hosted service, provider tooling, semantic search, or other authoring system exists. Their scope and priority are owner decisions. These decisions include which other authoring operations go through woof.

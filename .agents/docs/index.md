@@ -73,7 +73,7 @@ Add each document using this format:
 
 #### [cli-command-edit.md](./cli-command-edit.md)
 
-- Description: Changes to one token's content, description, or tags, the layer choice, the local browser page, and the agent handoff.
+- Description: Changes to one token's content, metadata, or export privacy, the layer choice, the local browser page, and the agent handoff.
 - Tags: `edit`, `authoring`
 
 #### [cli-command-get.md](./cli-command-get.md)
@@ -98,7 +98,7 @@ Add each document using this format:
 
 #### [cli-command-export.md](./cli-command-export.md)
 
-- Description: Project archive assembly, destination naming, and export report.
+- Description: Project dependency selection, archive assembly, destination naming, and export report.
 - Tags: `export`
 
 #### [cli-command-import.md](./cli-command-import.md)
@@ -123,8 +123,8 @@ Add each document using this format:
 
 #### [tokens.md](./tokens.md)
 
-- Description: Design-token lineage, token tiers and modes, project overlay, references, preflight and provenance, and discovery rules.
-- Tags: `tokens`, `design-tokens`, `resolution`, `discovery`
+- Description: Design-token lineage, project overlay, references, private placeholders, preflight and provenance, and discovery rules.
+- Tags: `tokens`, `design-tokens`, `resolution`, `discovery`, `privacy`
 
 #### [scripts.md](./scripts.md)
 
@@ -133,8 +133,8 @@ Add each document using this format:
 
 #### [sharing.md](./sharing.md)
 
-- Description: Portable archive content, import review semantics, remapping, decisions, and application safety.
-- Tags: `sharing`, `export`, `import`
+- Description: Project bundle scope, private content, import review semantics, remapping, decisions, and application safety.
+- Tags: `sharing`, `export`, `import`, `privacy`
 
 #### [questions-brief.md](./questions-brief.md)
 

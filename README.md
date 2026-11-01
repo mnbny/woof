@@ -83,7 +83,7 @@ Edits, sharing, and repo setup work the same way. Your agent proposes, and you a
 
 If you can commit to a repo, like `acme`, keep its woof configuration there, and Git shares it with your team. Client repos are another story. Your agent instructions don't always belong in someone else's codebase, but your coworkers on that client could still use them. So keep the configuration in your woof home instead, like `globex`, and share it as a file.
 
-Ask your agent to export it. woof packs `globex`, your shared tokens, and every file they use into one zip:
+Ask your agent to export it. woof packs the tokens and files `globex` needs into one zip:
 
 <img src=".github/assets/readme/export.jpg" alt="you: share my globex setup with sam. agent: runs woof export --project globex, saves ~/.woof/exports/globex.woof.zip, and says to send it to Sam.">
 
@@ -92,6 +92,8 @@ On Sam's side, anything new comes straight in. Anything that differs from what S
 <img src=".github/assets/readme/import.jpg" alt="sam: import globex.woof.zip. agent: runs woof import globex.woof.zip, says git.commit is different from theirs, and asks to keep yours, take theirs, or save theirs under a new name. sam: keep mine.">
 
 Before it writes anything, woof saves a backup.
+
+For values Sam should supply, like staging credentials, ask your agent to mark the token private before you share it. Sam gets a placeholder to fill in.
 
 ## Getting started
 
@@ -204,6 +206,20 @@ Set `$type` to `bash`, `node`, `tsx`, or `bun`, and `$exec` becomes the script. 
 ```
 
 The script runs in the repo root, and its output becomes the value. `$exec` can also be a file, like `"<root>/scripts/checks.sh"`, or a list of scripts that run in order and stop at the first failure.
+
+### Private values
+
+You might keep `globex`'s staging accounts in woof. Ask your agent to mark that token private before you share it with Sam. It adds `$private` to the token:
+
+```json
+{
+  "$type": "prompt",
+  "$exec": "user1:pass user2:pass",
+  "$private": true
+}
+```
+
+You still get the real value locally. The export replaces it with `{{-woof:private-}}`. Sam can import the configuration and ask their agent to fill in their own value. Until then, woof warns whenever their agent uses the token.
 
 ### Projects
 
@@ -335,6 +351,7 @@ And `acme`'s repo config:
 | `$exec` | A resource | Prompt text, script source, or a `<root>/` or `<repo>/` file. Scripts also take a list. |
 | `$description` | A resource | Optional text for search |
 | `$tags` | A resource | Optional list of strings for search |
+| `$private` | A resource | Optional boolean. `true` replaces the content with `{{-woof:private-}}` on export. |
 | `$projects` | Your shared file | Private projects by name: inline, or a `<root>/` path to the project's own file, like `initech` |
 | `$metadata` | A private project | Optional `$basePaths` and `$worktreePaths` |
 | `$basePaths` | `$metadata` | Paths that select the project, including everything below them |
@@ -350,6 +367,7 @@ And `acme`'s repo config:
 - Shared tokens must resolve without a project. They can't reference project-only tokens or `<repo>` files.
 - An override replaces the whole token, including its description and tags. A project can't replace a shared namespace with a token, or a token with a namespace.
 - A missing reference or a cycle fails before any script runs. A token that references itself is a cycle.
+- `{{-...-}}` is reserved for internal markers. Add and import remapping reject token addresses that produce this syntax, such as `-draft-`. Write `{{{{-woof:private-}}}}` to show the private marker literally.
 - A checkout holds one repo config: `woof.config.json`, `.agents/woof.config.json`, or `.claude/woof.config.json`. Two different files fail.
 - Every config file declares `"$schemaVersion": 2`. woof never upgrades a file on its own. When it asks for a migration, rerun the command with `--migrate`.
 
@@ -361,8 +379,8 @@ Your agent runs these as `npx @mnbny/woof <command>`. Add `--help` to any comman
 | --- | --- | --- |
 | `woof readme` | Prints this guide. Agents run it first. | — |
 | `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>` |
-| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, and one of `--shared`, `--repo`, or `--project <name>` |
-| `woof edit [path]` | Changes a token's content, description, or tags | `--content`, `--description`, `--tag`, `--shared` or `--override`, `--project <name>` |
+| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
+| `woof edit [path]` | Changes a token's content, description, tags, or privacy | `--content`, `--description`, `--tag`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
 | `woof init [location]` | Creates a repo config or a private project | `--repo`, or `--name <name>` with `--base-path` and `--worktree-path` |
 | `woof projects` | Shows which project the current directory selects, and lists private projects | — |
 | `woof explain [path]` | Traces how a token resolves, without running scripts | `--project <name>` |
@@ -377,6 +395,7 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - `--content` takes text, the path of an existing file, or `-` to read standard input.
 - `--tag`, `--base-path`, and `--worktree-path` repeat: `--tag git --tag commits`.
 - In `edit`, an empty `--description` or `--tag` removes it. `--shared` changes a shared token for every project, and `--override` overrides it in the selected project only.
+- `--private` on `add` or `edit` sets `$private: true`. `edit --no-private` removes the field. Other edits preserve the privacy setting. Disabling privacy alone on an already public definition makes no change.
 - A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone.
 
 #### Agent mode and exit status
@@ -386,6 +405,15 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - When a command needs a decision, it prints the choices and the exact command to continue, writes nothing, and exits with status 1.
 - `get` prints the value exactly as resolved, so you can pipe it.
 - Exit status is `0` on success, `1` on a failure or a handoff, and `130` on a cancellation.
+
+#### Export and import
+
+- Export starts with the selected project's tokens and follows their references after applying overrides. It omits unrelated shared tokens, overridden defaults, and unused files. An empty project exports no shared tokens.
+- A shared token that depends on a project override, directly or through another token, exports as a project token. Independent shared dependencies stay shared.
+- For each exported token with `$private: true`, woof replaces `$exec` with `{{-woof:private-}}` and keeps the token's address, type, metadata, and privacy flag. Files and references used only by the omitted content stay out of the archive.
+- Privacy applies only to the marked token. An unmarked token can still export the same file. Local values and source files stay unchanged, and recovery backups retain private values.
+- Import warns about placeholders and continues. A differing value at the same address in the same layer needs conflict review. A new project token is added even if it overrides a shared token.
+- Each lookup that reaches a private placeholder names the token, asks for its value, and warns on stderr. Replacing the marker with `woof edit` stops the warning and preserves the privacy flag.
 
 ### Scripts
 
@@ -409,6 +437,7 @@ A script token runs each time your agent gets it, and whatever it prints becomes
 
 - Scripts run in the selected project's checkout, the same root as `<repo>`. Without one, they run in the current repo root, or in the current directory outside a repo.
 - A list of scripts runs in order and stops at the first failure.
+- A private placeholder returns a request for the missing value without starting a runtime. If any entry in a script list is a placeholder, none of the list runs.
 - The first `tsx` or `bun` run may need the network.
 - If a script fails, the lookup fails. woof doesn't undo what a script already did, and there's no timeout.
 - Only `get` runs scripts. Searching, `explain`, and `validate` never do.
