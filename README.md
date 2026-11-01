@@ -471,3 +471,12 @@ pnpm test
 ```
 
 Design notes for contributors and agents live in [`.agents/docs/`](.agents/docs/index.md).
+
+## ...and why "woof"?
+
+<table>
+  <tr>
+    <td>After this interaction, I refer to my agents as woof.</td>
+    <td><!-- screenshot --></td>
+  </tr>
+</table>
