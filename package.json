@@ -13,7 +13,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "woof": "./cli/woof.bundle.mjs"
+    "woof": "cli/woof.bundle.mjs"
   },
   "files": [
     "cli/woof.bundle.mjs",
