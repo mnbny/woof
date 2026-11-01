@@ -1,9 +1,6 @@
-Exported {{project}} without executing scripts.
+Exported {{project}}.
 
-Project: {{project}}
 Archive: {{archive}}
-Resources: {{resources}}
+Files: {{files}}
 
-Use only the result relevant to the current request. Preserve the user's task and scope.
-
-Import this archive with woof import {{archiveArgument}} --agent.
+Import it with woof import {{archiveArgument}} --agent.

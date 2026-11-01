@@ -9,10 +9,10 @@ import { parseArgs } from 'node:util'
 import { isAgent } from '../utils/agent.ts'
 import { createBundleArchive } from '../utils/bundles.ts'
 import { validateConfigurationDocument } from '../utils/config.ts'
-import { shellQuote } from '../utils/display.ts'
+import { fieldsText, inlineCodeText, shellQuote } from '../utils/display.ts'
 import { getWoofHome } from '../utils/paths.ts'
-import { presentError, presentResult } from '../utils/presentation.ts'
-import { selectProjectContext } from '../utils/projects.ts'
+import { chooseOption, presentCancel, presentCode, presentError, presentResult } from '../utils/presentation.ts'
+import { checkoutPath, loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
 
@@ -49,13 +49,29 @@ export default defineCommand({
           project: { type: 'string' },
         },
       })
-      if (positionals.length) throw new Error('Export accepts no positional arguments; use --project NAME.')
-      const projectName = values.project
+      if (positionals.length)
+        throw new Error(`Export accepts no positional arguments; use ${inlineCodeText('--project NAME')}.`)
+      const agent = values.agent === true || Boolean(isAgent())
+      let projectName = values.project
+      // A person at a terminal picks the registered project. Other callers name it.
+      if (!projectName && !agent && process.stdout.isTTY) {
+        const loader = createResourceLoader({ cwd: process.cwd() })
+        const projects = loadRegisteredProjects(loader.loadRootConfiguration(), loader)
+        if (!projects.length)
+          throw new Error(`No project is registered. Register one with ${inlineCodeText('woof init')}.`)
+        projectName = await chooseOption({
+          message: 'Project to export',
+          options: projects.map(project => {
+            const path = checkoutPath(project)
+            return { value: project.name, label: project.name, ...(path ? { hint: path } : {}) }
+          }),
+        })
+        if (!projectName) return presentCancel('Export cancelled. Nothing was written.')
+      }
       if (!projectName)
         throw new Error(
-          'Export requires an explicit registered --project; repository-defined projects cannot be exported.',
+          `Name the project with ${inlineCodeText('--project NAME')}. See the registered projects with ${inlineCodeText('woof projects')}. A repository project cannot be exported.`,
         )
-      const agent = values.agent === true || Boolean(isAgent())
 
       const context = selectProjectContext({
         project: projectName,
@@ -65,7 +81,8 @@ export default defineCommand({
       if (!project || project.kind !== 'registered')
         throw new Error('Repository-defined projects cannot be exported; select a registered home project explicitly.')
       const definition = context.root.data.$projects?.[projectName]
-      if (!definition) throw new Error(`Registered project ${projectName} has no exportable definition.`)
+      if (!definition)
+        throw new Error(`Registered project ${inlineCodeText(projectName)} has no exportable definition.`)
 
       const originalConfiguration = validateConfigurationDocument(
         { ...context.root.data, $projects: { [projectName]: definition } },
@@ -87,7 +104,7 @@ export default defineCommand({
       function add(path: string, data: Uint8Array) {
         const existing = resources.get(path)
         if (existing && !Buffer.from(existing.data).equals(Buffer.from(data)))
-          throw new Error(`Export resources collide at ${path}. Choose distinct source paths.`)
+          throw new Error(`Export resources collide at ${inlineCodeText(path)}. Choose distinct source paths.`)
         resources.set(path, { path, data })
       }
       for (const validation of validations) {
@@ -143,29 +160,27 @@ export default defineCommand({
       const destination = writeUniqueArchive(projectName, archive)
       presentResult(
         {
-          summary: `Exported ${projectName} without executing scripts.`,
-          details: [`Project: ${projectName}`, `Archive: ${destination}`, `Resources: ${resources.size}`].join('\n'),
-          recovery: `Import this archive with woof import ${shellQuote(destination)}${agent ? ' --agent' : ''}.`,
+          summary: `Exported ${inlineCodeText(projectName)}.`,
+          details: fieldsText([
+            ['Archive', destination],
+            ['Files', String(resources.size)],
+          ]),
         },
         {
           template: 'export-result',
           values: {
             project: projectName,
             archive: destination,
-            resources: resources.size,
+            files: resources.size,
             archiveArgument: shellQuote(destination),
           },
         },
       )
+      presentCode('Import it with', `woof import ${shellQuote(destination)}`, null)
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)
       presentError(
-        {
-          summary: 'woof could not export the project.',
-          details,
-          recovery:
-            'Select an explicit registered project, correct any missing resources or invalid references, then retry. Source configuration was not changed.',
-        },
+        { summary: 'woof could not export the project.', details },
         { template: 'export-error', values: { details } },
       )
       process.exitCode = 1
