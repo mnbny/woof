@@ -65,5 +65,6 @@ Preflight records the provenance of each reachable token: origin, source, root, 
 Discovery helps callers choose a resource before they retrieve or run it. Exact lookup and discovery stay separate. Discovery never resolves a match, even a unique match.
 
 - Discovery ranks fuzzy matches against the path, description, and tags of each token in the effective view, and against the target of each alias.
+- Without terms, discovery lists the project tokens first, then the shared tokens. Each group is in alphabetical order.
 - Discovery never reads bodies, evaluates references, or runs scripts. It has no result cap.
 - Each candidate has a kind: prompt, alias, or a script runtime. An alias candidate names its target.

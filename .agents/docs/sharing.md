@@ -14,14 +14,28 @@ When woof reads an archive, it checks entry names, sizes, and checksums. It also
 
 ## Review
 
-Import compares the archive with the local home. It reviews each difference one item at a time. The items are shared tokens, the project entry, project tokens, project metadata, and files. An identical item at the same address needs no decision.
+Import compares the archive with the local home. The items are shared tokens, the project entry, project tokens, project metadata, and files.
+
+These items need no decision:
+
+- An identical item at the same address.
+- An incoming item that does not exist locally, unless the next list includes it. Import takes it.
+- A file that only the decided tokens use. It follows their decisions. This applies to a token file that no other local token reads, and to the project configuration file that no other project shares.
+- A checkout file that export copied into the archive, when the local token still reads the file from the checkout and the content is the same.
+
+Import reviews these items one at a time:
+
+- A conflict: an item that exists on both sides and differs.
+- An incoming item that matches a local item that it could reuse.
+- An incoming item that must use a new path.
+- An item with an earlier decision that a later choice reopened.
 
 Each item offers the choices that apply to it:
 
-- **Keep existing** keeps the local item, or declines an addition.
-- **Take incoming** adds or replaces the item. If taking a shared token can affect existing projects, the review names those projects.
+- **Keep existing** keeps the local item, or declines an item that the review shows.
+- **Take incoming** adds or replaces the item. If local projects use a shared token through their own tokens, the review names those projects.
 - **Add as new** stores the item at an unused token address or home path. A file must use a new path if remapping changes its content or if the file belongs to an added token.
-- **Reuse existing** maps the item to a local item with identical type and content. The local item keeps its metadata.
+- **Reuse existing** maps the item to a local item at another address with identical type and content. The local item keeps its metadata.
 
 Project metadata and project override bindings allow only keep or take.
 

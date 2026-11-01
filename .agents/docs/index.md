@@ -53,8 +53,8 @@ Add each document using this format:
 
 #### [cli.md](./cli.md)
 
-- Description: Command set, invocation and startup order, presentation and exit status, and distribution.
-- Tags: `cli`, `commands`, `distribution`
+- Description: Command set, invocation and startup order, presentation conventions and exit status, and distribution.
+- Tags: `cli`, `commands`, `presentation`, `distribution`
 
 #### [cli-command-readme.md](./cli-command-readme.md)
 
@@ -83,7 +83,7 @@ Add each document using this format:
 
 #### [cli-command-projects.md](./cli-command-projects.md)
 
-- Description: Registered project list and report of the current selection.
+- Description: Summary of the detected project and the registered projects.
 - Tags: `projects`
 
 #### [cli-command-explain.md](./cli-command-explain.md)

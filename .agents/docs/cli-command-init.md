@@ -8,19 +8,19 @@ Init creates an empty project configuration. It creates a repository configurati
 
 - The repository option selects a repository configuration. An optional argument names one of the recognized locations in the checkout.
 - The name option selects a registered project and supplies its name.
-- The base path and worktree pattern options add project metadata. They can repeat. They apply only to a registered project.
+- The base path and worktree path options add project metadata. They can repeat. They apply only to a registered project.
 
 The repository option cannot be combined with the name option or the path options.
 
 ## Behavior
 
-1. If the target is missing, a human chooses it. Outside a checkout, the target is always a registered project. Other callers receive the exact command for each target.
-2. A repository configuration needs a checkout. Inside woof home, init refuses, because woof ignores repository configuration there. If the location is missing, a human chooses it. Other callers receive the command for each location.
+1. If the target is missing, a human chooses it. Outside a checkout, the target is always a registered project. Other callers receive the command for each target.
+2. A repository configuration needs a checkout. Inside woof home, init refuses, because woof ignores repository configuration there. If the location is missing, a human chooses it. Other callers receive one command and the list of locations.
 3. A registered project needs a name. A human enters it. The suggestion is the checkout folder name, if that name is a valid token name. Other callers receive a command with a name placeholder.
-4. If no path options are given, a human enters base paths and worktree patterns. The base path suggestion is the current checkout, relative to the home directory when possible. Paths are optional. Without paths, only the project option selects the project.
+4. If the caller gives no path options, a human enters base paths and worktree paths. The suggested base path is the current checkout. Outside a checkout, the suggestion is the current directory. woof shows the suggestion relative to the home directory when possible. Paths are optional. Without paths, only the project option selects the project.
 5. A repository configuration holds only the current schema version. Init never replaces a repository configuration in any recognized location.
 6. A registered project is an inline entry in the root configuration. It holds only the given metadata. Init replaces the root configuration atomically and keeps its other content, key order, and file mode. Init never replaces a registered project.
 
 ## Output and exit status
 
-On success, init reports the created file and the add command for the new project. For a registered project, init also reports the paths and how woof selects the project. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.
+On success, init reports the created file and the add command for the new project. For a registered project, init also reports the paths. The agent result also tells how woof selects the project. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation shows a warning and exits with status 130.

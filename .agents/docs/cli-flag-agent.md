@@ -18,9 +18,9 @@ Human mode and agent mode run the same operations. Agent mode changes only prese
 
 If the input is complete and authorized, the command runs the operation directly. If a decision is missing, the command returns the decision to the conversation as a handoff:
 
-- If several projects match, the command returns the candidates with exact retry commands.
-- Discovery returns candidates with exact follow-up commands. Discovery never runs a match.
-- Import review returns a decision document for the next unresolved item.
+- If several projects match, the command returns the project names and one retry command.
+- Discovery returns one line for each candidate and one command that resolves a candidate. Discovery never runs a match.
+- Import review returns a decision document for the next item that needs a decision.
 
 Explicit permission that the user already gave in the conversation stays valid. Defaults and terminal availability do not imply consent. Migration still requires its explicit flag. Invalid arguments fail before the command acts.
 

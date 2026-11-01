@@ -17,7 +17,7 @@ woof has no dependency installer. woof does not analyze script dependencies.
 ## Execution
 
 - A marked execution value runs as a file. Any other value runs as inline source.
-- Scripts run as child processes in the detected checkout root. Without a checkout, scripts run in the caller's directory.
+- Scripts run as child processes in the checkout of the selected project. The projects domain decides that checkout. Without that checkout, scripts run in the checkout or the directory of the caller.
 - Array entries run in sequence. Each entry starts from the same directory and environment. The first failure stops the remaining entries. Directory and environment changes do not pass to the next entry.
 - Each child process runs noninteractively, with quiet package-manager settings. Its error output goes to woof's standard error.
 

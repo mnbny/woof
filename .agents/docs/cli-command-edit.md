@@ -2,34 +2,42 @@
 
 ## Purpose and ownership
 
-Edit changes the content, description, or tags of one token. People edit in a local browser page. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
+Edit changes the content, description, or tags of one token. People edit prompt content in a local browser page. They edit the description and tags in the terminal. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
 
 ## Inputs
 
 - The path of a token in the effective view, and an optional registered project.
 - The changes: new content, a description, or a tag set. A flag that is not given keeps its field. An empty description or an empty tag removes that field.
-- A layer, when a project context shows a shared token: change the shared token for every project, or add an override in the project.
+- A layer, when a project context shows a shared token: change the shared token for all projects, or add an override for this project only.
 
 ## What changes
 
 - Inline content changes in the configuration.
 - A prompt file changes in place. An override keeps its text inline, so the shared file stays the same.
-- A script file stays outside woof. Edit shows the file, and changes only the description and tags.
+- Edit does not change the content of a script file. Edit shows commands that open the file. For a script, edit changes only the description and tags.
+- An override of a script gets its own copy of the script files, so a change to the copy stays in the project. A repository keeps the copies next to its configuration. A registered project keeps them in woof home. If the edit does not finish, woof removes the copies.
 
 Edit runs the same checks as add, and writes nothing until all checks pass. Edit also refuses a change when the token changed after it was opened.
 
 ## People
 
-A person without change flags picks the token from a searchable list and chooses the layer when needed. Then woof opens a local page in the default browser and shows its address. The page shows the description, the tags, and the content. A second tab shows a Markdown preview. Raw HTML in the preview shows as text. For a script file, the page lists commands that open the file in common editors.
+A person without change flags picks the token from the same search picker as get. An inexact path opens the picker with the path as the search. If a layer choice applies, the person then chooses the layer.
 
-A failed save shows the reason on the page and keeps the changes. A save or a cancellation closes the page server. The page also closes after 30 minutes without activity.
+The content comes first:
+
+- For a prompt, woof shows the page address and opens the page in the default browser after a short countdown. The page shows the content and a second tab with a Markdown preview. Raw HTML in the preview shows as text.
+- For a script file, woof lists commands that open the file in common editors and continues.
+
+On the page, a save checks the content and returns it to the terminal. A failed check shows the reason on the page, marks the content, and keeps the changes. A save or a cancellation closes the page server. The page also closes after 30 minutes without activity.
+
+Then the terminal asks for the description and the tags, with the current values filled in. woof writes all changes once, at the end.
 
 The page server listens only on the local loopback address. It answers only requests that use the address host, the page origin, and a secret path. The page runs only its own script, and loads only pinned daisyUI styles.
 
 ## Agents
 
-An agent without changes receives the current token: the type, the layer, the files, the description, the tags, and the content. The handoff tells the agent to work out the change from the conversation, to show the user the current and the new version, and to apply the change only after approval. It gives the exact command, with the content on standard input.
+An agent without changes receives the current token: the type, the layer, the files, the description, the tags, and the content. The handoff tells the agent to draft the change from the conversation, to show the user the current and the new version, and to apply the change only after approval. It gives the exact command, with the content on standard input. For a script, the override flag alone creates the override with its own copy of the script files. The agent then edits the copy.
 
 ## Output and exit status
 
-On success, edit reports the configuration file, the content file that changed, the layer, and a command to check the token. If the new values match the current token, edit reports that nothing changed. A handoff or a failure exits with status 1 and writes nothing. A cancellation exits with status 130. An expired page exits with status 1.
+On success, edit reports the configuration file, the content file that changed, the layer, and a command to check the token. If the new values match the current token, edit shows a warning that nothing changed. A cancellation is also a warning. A handoff or a failure exits with status 1 and writes nothing. A cancellation exits with status 130. An expired page exits with status 1.

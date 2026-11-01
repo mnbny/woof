@@ -35,7 +35,8 @@ A project token at the path of a shared token is an override. Add reports it.
 ## Flow
 
 - A human answers one question for each missing input: target, path, type, content, description, and tags. Each answer is checked at once. After a failure, add shows the reason and asks the same question again.
-- An agent without complete input receives a drafting handoff. The handoff tells the agent to work out the token from the conversation, to search for a similar token, to show the draft to the user, and to save only after approval. It lists the existing namespaces, the targets, and the exact command.
+- The target choices are the shared tokens and the detected project. If woof detects no project, the choices are the shared tokens and all registered projects, or the matching projects if several match.
+- An agent without complete input receives a drafting handoff. The handoff tells the agent to draft the token from the conversation, to search for a similar token, to show the draft to the user, and to save only after approval. It lists the existing namespaces, the same targets as the human question, and the exact command.
 - With complete input, add reports every problem that it finds in one message.
 - Add checks again when it saves, because the configuration can change during the questions. The save replaces the document atomically and keeps its other content.
 

@@ -33,7 +33,7 @@ These items are outside the product: provider installers, hosted services, publi
 ## Vocabulary
 
 - **woof home:** the personal directory that holds the root configuration, registered project files, home resources, and exports. `<root>` refers to woof home.
-- **Checkout:** the Git repository or linked worktree that contains the caller's directory. `<repo>` refers to the checkout root. Computed scripts run in the checkout root.
+- **Checkout:** the Git repository or linked worktree of the selected project, usually the one that contains the caller's directory. `<repo>` refers to its root. Computed scripts run there.
 - **Root configuration:** the document in woof home that holds shared tokens and the project registry.
 - **Registered project:** a named entry in the project registry. The entry is inline or refers to a separate configuration file in woof home.
 - **Repository project:** a project without a name, defined by a configuration file in a checkout.

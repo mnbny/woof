@@ -2,7 +2,7 @@
 
 ## Purpose and ownership
 
-Projects lists the registered projects. It also shows which context the current directory selects. It reads configuration only. It never reads token bodies. The projects domain owns the selection rules.
+Projects summarizes the projects that woof knows: the project that the current directory selects, and the registered projects. It reads configuration only. It never reads token bodies. The projects domain owns the selection rules.
 
 ## Inputs
 
@@ -12,8 +12,10 @@ Projects takes no arguments other than the global flags. It does not accept a pr
 
 Projects reports these items:
 
-- The selection kind for the current directory, the current scope, and the matching candidates. Projects marks an unnamed repository scope as not exportable. For a repository scope, projects also reports the repository configuration file. Projects reports these items also when no registered projects exist.
-- For each registered project: inline or referenced storage, the configuration file, the resource root, checkout paths with the home directory expanded, and worktree patterns.
-- If no registered projects exist, guidance to create a project with init.
+- A summary: the current project and why woof selected it, several matching projects, or no project. Without a project, only shared tokens apply.
+- The current project first, marked as current. A repository project takes the name of its checkout folder.
+- Each registered project. A registered project that covers the directory but is not current is marked as a match.
+- For each project, its configuration file, marked as inline when the project is stored in the root configuration. For a registered project, each base path and worktree path, with the home directory expanded.
+- If no project exists, the command that creates one.
 
-Projects lists ambiguous matches without a prompt. It persists no selection. If a configuration cannot load, projects exits with status 1.
+Projects gives no instructions and asks no questions. If a configuration cannot load, projects exits with status 1.

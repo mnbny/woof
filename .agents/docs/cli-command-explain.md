@@ -6,7 +6,7 @@ Explain shows how one token resolves. It runs nothing. It helps people and agent
 
 ## Inputs
 
-Explain takes exactly one token address. It also takes an optional registered project, from the project option or a qualified address.
+Explain takes one token address. It also takes an optional registered project, from the project option or a qualified address. If the address is missing or inexact, a person at a terminal picks the token in the search picker of get, with the address as the search. An agent must give the address.
 
 ## Behavior
 
@@ -16,7 +16,7 @@ Explain selects the project in the same way as lookup. Then explain preflights t
 
 Explain reports these items:
 
-- The selection kind, the selected project or the root-only scope, and the requested address.
-- For each reachable token: its kind, origin, source file, resource root, the shared definition that it overrides, description, tags, references, and resolved resource files.
+- The selected project and the reason for the selection, or that only shared tokens apply.
+- The requested token first, then each token that it reaches, in the order of the references, with an arrow between tokens. For each token, explain shows its scope badge, its runtime badge if it is a script, its source file, the shared definition that it overrides, its description, tags, references, and resolved resource files.
 
 If a reference is missing or forms a cycle, explain reports the reference chain and exits with status 1.

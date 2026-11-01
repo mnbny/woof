@@ -6,7 +6,7 @@ Export packages one registered project, so that another woof home can import it.
 
 ## Inputs
 
-Export requires a registered project name. It accepts no positional arguments. Export refuses repository projects.
+Export needs a registered project name. A person at a terminal without the project option picks the project from the registered projects. An agent must name the project. Export accepts no positional arguments and refuses repository projects.
 
 ## Behavior
 
@@ -17,4 +17,4 @@ Export requires a registered project name. It accepts no positional arguments. E
 
 ## Output and exit status
 
-On success, export reports the project, the archive location, the resource count, and an import follow-up command. Export never overwrites an existing archive. It never changes the source configuration and never runs scripts. A failure exits with status 1.
+On success, export reports the archive location, the file count, and the import command. Export never overwrites an existing archive. It never changes the source configuration and never runs scripts. A failure exits with status 1.

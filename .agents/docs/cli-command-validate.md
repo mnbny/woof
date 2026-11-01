@@ -6,7 +6,7 @@ Validate checks a token catalog and does not run scripts. People and agents use 
 
 ## Inputs
 
-Validate takes an optional token address. It also takes an optional registered project, from the project option or a qualified address.
+Validate takes an optional token address. It also takes an optional registered project, from the project option or a qualified address. If the address is inexact, a person at a terminal picks the token in the search picker of get, with the address as the search.
 
 ## Behavior
 
@@ -17,4 +17,6 @@ Validate takes an optional token address. It also takes an optional registered p
 
 ## Output and exit status
 
-On success, validate reports the number of inspected definitions, the selection, the project, and the scope. Validation stops at the first failure. Validate reports the source or the reference chain of the failure and exits with status 1. For a configuration failure, the guidance recommends a correction.
+On success, validate states that the catalog is valid. With an address, it states that the token is valid, and gives the number of tokens that the token references. It also reports the selected project with the reason for the selection.
+
+Without an address, validate reports every token problem at once, so that one pass of fixes can succeed. With an address, it reports the problem of that token. Each problem names the token and its configuration file, or the reference chain. If validate finds a problem, it exits with status 1. A configuration that cannot load stops validation. The guidance then recommends a correction.

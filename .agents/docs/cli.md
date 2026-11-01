@@ -22,8 +22,20 @@ After these checks, startup checks the configuration and applies an explicit mig
 
 ## Presentation and exit status
 
-- Human mode uses Clack for results, interactive choices, and import review.
-- Agent mode prints only text from markdown templates. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template.
+- Human mode uses Clack for results, interactive choices, and import review. Human presentation assumes a terminal with color and follows these conventions:
+  - Each choice has a label and a muted hint. For a scope, the hint gives the path that the choice stands for on this machine. For an action, the hint says in plain words what the action does. A hint gives information, not a status. In an action picker, the most common action comes first, so it is the default.
+  - The choices fit the context. If woof detects a project, the choices are the shared tokens and that project. If not, the choices are all registered projects, or the matching projects if several match.
+  - A text question or a picker is a short noun, such as "Token to get" or "Project to use". A text question can have a muted note, such as an example or "optional".
+  - A token address that is missing or inexact opens the token search picker, with the address as the search. A missing project opens a project picker.
+  - Token paths, project names, file paths in errors, example values, flags, and commands show as inline code in questions, errors, summaries, and follow-up hints.
+  - A token list marks the scope of each token with a badge: global for a shared token, project for a token of the selected project. A script token also has a badge with its runtime. Badge colors come from the 256-color palette, so every color terminal shows them the same.
+  - Result details are fields. Their values align in one column and are muted.
+  - The selected project shows with the reason for the selection, such as the repository configuration or a path match. A repository project takes the name of its checkout folder.
+  - A field with several paths lists one path per line. Its label is singular for one path. When the field has no path, woof leaves it out. For agents, the values of a field stay on one line.
+  - A success message reports a change. An outcome that changes nothing, such as a cancellation, is a warning.
+  - Errors say plainly what is wrong and which token or file is at fault. An error or a handoff does not add that nothing changed.
+  - A code block has a guide line above it and padding on all sides.
+- Agent mode prints only text from markdown templates. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template. Agents get the same choices and labels as people, with each path after its label. Agent text has no styles and no alignment. An agent list puts each item on its own bulleted line. A command that applies to all items follows the list once. Templates do not repeat the guidance of the execution skill.
 - Payloads, results, and reports go to standard output. Warnings, migration notices, the execution skill recommendation, and script error output go to standard error.
 - A failure exits with status 1. An interactive cancellation exits with status 130.
 - If a human has no terminal, woof returns the agent handoff and exits with status 1. woof does not report a cancellation in this case.

@@ -16,10 +16,12 @@ woof detects the checkout through Git. For this reason, each linked worktree is 
 1. An explicit registered project, from the project option or a qualified address. An unknown name causes a failure.
 2. The repository configuration of the current checkout. Inside woof home, woof skips this step.
 3. The single registered project whose metadata matches the caller's directory.
-4. If several projects match, a human chooses interactively. Other callers receive the candidates with exact retry commands.
+4. If several projects match, a human chooses interactively. Other callers receive the project names and one retry command.
 5. If no project matches, the root definitions apply alone. woof never invents a default project.
 
 woof never persists a selection. Each invocation selects again.
+
+Repository resources always come from the checkout of the selected project, and scripts run there. Inside the paths of the project, that checkout is the checkout of the caller's directory. When the caller names a registered project and runs outside the paths of that project, woof uses the base path of the project on this machine. If the project has no base path, its repository resources are unavailable. Scripts then run in the caller's checkout.
 
 ## Metadata matching
 
