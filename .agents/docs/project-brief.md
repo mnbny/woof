@@ -25,10 +25,10 @@ woof includes these parts:
 - Computed resources.
 - Migration, export, and import.
 - Human and agent presentation.
-- Standalone and local package execution.
+- Standalone execution, and package execution from npm through npx.
 - One project-owned execution skill, which ships with the package.
 
-These items are outside the product: provider installers, hosted services, publishing, semantic search, and a general collection of development skills. MAACS is a reference for shared development practices and invocation structure. Its catalogs are not part of woof.
+These items are outside the product: provider installers, hosted services, semantic search, and a general collection of development skills. MAACS is a reference for shared development practices and invocation structure. Its catalogs are not part of woof.
 
 ## Vocabulary
 
@@ -43,5 +43,5 @@ These items are outside the product: provider installers, hosted services, publi
 - **Effective view:** the root tokens, with the tokens of the selected project on top.
 - **Discovery:** a search over metadata only, in the effective view.
 - **Migration:** an explicit startup upgrade of configuration documents to the current schema version. Migration keeps the original bytes for rollback.
-- **Export and import:** export packages a registered project as a portable archive. Import applies an archive after a review of every item.
+- **Export and import:** export packages a registered project as a portable archive. Import applies an archive after a review of each item that needs a decision.
 - **Handoff:** plain output that returns a pending decision to the caller. A handoff replaces a terminal question.

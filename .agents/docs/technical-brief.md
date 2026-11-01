@@ -5,8 +5,8 @@
 woof is written in TypeScript and runs on Node.js. Three entry points have the same behavior:
 
 - Source execution loads TypeScript through tsx. It resolves dependencies from the woof checkout, so it works from any caller directory.
-- The standalone bundle is one generated module. It embeds the runtime code. It reads the agent templates and the edit page from the package at runtime. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
-- Local package execution runs the bundle from a packed tarball. It needs no global installation and no publication.
+- The standalone bundle is one generated module. It embeds the runtime code. It reads the agent templates, the edit page, the readme, and the execution skill from the package at runtime. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
+- Package execution runs the bundle from the npm package through npx, or from a packed tarball. It needs no global installation.
 
 Each invocation parses the arguments, runs the startup checks, and runs one command. The readme command skips the configuration checks. woof keeps no daemon, persistent cache, or index between invocations.
 

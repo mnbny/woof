@@ -42,4 +42,8 @@ After these checks, startup checks the configuration and applies an explicit mig
 
 ## Distribution
 
-Source execution, standalone execution, and local package execution have the same behavior. The package contains the standalone bundle and the execution skill. The pack step builds the bundle. A link script in the repository puts the source entry on the user's local path.
+Source execution, standalone execution, and package execution have the same behavior. woof is published on npm under the mnbny scope. Users run the package through npx, without an installation.
+
+The package contains the standalone bundle, the agent templates, the edit page, the readme, the license, and the execution skill. Nothing else ships. The pack step builds the bundle. Before a release, a pack check builds the package and compares its contents with the files that woof reads at runtime. The pack check then runs the package through npx with an empty home. A woof token in the repository configuration holds the release procedure.
+
+A link script in the repository puts the source entry on the user's local path.
