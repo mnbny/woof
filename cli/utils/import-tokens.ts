@@ -2,7 +2,8 @@ import type { Resource, TokenValue } from './schema.ts'
 
 import { createHash } from 'node:crypto'
 
-import { rewriteTokenReferences } from './tokens.ts'
+import { isPrivateToken } from './private.ts'
+import { internalMarker, rewriteTokenReferences } from './tokens.ts'
 
 export type ImportLeaf = string | Resource
 
@@ -44,6 +45,7 @@ export function putImportValue(value: Record<string, unknown>, path: string, inc
 }
 
 export function assertImportAddress(path: string) {
+  if (internalMarker(path)) throw new Error(`Token address ${path} is reserved for internal markers.`)
   if (
     !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(path) ||
     path.split('.').some(part => ['__proto__', 'prototype', 'constructor'].includes(part))
@@ -93,7 +95,12 @@ export function importTokenFingerprint(
     const hash = createHash('sha256').update(content).digest('hex')
     parts.push(`${prompt ? '' : file ? 'file:' : 'inline:'}${hash}`)
   }
-  return JSON.stringify({ type, array: !prompt && typeof value !== 'string' && Array.isArray(value.$exec), parts })
+  return JSON.stringify({
+    type,
+    private: isPrivateToken(value),
+    array: !prompt && typeof value !== 'string' && Array.isArray(value.$exec),
+    parts,
+  })
 }
 
 export function isImportLeaf(value: TokenValue | undefined): value is ImportLeaf {

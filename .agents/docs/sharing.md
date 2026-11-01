@@ -6,11 +6,24 @@ Sharing moves a registered project between woof homes through a portable archive
 
 ## Archives
 
-- An archive is a standard ZIP file without a manifest. Its root configuration holds every shared definition and only the selected project entry. Pruning changes only the archive. It never changes the source registry.
-- The archive includes every file that the shared graph and the project graph declare, including shadowed shared files. It also includes the project's configuration file, if one exists. Raw payload bytes stay unchanged.
+- An archive is a standard ZIP file without a manifest. It holds the selected project's tokens and only the shared dependencies reachable from those tokens. References follow the effective view, so overridden root definitions and unrelated tokens are omitted. An empty project exports no shared tokens. Pruning changes only the archive. It never changes the source registry.
+- Shared dependencies that rely on a project override travel as project tokens. This also applies to their callers. Independent shared dependencies stay in the root configuration, so the exported shared catalog can resolve without the project.
+- The archive includes only the files that the retained tokens declare, plus the project's configuration file, if one exists. Included payload bytes stay unchanged. An unchanged project configuration also keeps its original bytes.
 - Export copies project files under `<repo>` into a project-specific directory. The exported references point to the copies. Export does not copy the checkout or undeclared script dependencies.
 
 When woof reads an archive, it checks entry names, sizes, and checksums. It also checks that the central and local records agree. These conditions cause a failure: unsafe paths, duplicate destinations, required entries that are not regular files, multi-disk archives, and ZIP64. woof ignores entries that no definition references. These entries never become writes.
+
+## Private content
+
+Export replaces a private token's content with an inline placeholder. It keeps the token's address, type, metadata, and privacy flag. This applies to retained shared and project definitions. Export does not change local content.
+
+Privacy applies only to explicitly marked tokens. Redaction occurs before dependency selection, so a private placeholder needs no payload files or referenced tokens. If another retained, unmarked token needs those files or tokens, export includes them. Export does not interpret a prompt file as configuration, even when that file contains JSON token definitions.
+
+Import warns about incoming placeholders and continues. A placeholder that differs from a local value needs the same review as any other conflict. Identical placeholders at the same address need no decision. Placeholders at different addresses are not reuse candidates, because their original values are unknown. Reuse of populated tokens requires the same privacy setting.
+
+A new project token is an addition even when it overrides an existing shared value. The shared token's name alone does not require conflict review.
+
+Local recovery backups retain private values and files. Export privacy does not change backup or restoration behavior.
 
 ## Review
 

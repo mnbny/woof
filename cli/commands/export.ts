@@ -1,10 +1,9 @@
 import type { BundleFile } from '../utils/bundles.ts'
-import type { ProjectDefinition } from '../utils/projects.ts'
-import type { Resource, TokenValue } from '../utils/schema.ts'
+import type { Resource } from '../utils/schema.ts'
 
 import { defineCommand } from 'citty'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { parseArgs } from 'node:util'
+import { isDeepStrictEqual, parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
 import { createBundleArchive } from '../utils/bundles.ts'
@@ -12,9 +11,20 @@ import { validateConfigurationDocument } from '../utils/config.ts'
 import { fieldsText, inlineCodeText, shellQuote } from '../utils/display.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentCancel, presentCode, presentError, presentResult } from '../utils/presentation.ts'
+import { isPrivateToken, PRIVATE_MARKER } from '../utils/private.ts'
 import { checkoutPath, loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
+import { createTokenGraph, preflightToken } from '../utils/tokens.ts'
+
+function putToken(document: Record<string, unknown>, path: string, value: string | Resource) {
+  const parts = path.split('.')
+  let namespace = document
+  for (const part of parts.slice(0, -1)) {
+    namespace[part] ??= {}
+    namespace = namespace[part] as Record<string, unknown>
+  }
+  namespace[parts.at(-1)!] = value
+}
 
 function writeUniqueArchive(project: string, archive: Uint8Array) {
   const directory = getWoofHome('exports')
@@ -83,22 +93,17 @@ export default defineCommand({
       if (!definition)
         throw new Error(`Registered project ${inlineCodeText(projectName)} has no exportable definition.`)
 
-      const originalConfiguration = validateConfigurationDocument(
-        { ...context.root.data, $projects: { [projectName]: definition } },
-        'root',
-        'export payload',
+      const graph = createTokenGraph(context)
+      // A placeholder has no dependencies. Redact before walking so omitted content cannot pull in more tokens or files.
+      for (const [path, token] of graph.tokens)
+        if (isPrivateToken(token.value))
+          graph.tokens.set(path, { ...token, value: { ...(token.value as Resource), $exec: PRIVATE_MARKER } })
+      const validations = [...graph.tokens.values()]
+        .filter(token => token.origin === 'project')
+        .map(token => preflightToken(graph, token.path))
+      const reachable = new Map(
+        validations.flatMap(validation => validation.tokens.map(token => [token.path, token] as const)),
       )
-      const originalContext = { ...context, root: { ...context.root, data: originalConfiguration } }
-      const rootOnlyContext = {
-        root: originalContext.root,
-        candidates: [],
-        checkoutRoot: originalContext.checkoutRoot,
-        selection: 'root' as const,
-      }
-      const validations = [
-        ...validateTokenGraph(createTokenGraph(rootOnlyContext)),
-        ...validateTokenGraph(createTokenGraph(originalContext)),
-      ]
       const resources = new Map<string, BundleFile>()
       function add(path: string, data: Uint8Array) {
         const existing = resources.get(path)
@@ -106,41 +111,35 @@ export default defineCommand({
           throw new Error(`Export resources collide at ${inlineCodeText(path)}. Choose distinct source paths.`)
         resources.set(path, { path, data })
       }
-      for (const validation of validations) {
-        for (const token of validation.tokens) {
-          for (const location of token.files) {
-            const path = location.markedPath.startsWith('<root>/')
-              ? location.markedPath.slice('<root>/'.length)
-              : `${projectName}-repo-export/${location.markedPath.slice('<repo>/'.length)}`
-            add(path, readFileSync(location.file))
-          }
+      function rewrite(value: string | Resource) {
+        const update = (part: string) =>
+          part.startsWith('<repo>/') ? `<root>/${projectName}-repo-export/${part.slice('<repo>/'.length)}` : part
+        if (typeof value === 'string') return update(value)
+        return {
+          ...value,
+          $exec: Array.isArray(value.$exec) ? value.$exec.map(update) : update(value.$exec),
+        } as Resource
+      }
+      const exportedProject = structuredClone(project.data)
+      const shared: Record<string, unknown> = {}
+      const projectSpecific = new Set<string>()
+      // Preflight lists dependencies before their callers. A shared caller of a project override must travel with
+      // the project too; otherwise the exported shared catalog would depend on a project-only token.
+      for (const token of reachable.values()) {
+        const inProject = token.origin === 'project' || token.references.some(path => projectSpecific.has(path))
+        if (inProject) projectSpecific.add(token.path)
+        putToken(inProject ? exportedProject : shared, token.path, rewrite(graph.tokens.get(token.path)!.value))
+        for (const location of token.files) {
+          const path = location.markedPath.startsWith('<root>/')
+            ? location.markedPath.slice('<root>/'.length)
+            : `${projectName}-repo-export/${location.markedPath.slice('<repo>/'.length)}`
+          add(path, readFileSync(location.file))
         }
       }
-      function rewrite(value: TokenValue): TokenValue {
-        if (typeof value === 'string')
-          return value.startsWith('<repo>/')
-            ? `<root>/${projectName}-repo-export/${value.slice('<repo>/'.length)}`
-            : value
-        if ('$type' in value || '$exec' in value) {
-          const resource = value as Resource
-          const update = (part: string) =>
-            part.startsWith('<repo>/') ? `<root>/${projectName}-repo-export/${part.slice('<repo>/'.length)}` : part
-          return {
-            ...resource,
-            $exec: Array.isArray(resource.$exec) ? resource.$exec.map(update) : update(resource.$exec),
-          } as Resource
-        }
-        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, rewrite(child)]))
-      }
-      const exportedProject = Object.fromEntries(
-        Object.entries(project.data).map(([key, value]) => [
-          key,
-          key.startsWith('$') ? value : rewrite(value as TokenValue),
-        ]),
-      ) as ProjectDefinition
       const configuration = validateConfigurationDocument(
         {
-          ...context.root.data,
+          $schemaVersion: context.root.data.$schemaVersion,
+          ...shared,
           $projects: { [projectName]: typeof definition === 'string' ? definition : exportedProject },
         },
         'root',
@@ -148,10 +147,9 @@ export default defineCommand({
       )
       if (!project.inline && typeof definition === 'string') {
         const path = definition.slice('<root>/'.length)
-        const bytes =
-          JSON.stringify(exportedProject) === JSON.stringify(project.data)
-            ? readFileSync(project.source.file)
-            : Buffer.from(`${JSON.stringify(exportedProject, null, 2)}\n`)
+        const bytes = isDeepStrictEqual(exportedProject, project.data)
+          ? readFileSync(project.source.file)
+          : Buffer.from(`${JSON.stringify(exportedProject, null, 2)}\n`)
         add(path, bytes)
       }
 

@@ -12,6 +12,7 @@ import { isAgent } from '../utils/agent.ts'
 import { diffText, hintText, inlineCodeText, listFieldText, mutedText, shellQuote } from '../utils/display.ts'
 import { applyImport, ImportApplyError } from '../utils/import-apply.ts'
 import { importReviewSources, planImport, reviewImport, verifyImportReviewSources } from '../utils/import-plan.ts'
+import { flattenImportTokens } from '../utils/import-tokens.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import {
   chooseOption,
@@ -25,6 +26,7 @@ import {
   presentWarning,
   renderTemplateFile,
 } from '../utils/presentation.ts'
+import { hasPrivatePlaceholder } from '../utils/private.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
@@ -82,9 +84,16 @@ function tokenText(value: unknown) {
   if (value === undefined) return ''
   if (typeof value === 'string') return `${value}\n`
   if (!value || typeof value !== 'object' || !('$exec' in value)) return text(value)
-  const token = value as { $type?: string; $exec: string | string[]; $description?: string; $tags?: string[] }
+  const token = value as {
+    $type?: string
+    $exec: string | string[]
+    $description?: string
+    $tags?: string[]
+    $private?: boolean
+  }
   return `${[
     ...(token.$type ? [`Type: ${token.$type}`] : []),
+    ...(token.$private !== undefined ? [`Private: ${token.$private ? 'yes' : 'no'}`] : []),
     ...(token.$description !== undefined ? [`Description: ${token.$description}`] : []),
     ...(token.$tags?.length ? [`Tags: ${token.$tags.join(', ')}`] : []),
     '',
@@ -244,6 +253,15 @@ export default defineCommand({
       const archive = readFileSync(archivePath)
 
       const plan = planImport(archive, { cwd })
+      const placeholders = [
+        ...[...flattenImportTokens(plan.bundle.configuration)]
+          .filter(([, value]) => hasPrivatePlaceholder(value))
+          .map(([path]) => `- shared: ${path}`),
+        ...[...flattenImportTokens(plan.bundle.project)]
+          .filter(([, value]) => hasPrivatePlaceholder(value))
+          .map(([path]) => `- ${plan.bundle.projectName}: ${path}`),
+      ]
+      if (placeholders.length) presentWarning('import-private', { tokens: placeholders.join('\n') })
       const prior = decisionsPath ? readDecisions(decisionsPath, plan) : undefined
       const choices: Record<string, ImportChoice> = { ...(prior?.choices ?? {}) }
       let recorded = prior?.conflicts ?? []

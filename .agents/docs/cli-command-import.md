@@ -13,6 +13,7 @@ Import runs from any directory. When the local project reads repository files, t
 
 ## Review loop
 
+- Import warns about private placeholders in the archive before review. The warning does not require a decision or stop the import. A placeholder that conflicts with a local value still needs review.
 - Import plans the archive against the local home. It applies the saved choices. It drops each choice whose context changed. It takes each item that needs no decision, so that only the items that need a decision reach the person or the agent.
 - Human review shows a colored diff for each item, then its notes. A token shows as its type, description, tags, and content text, followed by each of its files whose content differs.
 - The actions that apply follow the diff. Take incoming comes first and is the default, and each action has a hint that says what it does. For Add as new, import asks for an address or path. For Reuse existing, import offers the matching candidates. If a choice is not valid, import reports the problem and asks again. Cancellation shows a warning, exits with status 130, and writes nothing.

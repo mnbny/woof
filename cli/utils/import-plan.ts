@@ -23,6 +23,7 @@ import {
   rewriteImportToken,
 } from './import-tokens.ts'
 import { getWoofHome } from './paths.ts'
+import { hasPrivatePlaceholder } from './private.ts'
 import { namedProjectCheckout } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
@@ -313,6 +314,8 @@ function tokenIssue(
     .filter(
       ([address, candidate]) =>
         address !== path &&
+        !hasPrivatePlaceholder(incoming) &&
+        !hasPrivatePlaceholder(candidate) &&
         signature !== undefined &&
         importTokenFingerprint(candidate, ref => readLocal(plan, ref)) === signature,
     )
@@ -487,6 +490,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
             : {
                 ...(original.$description !== undefined ? { $description: original.$description } : {}),
                 ...(original.$tags !== undefined ? { $tags: original.$tags } : {}),
+                ...(original.$private !== undefined ? { $private: original.$private } : {}),
               }
         const alias: ImportLeaf = Object.keys(metadata).length
           ? { $type: 'prompt', $exec: `{{${choice.address}}}`, ...metadata }
@@ -825,7 +829,8 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       const expected = importTokenFingerprint(check.value, ref => readIncoming(plan, ref), described.mappings)
       check.item.candidates = [...check.candidates.entries()]
         .filter(([address, original]) => {
-          if (address === check.item.path) return false
+          if (address === check.item.path || hasPrivatePlaceholder(check.value) || hasPrivatePlaceholder(original))
+            return false
           const current =
             (check.origin === 'project' ? importValueAt(described.project, address) : undefined) ??
             importValueAt(described.root, address)
