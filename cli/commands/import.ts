@@ -30,7 +30,7 @@ import { hasPrivatePlaceholder } from '../utils/private.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
-import { createTokenGraph, validateTokenGraph } from '../utils/tokens.ts'
+import { createTokenGraph, preflightTokenGraph } from '../utils/tokens.ts'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`
@@ -190,13 +190,8 @@ function validateImportedCatalog(cwd: string) {
         ? selectProjectContext({ project: name, cwd, loader })
         : { root, candidates: [], checkoutRoot: loader.repoRoot, selection: 'root' as const }
       const graph = createTokenGraph(context)
-      for (const path of graph.tokens.keys()) {
-        try {
-          validateTokenGraph(graph, path)
-        } catch (error) {
-          findings.push(`${label}, ${path}: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
+      const validation = preflightTokenGraph(graph, [...graph.tokens.keys()])
+      for (const problem of validation.problems) findings.push(`${label}: ${problem}`)
     } catch (error) {
       findings.push(`${label}: ${error instanceof Error ? error.message : String(error)}`)
     }

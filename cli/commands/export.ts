@@ -14,7 +14,7 @@ import { chooseOption, presentCancel, presentCode, presentError, presentResult }
 import { isPrivateToken, PRIVATE_MARKER } from '../utils/private.ts'
 import { checkoutPath, loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, preflightToken } from '../utils/tokens.ts'
+import { createTokenGraph, preflightTokenGraph, TokenResolutionError } from '../utils/tokens.ts'
 
 function putToken(document: Record<string, unknown>, path: string, value: string | Resource) {
   const parts = path.split('.')
@@ -98,12 +98,12 @@ export default defineCommand({
       for (const [path, token] of graph.tokens)
         if (isPrivateToken(token.value))
           graph.tokens.set(path, { ...token, value: { ...(token.value as Resource), $exec: PRIVATE_MARKER } })
-      const validations = [...graph.tokens.values()]
-        .filter(token => token.origin === 'project')
-        .map(token => preflightToken(graph, token.path))
-      const reachable = new Map(
-        validations.flatMap(validation => validation.tokens.map(token => [token.path, token] as const)),
+      const validation = preflightTokenGraph(
+        graph,
+        [...graph.tokens.values()].filter(token => token.origin === 'project').map(token => token.path),
       )
+      if (validation.problems.length) throw new TokenResolutionError(validation.problems.join('\n'))
+      const reachable = new Map(validation.tokens.map(token => [token.path, token]))
       const resources = new Map<string, BundleFile>()
       function add(path: string, data: Uint8Array) {
         const existing = resources.get(path)
@@ -122,12 +122,17 @@ export default defineCommand({
       }
       const exportedProject = structuredClone(project.data)
       const shared: Record<string, unknown> = {}
-      const projectSpecific = new Set<string>()
-      // Preflight lists dependencies before their callers. A shared caller of a project override must travel with
-      // the project too; otherwise the exported shared catalog would depend on a project-only token.
+      const projectSpecific = new Set(
+        validation.tokens.filter(token => token.origin === 'project').map(token => token.path),
+      )
+      const callers = new Map<string, string[]>()
+      for (const token of reachable.values())
+        for (const target of [...token.references, ...token.deferred])
+          callers.set(target, [...(callers.get(target) ?? []), token.path])
+      // Follow callers until stable: deferred cycles have no dependency-first ordering.
+      for (const path of projectSpecific) for (const caller of callers.get(path) ?? []) projectSpecific.add(caller)
       for (const token of reachable.values()) {
-        const inProject = token.origin === 'project' || token.references.some(path => projectSpecific.has(path))
-        if (inProject) projectSpecific.add(token.path)
+        const inProject = projectSpecific.has(token.path)
         putToken(inProject ? exportedProject : shared, token.path, rewrite(graph.tokens.get(token.path)!.value))
         for (const location of token.files) {
           const path = location.markedPath.startsWith('<root>/')

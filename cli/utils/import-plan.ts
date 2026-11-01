@@ -27,7 +27,7 @@ import { hasPrivatePlaceholder } from './private.ts'
 import { namedProjectCheckout } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
-import { tokenReferencePaths } from './tokens.ts'
+import { tokenReferencePaths, tokenReferences } from './tokens.ts'
 
 export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
 export type ImportConflict = {
@@ -242,7 +242,7 @@ function projectsUsing(plan: ImportPlan, target: string) {
       if (source.startsWith('<repo>/')) return []
       const bytes = source.startsWith('<root>/') ? readLocal(plan, source) : undefined
       if (source.startsWith('<root>/') && !bytes) return []
-      return tokenReferencePaths(bytes ? new TextDecoder().decode(bytes) : source)
+      return tokenReferences(bytes ? new TextDecoder().decode(bytes) : source).map(reference => reference.path)
     })
   }
   return localProjects(plan).flatMap(([name, data]) => {

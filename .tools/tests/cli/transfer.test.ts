@@ -278,6 +278,92 @@ test('exports only reachable chains after overrides and redaction, keeping both 
   expect(invalid.stdout).toContain('missing')
 })
 
+test('exports deferred cycles and their files after overrides and privacy redaction', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const source = join(directory, 'deferred-source')
+  const destination = join(directory, 'deferred-destination')
+  const effect = join(directory, 'export-must-not-run')
+  await config(source, {
+    $schemaVersion: 2,
+    base: 'base',
+    style: '<root>/unused-default.txt',
+    workflow: '{{~helper~}} {{~style~}}',
+    helper: '<root>/helper.txt',
+    loop: '{{~workflow~}}',
+    privateTarget: { $type: 'prompt', $private: true, $exec: '<root>/missing-private.txt' },
+    script: { $type: 'node', $exec: `require('fs').writeFileSync(${JSON.stringify(effect)}, 'ran')` },
+    unrelated: '{{missing}}',
+    $projects: {
+      demo: {
+        entry: '{{~workflow~}}',
+        style: 'project style',
+        hidden: { $type: 'prompt', $private: true, $exec: '{{~missing~}}' },
+      },
+    },
+  })
+  const content = '{{base}} {{~loop~}} {{~privateTarget~}} {{~script~}}'
+  await put(join(source, 'helper.txt'), content)
+  const original = await readFile(join(source, 'woof.config.json'))
+  const exported = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+  expect(exported.status, exported.stdout).toBe(0)
+  const path = /^Archive: (.+)$/m.exec(exported.stdout)?.[1]
+  assert(path)
+  const bundle = readBundleArchive(await readFile(path))
+  expect(bundle.configuration['base']).toBe('base')
+  expect(bundle.configuration['privateTarget']).toMatchObject({ $private: true, $exec: '{{-woof:private-}}' })
+  for (const name of ['workflow', 'helper', 'loop', 'style', 'unrelated'])
+    expect(bundle.configuration).not.toHaveProperty(name)
+  expect(bundle.project).toMatchObject({
+    workflow: '{{~helper~}} {{~style~}}',
+    helper: '<root>/helper.txt',
+    loop: '{{~workflow~}}',
+    style: 'project style',
+    hidden: { $private: true, $exec: '{{-woof:private-}}' },
+  })
+  expect([...bundle.files.keys()].sort()).toEqual(['helper.txt', 'woof.config.json'])
+  expect(strFromU8(bundle.files.get('helper.txt')!)).toBe(content)
+  expect(await readFile(join(source, 'woof.config.json'))).toEqual(original)
+  expect(fs.existsSync(effect)).toBe(false)
+  await config(destination, { $schemaVersion: 2 })
+  expect((await run(cli, destination, ['import', path, '--agent'])).status).toBe(0)
+  for (const flags of [[], ['--project', 'demo']])
+    expect((await run(cli, destination, ['validate', ...flags, '--agent'])).status).toBe(0)
+  expect(await run(cli, destination, ['get', 'entry', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'use the woof token `$projects.demo.workflow`',
+  })
+  expect((await run(cli, destination, ['get', 'helper', '--project', 'demo', '--agent'])).stderr).not.toContain(
+    'needs a value',
+  )
+  expect((await run(cli, destination, ['get', 'privateTarget', '--agent'])).stderr).toContain('needs a value')
+  expect(fs.existsSync(effect)).toBe(false)
+  await put(join(source, 'helper.txt'), '{{~missing~}}')
+  expect((await run(cli, source, ['export', '--project', 'demo', '--agent'])).status).toBe(1)
+})
+
+test('reports export failures once instead of repeating them for each dependency ancestor', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'export-failure-home')
+  for (const cycle of [false, true]) {
+    await config(home, {
+      $schemaVersion: 2,
+      a: '{{b}}',
+      b: cycle ? '{{a}}' : '<root>/missing.txt',
+      $projects: { demo: { entry: '{{a}}' } },
+    })
+    const result = await run(cli, home, ['export', '--project', 'demo', '--agent'])
+    expect(result.status).toBe(1)
+    expect(result.stdout.match(cycle ? /Circular token reference/g : /cannot load/g)).toHaveLength(1)
+    expect(result.stdout).not.toContain('Archive:')
+  }
+})
+
 test('reviews incoming private placeholders against real local values without reusing unrelated placeholders', async ({
   cli,
   directory,
@@ -783,17 +869,21 @@ test('remaps imported prompt files and project overrides without changing local 
   const archive = createBundleArchive(
     rootConfiguration({
       $schemaVersion: 2,
-      agents: 'incoming {{conventions.commit}}',
+      agents: 'incoming {{conventions.commit}} {{~conventions.commit~}}',
       conventions: { commit: 'incoming' },
       prompt: '<root>/prompt.md',
-      $projects: { demo: { conventions: { commit: 'project' }, agents: 'project {{conventions.commit}}' } },
+      $projects: {
+        demo: { conventions: { commit: 'project' }, agents: 'project {{conventions.commit}} {{~conventions.commit~}}' },
+      },
     }),
     [
       {
         path: 'prompt.md',
         data: Buffer.concat([
           Buffer.from([0xef, 0xbb, 0xbf]),
-          strToU8('incoming {{conventions.commit}} {{{{conventions.commit}}}}\r\n'),
+          strToU8(
+            'incoming {{conventions.commit}} {{{{conventions.commit}}}} {{~conventions.commit~}} {{{{~conventions.commit~}}}}\r\n',
+          ),
         ]),
       },
     ],
@@ -815,13 +905,15 @@ test('remaps imported prompt files and project overrides without changing local 
   expect(await readFile(join(home, 'copies/prompt.md'))).toEqual(
     Buffer.concat([
       Buffer.from([0xef, 0xbb, 0xbf]),
-      strToU8('incoming {{conventions.alternate}} {{{{conventions.commit}}}}\r\n'),
+      strToU8(
+        'incoming {{conventions.alternate}} {{{{conventions.commit}}}} {{~conventions.alternate~}} {{{{~conventions.commit~}}}}\r\n',
+      ),
     ]),
   )
   expect(await run(cli, home, ['get', 'agents', '--agent'])).toMatchObject({ status: 0, stdout: 'local local' })
   expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
     status: 0,
-    stdout: 'project project',
+    stdout: 'project project use the woof token `$projects.demo.conventions.alternate`',
   })
 })
 
@@ -1027,6 +1119,36 @@ test('reopens reuse when a project binding would make the reused alias circular'
   expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
     status: 0,
     stdout: 'A',
+  })
+})
+
+test('keeps reuse when the project binding only closes a deferred cycle', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'deferred-reuse-home')
+  await config(home, { $schemaVersion: 2, matchroot: 'A', matchproject: '{{~matchroot~}}', $projects: { demo: {} } })
+  const archive = createBundleArchive(
+    rootConfiguration({ $schemaVersion: 2, x: 'A', agents: '{{x}}', $projects: { demo: { x: '{{~matchroot~}}' } } }),
+    [],
+  )
+  const path = join(directory, 'deferred-reuse.zip')
+  await writeFile(path, archive)
+  const result = await reviewAgentImport(
+    cli,
+    home,
+    path,
+    join(directory, 'deferred-reuse-decisions.json'),
+    (item, doc) => {
+      expect(doc.invalidated ?? []).not.toContain('x')
+      if (item.kind === 'token' && item.path === 'x') return { action: 'reuse', address: 'matchroot' }
+      if (item.kind === 'project-token' && item.path === 'x') return { action: 'reuse', address: 'matchproject' }
+      return 'take'
+    },
+  )
+  expect(result.status).toBe(0)
+  expect(result.stderr).not.toContain('Circular token reference')
+  expect((await run(cli, home, ['validate', 'agents', '--project', 'demo', '--agent'])).status).toBe(0)
+  expect(await run(cli, home, ['get', 'agents', '--project', 'demo', '--agent'])).toMatchObject({
+    status: 0,
+    stdout: 'use the woof token `$projects.demo.matchroot`',
   })
 })
 
