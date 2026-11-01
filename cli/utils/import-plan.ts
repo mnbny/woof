@@ -4,7 +4,7 @@ import type { InlineProject, ProjectConfiguration, RootConfiguration, TokenValue
 
 import { createHash } from 'node:crypto'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve, sep, win32 } from 'node:path'
+import { isAbsolute, relative, resolve, sep, win32 } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { readBundleArchive } from './bundles.ts'
@@ -23,6 +23,7 @@ import {
   rewriteImportToken,
 } from './import-tokens.ts'
 import { getWoofHome } from './paths.ts'
+import { namedProjectCheckout } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
 import { tokenReferencePaths } from './tokens.ts'
@@ -42,6 +43,10 @@ export type ImportConflict = {
   keepTakeOnly?: boolean
   invalid?: boolean
   notice?: string
+  // The item follows from earlier decisions, so it needs no decision of its own.
+  derived?: boolean
+  // The files of a token whose content differs, so the review can show them.
+  files?: { reference: string; existing?: Uint8Array; incoming?: Uint8Array }[]
 }
 export type ImportSourceState = { path: string; digest: string | null; physical: string | null }
 
@@ -127,22 +132,6 @@ function sourceState(home: string, path: string): ImportSourceState & { data?: U
   }
 }
 
-function assertRepositoryImportAllowed(cwd: string) {
-  const checkout = detectCheckoutRoot(cwd)
-  if (!checkout) return
-  for (const candidate of ['woof.config.json', '.agents/woof.config.json', '.claude/woof.config.json']) {
-    try {
-      if (statSync(realpathSync(join(checkout, candidate))).isFile())
-        throw new Error(
-          'Repository-defined projects cannot be imported. Run import from a registered home-project context.',
-        )
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
-      throw error
-    }
-  }
-}
-
 function localProject(local: RootConfiguration, bundle: WoofBundle, home: string) {
   const definition = local.$projects?.[bundle.projectName]
   if (definition === undefined) return { definition, data: undefined, file: undefined, source: undefined }
@@ -165,6 +154,7 @@ type Snapshot = ImportSourceState & { data?: Uint8Array }
 type ImportPlan = {
   archiveDigest: string
   bundle: WoofBundle
+  checkout: string | undefined
   cwd: string
   home: string
   local: RootConfiguration
@@ -191,9 +181,9 @@ function readLocal(plan: ImportPlan, reference: string) {
       return undefined
     }
   }
-  if (!reference.startsWith('<repo>/')) return undefined
+  if (!reference.startsWith('<repo>/') || !plan.checkout) return undefined
   try {
-    const file = resolveResourceLocation(reference, { cwd: plan.cwd }).file
+    const file = resolveResourceLocation(reference, { repoRoot: plan.checkout }).file
     const bytes = readFileSync(file)
     const actual = digest(bytes)
     const prior = plan.external.get(file)
@@ -209,6 +199,79 @@ function readLocal(plan: ImportPlan, reference: string) {
 
 function readIncoming(plan: ImportPlan, reference: string) {
   return reference.startsWith('<root>/') ? plan.bundle.files.get(reference.slice('<root>/'.length)) : undefined
+}
+
+// The definitions of the local projects. A project whose file cannot be read is left out.
+function localProjects(plan: ImportPlan) {
+  return Object.entries(plan.local.$projects ?? {}).flatMap(([name, definition]): [string, object][] => {
+    if (typeof definition !== 'string') return [[name, definition]]
+    const bytes = readLocal(plan, definition)
+    if (!bytes) return []
+    try {
+      return [
+        [
+          name,
+          parseConfigurationDocument(new TextDecoder().decode(bytes), 'project', definition.slice('<root>/'.length)),
+        ],
+      ]
+    } catch {
+      return []
+    }
+  })
+}
+
+// The local tokens that read a home file, as the shared tokens or a project name with the token path.
+function localFileUsers(plan: ImportPlan, reference: string) {
+  const users = new Set<string>()
+  const scopes: [string, object][] = [['', plan.local], ...localProjects(plan)]
+  for (const [scope, data] of scopes)
+    for (const [path, value] of flattenImportTokens(data))
+      if (importTokenFiles(value).includes(reference)) users.add(`${scope}\0${path}`)
+  return users
+}
+
+// The local projects whose own tokens reach a shared token, directly or through other shared tokens. A project that
+// overrides the token keeps its own value. Only home files are read, because <repo> belongs to each project's checkout.
+function projectsUsing(plan: ImportPlan, target: string) {
+  const shared = flattenImportTokens(plan.local)
+  const references = (value: ImportLeaf) => {
+    if (typeof value !== 'string' && value.$type !== 'prompt') return []
+    const sources = typeof value === 'string' ? [value] : Array.isArray(value.$exec) ? value.$exec : [value.$exec]
+    return sources.flatMap(source => {
+      if (source.startsWith('<repo>/')) return []
+      const bytes = source.startsWith('<root>/') ? readLocal(plan, source) : undefined
+      if (source.startsWith('<root>/') && !bytes) return []
+      return tokenReferencePaths(bytes ? new TextDecoder().decode(bytes) : source)
+    })
+  }
+  return localProjects(plan).flatMap(([name, data]) => {
+    const own = flattenImportTokens(data)
+    if (own.has(target)) return []
+    const seen = new Set<string>()
+    const reaches = (path: string): boolean => {
+      if (path === target) return true
+      if (seen.has(path)) return false
+      seen.add(path)
+      const value = own.get(path) ?? shared.get(path)
+      return value ? references(value).some(reaches) : false
+    }
+    return [...own.values()].some(value => references(value).some(reaches)) ? [name] : []
+  })
+}
+
+// Export points each checkout file at its copy in the archive. When the local token still reads that file from the
+// checkout, the copy stands for the same reference, and the fingerprints compare the content.
+function checkoutReferences(plan: ImportPlan, incoming: unknown, existing: unknown) {
+  if (!isImportLeaf(incoming as TokenValue) || !isImportLeaf(existing as TokenValue)) return incoming
+  const prefix = `<root>/${plan.bundle.projectName}-repo-export/`
+  const local = importTokenFiles(existing as ImportLeaf)
+  const restore = (part: string) => {
+    const reference = `<repo>/${part.slice(prefix.length)}`
+    return part.startsWith(prefix) && local.includes(reference) ? reference : part
+  }
+  const value = incoming as ImportLeaf
+  if (typeof value === 'string') return restore(value)
+  return { ...value, $exec: Array.isArray(value.$exec) ? value.$exec.map(restore) : restore(value.$exec) }
 }
 
 function decisionAction(choice: ImportChoice | undefined) {
@@ -245,10 +308,13 @@ function tokenIssue(
   item.existingDigest = digest(
     `${item.existingDigest}\0${isImportLeaf(existing as TokenValue) ? (importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) ?? 'missing content') : ''}`,
   )
+  // A token at the item's own address is the local side of the conflict. Reusing it would only keep it.
   item.candidates = [...candidates.entries()]
     .filter(
-      ([, candidate]) =>
-        signature !== undefined && importTokenFingerprint(candidate, ref => readLocal(plan, ref)) === signature,
+      ([address, candidate]) =>
+        address !== path &&
+        signature !== undefined &&
+        importTokenFingerprint(candidate, ref => readLocal(plan, ref)) === signature,
     )
     .map(([address]) => address)
     .sort()
@@ -262,9 +328,18 @@ function tokenIssue(
           ...(value.$tags !== undefined ? { tags: value.$tags } : {}),
         }
   })
+  const existingFiles = isImportLeaf(existing as TokenValue) ? importTokenFiles(existing as ImportLeaf) : []
+  item.files = importTokenFiles(incoming).flatMap((reference, index) => {
+    const local = existingFiles.includes(reference) ? reference : existingFiles[index]
+    const before = local ? readLocal(plan, local) : undefined
+    const after = readIncoming(plan, reference)
+    if ((!before && !after) || (before && after && equalBytes(before, after))) return []
+    return [{ reference, ...(before ? { existing: before } : {}), ...(after ? { incoming: after } : {}) }]
+  })
   if (kind === 'token' && existing !== undefined) {
-    const projects = Object.keys(plan.local.$projects ?? {})
-    if (projects.length) item.notice = `Taking this shared token may affect existing projects: ${projects.join(', ')}.`
+    const projects = projectsUsing(plan, path)
+    if (projects.length)
+      item.notice = `Taking this shared token affects the projects that use it: ${projects.join(', ')}.`
   }
   if (signature === undefined)
     item.notice = `${item.notice ? `${item.notice} ` : ''}Incoming file content is unavailable; it cannot be matched for reuse.`
@@ -276,7 +351,6 @@ function tokenIssue(
 export function planImport(archive: Uint8Array, options: ImportPlanOptions = {}): ImportPlan {
   const cwd = options.cwd ?? process.cwd()
   const home = realpathSync(options.home ?? getWoofHome())
-  assertRepositoryImportAllowed(cwd)
   const bundle = readBundleArchive(archive)
   const rootSource = sourceState(home, 'woof.config.json')
   if (!rootSource.data)
@@ -287,9 +361,14 @@ export function planImport(archive: Uint8Array, options: ImportPlanOptions = {})
     getWoofHome('woof.config.json'),
   )
   const selected = localProject(local, bundle, home)
+  // The local project reads <repo> files from its own checkout, as it does in every other command.
+  const checkout = selected.data
+    ? namedProjectCheckout({ name: bundle.projectName, data: selected.data }, cwd, detectCheckoutRoot(cwd))
+    : undefined
   const plan: ImportPlan = {
     archiveDigest: digest(archive),
     bundle,
+    checkout,
     cwd,
     home,
     local,
@@ -381,7 +460,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
       item.notice = `${item.notice ? `${item.notice} ` : ''}A reused token at another address is connected through a project alias at ${bound}.`
     const same =
       destination === path &&
-      isDeepStrictEqual(existing, item.incoming) &&
+      isDeepStrictEqual(existing, checkoutReferences(plan, item.incoming, existing)) &&
       isImportLeaf(existing as TokenValue) &&
       importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) !== undefined &&
       importTokenFingerprint(existing as ImportLeaf, ref => readLocal(plan, ref)) ===
@@ -549,13 +628,19 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     { action: 'keep' | 'write' | 'reserve'; data?: Uint8Array; item: ImportConflict; added?: boolean }
   >()
   const paths = new Map<string, string>()
-  const requirements = new Map<string, { reference: string; prompt: boolean; added: boolean }>()
+  const requirements = new Map<string, { reference: string; prompt: boolean; added: boolean; users: Set<string> }>()
   for (const token of described.selectedTokens) {
     const prompt = typeof token.value === 'string' || token.value.$type === 'prompt'
+    const user = `${token.origin === 'root' ? '' : plan.bundle.projectName}\0${token.path}`
     for (const reference of importTokenFiles(token.value)) {
       const key = `${reference}\0${prompt ? 'prompt' : 'script'}`
       const prior = requirements.get(key)
-      requirements.set(key, { reference, prompt, added: token.added || Boolean(prior?.added) })
+      requirements.set(key, {
+        reference,
+        prompt,
+        added: token.added || Boolean(prior?.added),
+        users: new Set([...(prior?.users ?? []), user]),
+      })
     }
   }
   for (const [key, requirement] of requirements) {
@@ -596,6 +681,9 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
         .map(([name]) => name)
       if (owners.length)
         item.notice = `This file is registered as configuration for ${owners.join(', ')}. Taking raw bytes may prevent woof from starting. ${item.notice ?? ''}`
+      // When only the tokens that this import takes read the file, taking them already decided it.
+      const users = localFileUsers(plan, reference)
+      if (!owners.length && users.size && [...users].every(user => requirement.users.has(user))) item.derived = true
     }
     const originalPhysical = reference.startsWith('<root>/') ? snapshot(plan, originalPath).physical : null
     item.candidates =
@@ -737,6 +825,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       const expected = importTokenFingerprint(check.value, ref => readIncoming(plan, ref), described.mappings)
       check.item.candidates = [...check.candidates.entries()]
         .filter(([address, original]) => {
+          if (address === check.item.path) return false
           const current =
             (check.origin === 'project' ? importValueAt(described.project, address) : undefined) ??
             importValueAt(described.root, address)
@@ -896,8 +985,10 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
           return source.path === path || Boolean(targetPhysical && source.physical === targetPhysical)
         })
         .map(([name]) => name)
-      if (owners.length)
-        item.notice = `This configuration is used by ${owners.join(', ')}; taking changes affects those projects.`
+      // The token decisions already set the content of the project's own file. Another project that shares the file
+      // makes it a decision of its own.
+      if (owners.every(name => name === plan.bundle.projectName)) item.derived = true
+      else item.notice = `This configuration is used by ${owners.join(', ')}; taking changes affects those projects.`
       issues.push(item)
       const choice = choices[item.id]
       const action = decisionAction(choice)
@@ -1010,7 +1101,7 @@ export function verifyImportReviewSources(plan: ImportPlan, saved: ReturnType<ty
     if (current.digest !== source.digest || current.physical !== source.physical)
       throw new Error(`Import destination ${source.path} changed after review; review it again.`)
   }
-  const checkout = detectCheckoutRoot(plan.cwd)
+  const checkout = plan.checkout
   for (const source of saved.external) {
     if (
       !source ||
