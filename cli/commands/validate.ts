@@ -2,11 +2,19 @@ import { defineCommand } from 'citty'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { shellQuote } from '../utils/display.ts'
-import { chooseOption, presentError, presentResult, presentSelection } from '../utils/presentation.ts'
-import { selectProjectContext } from '../utils/projects.ts'
+import { discoverResources } from '../utils/discovery.ts'
+import { fieldsText, inlineCodeText, mutedText, shellQuote } from '../utils/display.ts'
+import {
+  chooseOption,
+  chooseToken,
+  presentCancel,
+  presentError,
+  presentResult,
+  presentSelection,
+} from '../utils/presentation.ts'
+import { checkoutPath, selectedProjectText, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
-import { createTokenGraph, splitProjectAddress, validateTokenGraph } from '../utils/tokens.ts'
+import { createTokenGraph, preflightToken, splitProjectAddress } from '../utils/tokens.ts'
 
 export default defineCommand({
   args: {
@@ -26,11 +34,11 @@ export default defineCommand({
         },
       })
       if (positionals.length > 1) throw new Error('Validate accepts at most one token address.')
-      const query = positionals[0] ?? ''
+      let query = positionals[0] ?? ''
       const qualified = query.startsWith('$projects.') ? splitProjectAddress(query) : undefined
       if (qualified?.project && values.project && qualified.project !== values.project)
         throw new Error(
-          `Qualified address selects ${qualified.project}, which contradicts --project ${values.project}.`,
+          `Qualified address selects ${inlineCodeText(qualified.project)}, which contradicts ${inlineCodeText(`--project ${values.project}`)}.`,
         )
       const explicitProject = qualified?.project ?? values.project
       const agent = values.agent === true || Boolean(isAgent())
@@ -43,28 +51,31 @@ export default defineCommand({
         const candidates = context.candidates
         if (!agent && process.stdout.isTTY) {
           const selected = await chooseOption({
-            message: 'Select the project for validation',
-            options: candidates.map(candidate => ({ value: candidate.name, label: candidate.name })),
+            message: 'Project to use',
+            options: candidates.map(candidate => {
+              const path = checkoutPath(candidate)
+              return { value: candidate.name, label: candidate.name, ...(path ? { hint: path } : {}) }
+            }),
           })
-          if (!selected) {
-            process.exitCode = 130
-            return
-          }
+          if (!selected) return presentCancel('Validation cancelled.')
           context = selectProjectContext({ project: selected, loader: createResourceLoader({ cwd: process.cwd() }) })
         } else {
+          // The projects come as a list of names, and the command to retry follows once.
           const details = candidates
             .map(candidate => {
-              const retry = `woof validate${query ? ` ${shellQuote(query)}` : ''} --project ${shellQuote(candidate.name)}${agent ? ' --agent' : ''}`
-              return `${candidate.name}\n  ${retry}`
+              const path = checkoutPath(candidate)
+              const name = `${agent ? '- ' : ''}${candidate.name}`
+              return path ? `${name}  ${mutedText(path)}` : name
             })
             .join('\n')
+          const command = `woof validate${query ? ` ${shellQuote(query)}` : ''} --project NAME${agent ? ' --agent' : ''}`
           presentSelection(
             {
-              summary: 'Multiple projects match this validation. Select one explicitly.',
+              summary: 'Several projects match this directory.',
               details,
-              recovery: 'Retry with one exact --project value. No selection was persisted.',
+              recovery: `Retry with ${inlineCodeText(command)}, with NAME replaced by the project name.`,
             },
-            { template: 'validate-ambiguous', values: { candidates: details } },
+            { template: 'validate-ambiguous', values: { projects: details, command } },
           )
           process.exitCode = 1
           return
@@ -72,32 +83,67 @@ export default defineCommand({
       }
 
       const graph = createTokenGraph(context)
-      const validations = validateTokenGraph(graph, query || undefined)
-      const inspected = validations.reduce((total, validation) => total + validation.tokens.length, 0)
-      const project = context.project ? `${context.project.name ?? 'unnamed'} (${context.project.kind})` : 'Root only'
-      const definitions = inspected === 1 ? 'definition' : 'definitions'
-      const scope = query || 'Complete effective catalog'
-      presentResult(
-        {
-          summary: `Validated ${inspected} token ${definitions} without executing scripts.`,
-          details: [`Selection: ${context.selection}`, `Project: ${project}`, `Scope: ${scope}`].join('\n'),
-          recovery:
-            'Configuration, references and declared resource paths passed preflight without computed execution.',
-        },
-        {
-          template: 'validate-result',
-          values: { count: inspected, definitions, selection: context.selection, project, scope },
-        },
+      // A person at a terminal picks the token when the address is inexact. Without an address, validate checks all.
+      if (query && !agent && process.stdout.isTTY && !graph.tokens.has(qualified?.path ?? query)) {
+        const selected = await chooseToken({ message: 'Token to validate', tokens: discoverResources(graph), query })
+        if (!selected) return presentCancel('Validation cancelled.')
+        query = selected
+      }
+      const project = selectedProjectText(context) ?? 'none (shared tokens only)'
+      if (query) {
+        let explanation
+        try {
+          explanation = preflightToken(graph, query)
+        } catch (error) {
+          // A broken token is a problem in the configuration. An unknown address stays an invocation error.
+          if (!graph.tokens.has(qualified?.path ?? query)) throw error
+          return fail('woof found 1 problem.', error instanceof Error ? error.message : String(error), 'it')
+        }
+        const path = explanation.requested
+        const references = explanation.tokens.length - 1
+        const referenced = references === 1 ? '1 referenced token' : `${references} referenced tokens`
+        return valid(`${inlineCodeText(path)} is valid${references ? `, with ${referenced}` : ''}.`, project)
+      }
+
+      // The complete catalog reports every token problem at once, so one pass of fixes can succeed.
+      const problems = new Set<string>()
+      for (const path of graph.tokens.keys()) {
+        try {
+          preflightToken(graph, path)
+        } catch (error) {
+          problems.add(error instanceof Error ? error.message : String(error))
+        }
+      }
+      if (problems.size) {
+        const count = problems.size === 1 ? '1 problem' : `${problems.size} problems`
+        const details =
+          problems.size === 1 ? [...problems][0]! : [...problems].map(problem => `- ${problem}`).join('\n')
+        return fail(`woof found ${count}.`, details, problems.size === 1 ? 'it' : 'them')
+      }
+      const count = graph.tokens.size
+      valid(
+        count === 0
+          ? 'There are no tokens to validate.'
+          : count === 1
+            ? '1 token is valid.'
+            : `All ${count} tokens are valid.`,
+        project,
       )
     } catch (error) {
-      const details = error instanceof Error ? error.message : String(error)
+      fail('woof validation failed.', error instanceof Error ? error.message : String(error), 'it')
+    }
+
+    function valid(summary: string, project: string) {
+      presentResult(
+        { summary, details: fieldsText([['Project', project]]) },
+        { template: 'validate-result', values: { summary, project } },
+      )
+    }
+
+    function fail(summary: string, details: string, fix: string) {
       presentError(
-        {
-          summary: 'woof validation failed.',
-          details,
-          recovery: 'Review the reported data, source or reference failure. Correct it, then retry.',
-        },
-        { template: 'validate-error', values: { details } },
+        { summary, details, recovery: `Fix ${fix}, then run ${inlineCodeText('woof validate')} again.` },
+        { template: 'validate-error', values: { summary, details, fix } },
       )
       process.exitCode = 1
     }
