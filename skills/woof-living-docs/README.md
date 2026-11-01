@@ -28,7 +28,7 @@ If a distinct domain needs a brief but has none, the skill reports the gap. It d
 
 The skill updates the registry when a brief is created, renamed, deleted, or materially re-scoped. Registry tags identify the main subjects or workflows that each brief covers. The skill removes tags for incidental mentions, supporting details, and prerequisites when it updates an entry.
 
-On a scaffold request, it creates the registry, the agent entry points, and their symlinks. Before it finishes, it applies the Simplified Technical English flavor of the `toolkit-editorial-pass` skill to the changed prose.
+On a scaffold request, it creates the registry, the agent entry points, and their symlinks. Before it finishes, it applies the Simplified Technical English editorial pass from woof, `writing.editorial.pass.ste`, to the changed prose.
 
 ## Notes
 

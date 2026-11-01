@@ -122,11 +122,11 @@ When replacing or retiring existing documentation, complete the coverage review 
 
 ## Apply the editorial pass
 
-After preparing all documentation and registry changes, invoke the `toolkit-editorial-pass` skill and name the Simplified technical English flavor. Apply it to the changed documentation prose, including registry descriptions.
+After preparing all documentation and registry changes, run `woof get 'writing.editorial.pass.ste' --agent` and follow the instructions it prints. Apply them to the changed documentation prose, including registry descriptions.
 
 Preserve every supported fact and introduce no new claims. Keep headings, document ordering, registry structure, registry references, and tags intact.
 
-If the editorial pass cannot run, do not claim that it ran. Stop before finalizing documentation changes, report the failed editorial step, and ask the user how to proceed.
+If woof cannot return the instructions, or the editorial pass cannot run, do not claim that it ran. Stop before finalizing documentation changes, report the failed editorial step, and ask the user how to proceed.
 
 ## Finish
 
