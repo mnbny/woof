@@ -2,15 +2,33 @@ import type { RegisteredProject, RepositoryProject } from './projects.ts'
 import type { ProjectConfiguration, Resource, RootConfiguration, TokenValue } from './schema.ts'
 
 import { createHash } from 'node:crypto'
-import { chmodSync, constants, copyFileSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import {
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { replaceConfigurationFile, replaceFileContent, validateConfigurationDocument } from './config.ts'
+import { inlineCodeText } from './display.ts'
 import { withConfigurationLock } from './migrations.ts'
 import { getWoofHome } from './paths.ts'
-import { insideWoofHome, loadRegisteredProjects, repositoryConfiguration, selectProjectContext } from './projects.ts'
+import {
+  checkoutPath,
+  insideWoofHome,
+  loadRegisteredProjects,
+  namedProjectCheckout,
+  repositoryConfiguration,
+  selectProjectContext,
+} from './projects.ts'
 import {
   createResourceLoader,
   detectCheckoutRoot,
@@ -36,9 +54,20 @@ export type TokenDraft = {
 type ProjectContext = ReturnType<typeof selectProjectContext>
 
 export function targetLabel(target: TokenTarget) {
-  if (target.kind === 'shared') return 'shared tokens, used by every project'
-  if (target.kind === 'repository') return 'the repository configuration of this checkout'
-  return `registered project ${target.name}`
+  if (target.kind === 'shared') return 'shared tokens (global)'
+  if (target.kind === 'repository') return 'repo tokens (project)'
+  return `${target.name} tokens (project)`
+}
+
+// The place that a target stands for on this machine: the shared configuration or the project checkout.
+export function targetPath(target: TokenTarget, cwd: string) {
+  if (target.kind === 'shared') return getWoofHome('woof.config.json')
+  if (target.kind === 'repository') return detectCheckoutRoot(cwd)
+  const loader = createResourceLoader({ cwd })
+  const project = loadRegisteredProjects(loader.loadRootConfiguration(), loader).find(
+    candidate => candidate.name === target.name,
+  )
+  return project && checkoutPath(project)
 }
 
 const SEGMENT = /^[A-Za-z0-9_-]+$/
@@ -61,12 +90,18 @@ function destination(target: TokenTarget, cwd: string) {
   if (target.kind === 'repository') {
     const checkout = detectCheckoutRoot(cwd)
     const file = checkout && !insideWoofHome(cwd) ? repositoryConfiguration(checkout) : undefined
-    if (!file) throw new Error('This checkout has no repository configuration. Create one with woof init --repo.')
+    if (!file)
+      throw new Error(
+        `This checkout has no repository configuration. Create one with ${inlineCodeText('woof init --repo')}.`,
+      )
     return { file, kind: 'repository' as const, base: [] as string[] }
   }
   const loader = createResourceLoader({ cwd })
   const projects = loader.loadRootConfiguration().data.$projects ?? {}
-  if (!Object.hasOwn(projects, target.name)) throw new Error(`Unknown registered project: ${target.name}.`)
+  if (!Object.hasOwn(projects, target.name))
+    throw new Error(
+      `Project ${inlineCodeText(target.name)} is not registered. See the registered projects with ${inlineCodeText('woof projects')}.`,
+    )
   const definition = projects[target.name]!
   if (typeof definition === 'string')
     return {
@@ -87,14 +122,15 @@ function insert(document: Record<string, unknown>, base: string[], path: string,
     const existing = Object.hasOwn(namespace, segment) ? namespace[segment] : undefined
     if (index === segments.length - 1) {
       if (replace && (existing === undefined || isNamespace(existing)))
-        throw new Error(`Token ${current} does not exist in this configuration.`)
-      if (!replace && existing !== undefined) throw new Error(`Token ${current} already exists in this configuration.`)
+        throw new Error(`Token ${inlineCodeText(current)} does not exist in this configuration.`)
+      if (!replace && existing !== undefined)
+        throw new Error(`Token ${inlineCodeText(current)} already exists in this configuration.`)
       namespace[segment] = value
     } else if (existing === undefined) {
-      if (replace) throw new Error(`Token ${path} does not exist in this configuration.`)
+      if (replace) throw new Error(`Token ${inlineCodeText(path)} does not exist in this configuration.`)
       namespace = namespace[segment] = {}
     } else if (isNamespace(existing)) namespace = existing
-    else throw new Error(`Token ${current} already exists, so it cannot hold ${path}.`)
+    else throw new Error(`Token ${inlineCodeText(current)} already exists, so it cannot hold ${inlineCodeText(path)}.`)
   }
   return next
 }
@@ -126,7 +162,7 @@ export function assertTokenPath(path: string) {
   const segments = path.split('.')
   if (!segments.every(segment => SEGMENT.test(segment) && !PROTOTYPE_NAMES.has(segment)))
     throw new Error(
-      `Token path ${path} must be dot-separated names that contain only ASCII letters, digits, underscores and hyphens.`,
+      `Token path ${inlineCodeText(path)} must be dot-separated names that contain only ASCII letters, digits, underscores and hyphens.`,
     )
 }
 
@@ -151,7 +187,9 @@ export function readTokenContent(content: string, options: { cwd: string; target
   const copy = `resources/${options.path.replaceAll('.', '/')}${extname(file)}`
   try {
     statSync(join(home, copy))
-    throw new Error(`woof home already has a file at ${copy}. Move the file into woof home, or paste its content.`)
+    throw new Error(
+      `woof home already has a file at ${inlineCodeText(copy)}. Move the file into woof home, or paste its content.`,
+    )
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
@@ -178,7 +216,7 @@ export function checkToken(
     root,
     project,
     candidates: [],
-    checkoutRoot,
+    checkoutRoot: project.kind === 'registered' ? namedProjectCheckout(project, cwd, checkoutRoot) : checkoutRoot,
     selection: 'explicit',
   })
   const rootContext: ProjectContext = { root, candidates: [], checkoutRoot, selection: 'root' }
@@ -263,7 +301,8 @@ export async function saveToken(draft: TokenDraft, cwd: string) {
 }
 
 export type TokenLayer = 'definition' | 'override'
-export type TokenEdit = { content?: string; description?: string; tags?: string[] }
+// The script references replace those of the token, such as for an override with its own copy of the files.
+export type TokenEdit = { content?: string; description?: string; tags?: string[]; exec?: string | string[] }
 
 function digest(files: string[]) {
   const hash = createHash('sha256')
@@ -286,15 +325,15 @@ export function describeToken(address: string, options: { cwd: string; project?:
   })
   if (context.selection === 'ambiguous')
     throw new Error(
-      `Several projects match this directory: ${context.candidates.map(candidate => candidate.name).join(', ')}. Retry with --project NAME.`,
+      `Several projects match this directory: ${context.candidates.map(candidate => inlineCodeText(candidate.name)).join(', ')}. Retry with ${inlineCodeText('--project NAME')}.`,
     )
   const graph = createTokenGraph(context)
   const token = graph.tokens.get(address)
   if (!token)
     throw new Error(
       graph.rootNamespaces.has(address) || graph.projectNamespaces.has(address)
-        ? `${address} is a namespace. Choose one token in it.`
-        : `Unknown token ${address}. Find it with woof get --search.`,
+        ? `${inlineCodeText(address)} is a namespace. Choose one token in it.`
+        : `Token ${inlineCodeText(address)} does not exist. Find it with ${inlineCodeText('woof get --search')}.`,
     )
   const project = 'project' in context ? context.project : undefined
   const definition: TokenTarget = token.origin === 'root' ? { kind: 'shared' } : projectTarget(project!)
@@ -330,25 +369,37 @@ export function describeToken(address: string, options: { cwd: string; project?:
 export async function editToken(
   address: string,
   edit: TokenEdit,
-  options: { cwd: string; project?: string | undefined; layer: TokenLayer; version?: string },
+  options: { cwd: string; project?: string | undefined; layer: TokenLayer; version?: string; check?: boolean },
 ) {
   const opened = describeToken(address, options)
   const target = options.layer === 'override' ? opened.override : opened.definition
-  if (!target) throw new Error(`${address} is not a shared token seen from a project, so it cannot get an override.`)
+  if (!target)
+    throw new Error(
+      `${inlineCodeText(address)} is not a shared token seen from a project, so it cannot get an override.`,
+    )
   return withConfigurationLock(destination(target, options.cwd).file, file => {
     // The user can take a while, so the save reads the token again under the lock.
     const token = describeToken(address, options)
     if (options.version && token.version !== options.version)
-      throw new Error(`${address} changed after it was opened. Open it again to edit the current version.`)
+      throw new Error(
+        `${inlineCodeText(address)} changed after it was opened. Open it again to edit the current version.`,
+      )
     if (edit.content !== undefined && token.kind === 'fixed')
-      throw new Error(`The content of ${address} is in ${token.files.join(', ')}. Edit the file directly.`)
+      throw new Error(
+        `The content of ${inlineCodeText(address)} is in ${token.files.map(file => inlineCodeText(file)).join(', ')}. Edit the file directly.`,
+      )
     if (edit.content !== undefined && !edit.content.trim()) throw new Error('The token content is empty.')
     const description = edit.description === undefined ? token.description : edit.description.trim() || undefined
     const tags = edit.tags ?? token.tags
     const changed = edit.content !== undefined && edit.content !== token.content
     // A definition takes new prompt text into its file. An override keeps its text inline, so the shared file stays.
     const writesFile = changed && token.kind === 'file' && options.layer === 'definition'
-    const value = resourceValue(token.type, changed && !writesFile ? edit.content! : token.exec, description, tags)
+    const value = resourceValue(
+      token.type,
+      changed && !writesFile ? edit.content! : (edit.exec ?? token.exec),
+      description,
+      tags,
+    )
     if (options.layer === 'definition' && !writesFile && isDeepStrictEqual(value, token.value))
       return { file, contentFile: undefined, changed: false }
 
@@ -361,6 +412,8 @@ export async function editToken(
       },
       options.cwd,
     )
+    // A check runs every test of the save and stops before the write.
+    if (options.check) return { file, contentFile: undefined, changed: true }
     const next = writesFile ? insert(checked.document, checked.base, address, value, true) : checked.next
     const original = writesFile ? readFileSync(token.files[0]!) : undefined
     if (writesFile) replaceFileContent(token.files[0]!, edit.content!)
@@ -372,4 +425,55 @@ export async function editToken(
     }
     return { file, contentFile: writesFile ? token.files[0] : undefined, changed: true }
   })
+}
+
+// An override of a script gets its own copy of the script files, so a change to the copy stays in the project. A
+// repository keeps the copies next to its configuration, and a registered project keeps them in woof home.
+export function copyScriptForOverride(address: string, options: { cwd: string; project?: string | undefined }) {
+  const token = describeToken(address, options)
+  const target = token.override
+  if (!target || target.kind === 'shared' || token.kind !== 'fixed')
+    throw new Error(`${inlineCodeText(address)} has no script files to copy.`)
+  const checkout = detectCheckoutRoot(options.cwd)
+  const home = realpathSync(getWoofHome())
+  const base =
+    target.kind === 'repository'
+      ? { directory: join(dirname(destination(target, options.cwd).file), 'woof'), marker: '<repo>', root: checkout! }
+      : { directory: join(home, 'resources', 'projects', target.name), marker: '<root>', root: home }
+  const references = Array.isArray(token.exec) ? token.exec : [token.exec]
+  const marked = [...new Set(references.filter(isMarkedResourceReference))]
+  const segments = address.split('.')
+  const copies = new Map(
+    marked.map(reference => {
+      const source = resolveResourceLocation(reference, checkout ? { repoRoot: checkout } : {}).file
+      const file =
+        marked.length === 1
+          ? `${join(base.directory, ...segments)}${extname(source)}`
+          : join(base.directory, ...segments, basename(source))
+      return [reference, { source, file }] as const
+    }),
+  )
+  for (const { file } of copies.values())
+    if (existsSync(file)) throw new Error(`${inlineCodeText(file)} already exists. Move it away, then retry.`)
+  const remove = () => {
+    for (const { file } of copies.values()) rmSync(file, { force: true })
+  }
+  try {
+    for (const { source, file } of copies.values()) {
+      mkdirSync(dirname(file), { recursive: true })
+      copyFileSync(source, file, constants.COPYFILE_EXCL)
+    }
+  } catch (error) {
+    remove()
+    throw error
+  }
+  const exec = references.map(reference => {
+    const copy = copies.get(reference)
+    return copy ? `${base.marker}/${relative(base.root, copy.file).split(sep).join('/')}` : reference
+  })
+  return {
+    exec: Array.isArray(token.exec) ? exec : exec[0]!,
+    files: [...copies.values()].map(copy => copy.file),
+    remove,
+  }
 }
