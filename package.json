@@ -1,8 +1,16 @@
 {
   "name": "@mnbny/woof",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Local CLI for reusable instructions, prompts, and computed resources",
+  "homepage": "https://github.com/mnbny/woof#readme",
+  "bugs": {
+    "url": "https://github.com/mnbny/woof/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mnbny/woof.git"
+  },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "woof": "./cli/woof.bundle.mjs"
@@ -16,6 +24,7 @@
   "scripts": {
     "build": "tsx .tools/scripts/build.ts",
     "prepack": "pnpm build",
+    "pack:check": "tsx .tools/scripts/pack-check.ts",
     "test": "vitest run --config .tools/tests/vitest.config.ts",
     "validate": "tsx .tools/scripts/scripty.ts --sequential && pnpm build",
     "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
@@ -59,5 +68,8 @@
   "packageManager": "pnpm@12.16.1",
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
