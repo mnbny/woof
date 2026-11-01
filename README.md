@@ -477,6 +477,10 @@ Design notes for contributors and agents live in [`.agents/docs/`](.agents/docs/
 <table>
   <tr>
     <td>After this interaction, I refer to my agents as woof.</td>
-    <td><!-- screenshot --></td>
+    <td><img width="256" height="182" alt="telegram-cloud-photo-size-1-4954272345791073203-m" src="https://github.com/user-attachments/assets/d390675f-cf99-4acc-bca8-95a2a6076432" /></td>
   </tr>
 </table>
+
+
+
+
