@@ -33,12 +33,3 @@ Before writing a test, confirm that **all** conditions below are met. These requ
 3. It adds protection that existing tests do not already provide.
 4. It is neither trivial nor low-value, even if it covers something new.
 5. Its purpose is to protect behavior, not merely to increase test count or coverage.
-
-## Skills
-
-Use globally installed development skills when requested. This repository includes two skills:
-
-- `skills/woof-execution/SKILL.md`: the execution guide. It ships with the package.
-- `skills/woof-living-docs/SKILL.md`: the maintenance skill for this documentation system. It does not ship with the package.
-
-The repository does not vendor a broader catalog of development skills.
