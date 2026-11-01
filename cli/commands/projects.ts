@@ -1,11 +1,27 @@
 import { defineCommand } from 'citty'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
+import { isAgent } from '../utils/agent.ts'
+import { badgeText, fieldsText, inlineBadge, inlineCodeText, listFieldText } from '../utils/display.ts'
 import { presentError, presentResult } from '../utils/presentation.ts'
-import { loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
+import { loadRegisteredProjects, projectMatches, selectedProjectText, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
+
+// Each color is an entry of the 256-color palette, so terminals without true color show it unchanged.
+const CURRENT_COLOR = '#afd7ff'
+const MATCH_COLOR = '#dadada'
+
+type ProjectRow = {
+  name: string
+  kind: 'repo' | 'registered'
+  badge?: string
+  config: string
+  inline: boolean
+  basePaths: string[]
+  worktreePaths: string[]
+}
 
 function metadataPaths(paths: string[] | undefined) {
   return (paths ?? []).map(path =>
@@ -17,66 +33,101 @@ export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
   },
-  meta: { description: 'List registered projects and their paths', name: 'projects' },
+  meta: { description: 'List the detected project and the registered projects', name: 'projects' },
   async run({ rawArgs }) {
     try {
-      const { positionals } = parseArgs({
+      const { values, positionals } = parseArgs({
         args: rawArgs,
         allowPositionals: true,
         options: { agent: { type: 'boolean' } },
       })
       if (positionals.length) throw new Error('Projects does not accept positional arguments.')
+      const agent = values.agent === true || Boolean(isAgent())
 
-      const loader = createResourceLoader({ cwd: process.cwd() })
+      const cwd = process.cwd()
+      const loader = createResourceLoader({ cwd })
       const root = loader.loadRootConfiguration()
       const projects = loadRegisteredProjects(root, loader)
-      const context = selectProjectContext({ loader })
-      const scope = context.project
-        ? context.project.kind === 'repository'
-          ? 'unnamed repository (not a registered export)'
-          : context.project.name
-        : 'root only'
-      const candidates = context.candidates.map(candidate => candidate.name).join(', ') || 'none'
-      const current = [
-        `Selection: ${context.selection}`,
-        `Current scope: ${scope}`,
-        ...(context.project?.kind === 'repository' ? [`Repository configuration: ${context.project.source.file}`] : []),
-        `Matching candidates: ${candidates}`,
-      ].join('\n')
-      const list = projects
-        .flatMap(project => [
-          `${project.name} [${project.inline ? 'inline' : 'referenced'}]`,
-          `  Configuration: ${project.source.file}`,
-          `  Resource root: ${project.source.root}`,
-          ...metadataPaths(project.data.$metadata?.$basePaths).map(path => `  Checkout: ${path}`),
-          ...metadataPaths(project.data.$metadata?.$worktreePaths).map(path => `  Worktree pattern: ${path}`),
-        ])
-        .join('\n')
-      const projectsNoun = projects.length === 1 ? 'project' : 'projects'
+      const context = selectProjectContext({ cwd, loader })
+      const current = 'project' in context ? context.project : undefined
+      const matching = new Set(projects.filter(project => projectMatches(project, cwd)).map(project => project.name))
 
-      presentResult(
-        {
-          summary: projects.length ? `${projects.length} registered ${projectsNoun}` : 'No registered projects',
-          details: projects.length ? `${current}\n\n${list}` : `${current}\n\nTo create a project, run woof init.`,
-          recovery:
-            'Selection is not persisted. Unnamed repository scope is distinct from named, exportable registry entries.',
-        },
-        projects.length
-          ? {
-              template: 'projects-result',
-              values: { count: projects.length, projects: projectsNoun, current, list },
+      // The detected project comes first. A registered project that covers this directory but lost to the repository
+      // configuration, or that ties with another, is marked as a match.
+      const selected = selectedProjectText(context)
+      const summary = selected
+        ? `Current project: ${selected}`
+        : context.selection === 'ambiguous'
+          ? `Several projects match this directory. Pick one with ${inlineCodeText('--project NAME')}.`
+          : 'No project detected. Only shared tokens apply.'
+      const rows: ProjectRow[] = [
+        ...(current?.kind === 'repository'
+          ? [
+              {
+                name: basename(context.checkoutRoot!),
+                kind: 'repo' as const,
+                badge: 'current',
+                config: current.source.file,
+                inline: false,
+                basePaths: [],
+                worktreePaths: [],
+              },
+            ]
+          : []),
+        ...[...projects]
+          .sort(
+            (left, right) =>
+              Number(right.name === current?.name) - Number(left.name === current?.name) ||
+              Number(matching.has(right.name)) - Number(matching.has(left.name)),
+          )
+          .map(project => {
+            const badge =
+              project.name === current?.name
+                ? 'current'
+                : matching.has(project.name)
+                  ? current
+                    ? 'also matches'
+                    : 'matches'
+                  : undefined
+            return {
+              name: project.name,
+              kind: 'registered' as const,
+              ...(badge ? { badge } : {}),
+              config: project.source.file,
+              inline: project.inline,
+              basePaths: metadataPaths(project.data.$metadata?.$basePaths),
+              worktreePaths: metadataPaths(project.data.$metadata?.$worktreePaths),
             }
-          : { template: 'projects-empty', values: { current } },
-      )
+          }),
+      ]
+
+      const list = rows.length
+        ? rows
+            .map(row => {
+              const badge = row.badge
+                ? `  ${badgeText(row.badge, row.badge === 'current' ? CURRENT_COLOR : MATCH_COLOR)}`
+                : ''
+              const heading = agent
+                ? `- ${row.name} (${[row.kind, row.badge].filter(Boolean).join(', ')})`
+                : `${row.name}${badge}`
+              const inline = row.inline ? `  ${inlineBadge()}` : ''
+              return [
+                heading,
+                `  ${fieldsText([['Configuration', row.config]])}${inline}`,
+                ...[
+                  ...listFieldText('Base path', row.basePaths),
+                  ...listFieldText('Worktree path', row.worktreePaths),
+                ].map(line => `  ${line}`),
+              ].join('\n')
+            })
+            .join('\n')
+        : `No projects. To create one, run ${inlineCodeText(`woof init${agent ? ' --agent' : ''}`)}.`
+
+      presentResult({ summary, details: list }, { template: 'projects-result', values: { summary, list } })
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error)
       presentError(
-        {
-          summary: 'woof could not list projects.',
-          details,
-          recovery:
-            'Review the configuration paths and selection information, then retry. No project selection was persisted.',
-        },
+        { summary: 'woof could not list projects.', details },
         { template: 'projects-error', values: { details } },
       )
       process.exitCode = 1
