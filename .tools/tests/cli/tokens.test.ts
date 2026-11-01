@@ -142,6 +142,114 @@ test('keeps discovery metadata-only and reuses one literal computed result per r
   expect(await readFile(counter, 'utf8')).toBe('run\n')
 })
 
+test('lists project matches first while keeping relevance within each scope', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'discovery-home')
+  await config(home, {
+    $schemaVersion: 2,
+    aShared: {
+      $type: 'prompt',
+      $exec: 'Shared notes',
+      $description: 'Device verification notes for archived hardware',
+    },
+    zShared: { $type: 'prompt', $exec: 'Shared checks', $description: 'Device verification' },
+    $projects: {
+      demo: {
+        aProject: {
+          $type: 'prompt',
+          $exec: 'Project notes',
+          $description: 'Device verification guidance for legacy devices',
+        },
+        zProject: { $type: 'prompt', $exec: 'Project checks', $description: 'Device verification' },
+      },
+    },
+  })
+
+  for (const search of [false, true]) {
+    const result = await run(cli, home, [
+      'get',
+      'device verification',
+      '--project',
+      'demo',
+      '--agent',
+      ...(search ? ['--search'] : []),
+    ])
+    expect(result.status).toBe(search ? 0 : 1)
+    const paths = [...result.stdout.matchAll(/^- (\S+)/gm)].map(match => match[1])
+    expect(paths).toEqual(['zProject', 'aProject', 'zShared', 'aShared'])
+  }
+})
+
+test('finds single-word matches in any field without metadata dilution or duplicate tokens', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'single-word-home')
+  await config(home, {
+    $schemaVersion: 2,
+    deploy: { $type: 'prompt', $exec: 'Shared deployment', $description: 'Deploy', $tags: ['deploy'] },
+    'deploy-prod': { $type: 'prompt', $exec: 'Production', $description: 'Deploy to production' },
+    $projects: {
+      demo: {
+        deploy: 'Project deployment',
+        release: {
+          'deploy-checklist': {
+            $type: 'prompt',
+            $exec: 'Checklist',
+            $description: 'Steps before shipping',
+            $tags: ['ops'],
+          },
+        },
+        releaseAlias: '{{release.deploy-checklist}}',
+        describe: { $type: 'prompt', $exec: 'Instructions', $description: 'deploy' },
+        tagged: { $type: 'prompt', $exec: 'Instructions', $tags: ['deploy'] },
+        several: { $type: 'prompt', $exec: 'Instructions', $description: 'deploy', $tags: ['deploy'] },
+        bodyOnly: 'deploy',
+        dep: { $type: 'prompt', $exec: 'Instructions', $description: 'loy' },
+      },
+    },
+  })
+
+  for (const search of [false, true]) {
+    const result = await run(cli, home, [
+      'get',
+      search ? 'deploy' : 'deplo',
+      '--project',
+      'demo',
+      '--agent',
+      ...(search ? ['--search'] : []),
+    ])
+    expect(result.status).toBe(search ? 0 : 1)
+    const paths = [...result.stdout.matchAll(/^- (\S+)/gm)].map(match => match[1])
+    expect(paths).toEqual([
+      'deploy',
+      'describe',
+      'tagged',
+      'several',
+      'release.deploy-checklist',
+      'releaseAlias',
+      'deploy-prod',
+    ])
+  }
+})
+
+test('matches every query word across fields with spaces, tabs or newlines', async ({ cli, directory, expect }) => {
+  const home = join(directory, 'multi-word-home')
+  await config(home, {
+    $schemaVersion: 2,
+    crossFields: { $type: 'prompt', $exec: 'Instructions', $description: 'device', $tags: ['qa'] },
+    allOneField: { $type: 'prompt', $exec: 'Instructions', $description: 'device qa' },
+    missingWord: { $type: 'prompt', $exec: 'Instructions', $description: 'device', $tags: ['ops'] },
+  })
+
+  for (const query of ['device qa', ' device\tqa ', 'device\nqa', 'device zebra']) {
+    const result = await run(cli, home, ['get', query, '--search', '--agent'])
+    expect(result.status).toBe(0)
+    const paths = [...result.stdout.matchAll(/^- (\S+)/gm)].map(match => match[1])
+    expect(paths).toEqual(query === 'device zebra' ? [] : ['crossFields', 'allOneField'])
+  }
+})
+
 test('expands private markers through compositions without evaluating scripts or escaped examples', async ({
   cli,
   directory,

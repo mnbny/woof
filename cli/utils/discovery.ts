@@ -23,7 +23,21 @@ export function discoverResources(graph: TokenGraph, query = '') {
     tags: (token.tags ?? []).join(' '),
     target: token.target ?? '',
   }))
-  return picoSearch(records, normalized, ['path', 'description', 'tags', 'target'], { threshold: 0.3 }).map(
-    record => record.token,
+  // pico-search averages fields for one word, so search each field separately and keep each token's best hit.
+  const matches =
+    normalized.split(/\s+/).length === 1
+      ? picoSearch(
+          records.flatMap(({ token, ...fields }) =>
+            Object.values(fields)
+              .filter(value => value.trim())
+              .map(value => ({ token, value })),
+          ),
+          normalized,
+          ['value'],
+          { threshold: 0.3 },
+        )
+      : picoSearch(records, normalized, ['path', 'description', 'tags', 'target'], { threshold: 0.3 })
+  return [...new Set(matches.map(record => record.token))].sort(
+    (left, right) => Number(left.origin === 'root') - Number(right.origin === 'root'),
   )
 }
