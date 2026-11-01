@@ -6,6 +6,7 @@ type Option = { type: 'boolean' | 'string'; short?: string; multiple?: boolean }
 
 const commandOptions: Record<string, Record<string, Option>> = {
   add: {
+    private: { type: 'boolean' },
     type: { type: 'string' },
     content: { type: 'string' },
     description: { type: 'string' },
@@ -16,6 +17,8 @@ const commandOptions: Record<string, Record<string, Option>> = {
   },
   get: { project: { type: 'string' }, search: { type: 'boolean' } },
   edit: {
+    private: { type: 'boolean' },
+    'no-private': { type: 'boolean' },
     project: { type: 'string' },
     content: { type: 'string' },
     description: { type: 'string' },
@@ -67,6 +70,9 @@ export function parseInvocation(rawArgs: string[]) {
     parsed.values.help === true ||
     parsed.values.version === true
   if (command && !passive) {
+    const values = parsed.values as Record<string, unknown>
+    if (command === 'edit' && values['private'] && values['no-private'])
+      throw new Error('Choose --private or --no-private, not both.')
     const count = parsed.positionals.length
     if (command === 'import' && count !== 1) throw new Error('import requires exactly one argument.')
     // Without an address, explain offers a picker to a person and asks an agent for the address.
@@ -76,7 +82,7 @@ export function parseInvocation(rawArgs: string[]) {
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
     if ((command === 'add' || command === 'edit') && count > 1)
       throw new Error(`${command} accepts at most one token path.`)
-    if (command === 'init' && count > ((parsed.values as Record<string, unknown>)['repo'] ? 1 : 0))
+    if (command === 'init' && count > (values['repo'] ? 1 : 0))
       throw new Error('init accepts one location, and only with --repo.')
     if (
       ['get', 'explain', 'validate'].includes(command) &&
@@ -84,7 +90,7 @@ export function parseInvocation(rawArgs: string[]) {
       parsed.positionals[0]!.startsWith('$projects.')
     ) {
       const qualified = splitProjectAddress(parsed.positionals[0]!)
-      const project = (parsed.values as Record<string, unknown>)['project']
+      const project = values['project']
       if (project && qualified.project !== project)
         throw new Error(
           `Qualified address selects ${qualified.project}, which contradicts --project ${String(project)}.`,

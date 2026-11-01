@@ -10,6 +10,7 @@ Add creates one token in the shared tokens, in a registered project, or in the r
 - A type: prompt, or a bash, node, tsx, or bun script.
 - The content, as text or from standard input.
 - An optional description and tags, for discovery.
+- An optional privacy flag, to omit the content from exports.
 - One target: the shared tokens, the repository configuration, or a registered project.
 
 ## Content
@@ -20,7 +21,7 @@ woof saves text inline. One line that names an existing file becomes a file refe
 - For a project token, a file in the checkout keeps its place.
 - woof copies other files into the resources area of woof home, because a reference must stay inside a root.
 
-A prompt without a description or tags is saved as a plain string. Other tokens are saved as resource objects.
+A prompt without metadata or a privacy setting is saved as a plain string. Other tokens are saved as resource objects.
 
 ## Checks
 
@@ -36,10 +37,10 @@ A project token at the path of a shared token is an override. Add reports it.
 
 - A human answers one question for each missing input: target, path, type, content, description, and tags. Each answer is checked at once. After a failure, add shows the reason and asks the same question again.
 - The target choices are the shared tokens and the detected project. If woof detects no project, the choices are the shared tokens and all registered projects, or the matching projects if several match.
-- An agent without complete input receives a drafting handoff. The handoff tells the agent to draft the token from the conversation, to search for a similar token, to show the draft to the user, and to save only after approval. It lists the existing namespaces, the same targets as the human question, and the exact command.
+- An agent without complete input receives a drafting handoff. The agent drafts the token from the conversation and searches for a similar token. The draft includes the export privacy setting. The agent shows the draft to the user and saves only after approval. The handoff lists the existing namespaces, the same targets as the human question, and the exact command.
 - With complete input, add reports every problem that it finds in one message.
 - Add checks again when it saves, because the configuration can change during the questions. The save replaces the document atomically and keeps its other content.
 
 ## Output and exit status
 
-On success, add reports the configuration file, the type or the target of an alias, how the content was saved, the description, the tags, whether the token is an override, and a command to check the token. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.
+On success, add reports the configuration file, the type or alias target, and how the content was saved. It also reports the description, tags, export privacy setting, whether the token is an override, and a command to check the token. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.

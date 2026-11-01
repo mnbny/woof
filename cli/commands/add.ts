@@ -82,6 +82,7 @@ export default defineCommand({
     content: { description: 'Token content or a file path; - reads standard input', type: 'string' },
     description: { description: 'Description for discovery', type: 'string' },
     tag: { description: 'Tag for discovery (repeatable)', type: 'string' },
+    private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
     shared: { description: 'Add the token to the shared tokens', type: 'boolean' },
     repo: { description: 'Add the token to the repository configuration', type: 'boolean' },
     project: { description: 'Add the token to this registered project', type: 'string' },
@@ -98,6 +99,7 @@ export default defineCommand({
           content: { type: 'string' },
           description: { type: 'string' },
           tag: { type: 'string', multiple: true },
+          private: { type: 'boolean' },
           shared: { type: 'boolean' },
           repo: { type: 'boolean' },
           project: { type: 'string' },
@@ -160,6 +162,7 @@ export default defineCommand({
             '--type',
             type ?? 'TYPE',
             target ? targetFlag(target) : 'TARGET',
+            ...(values.private ? ['--private'] : []),
             '--description',
             description === undefined ? 'DESCRIPTION' : shellQuote(description),
             ...(tags.length ? tags.flatMap(tag => ['--tag', shellQuote(tag)]) : ['--tag', 'TAG']),
@@ -197,7 +200,15 @@ export default defineCommand({
         if (!errors.length) {
           try {
             checkDraft(
-              { target: target!, path: path!, type: type as TokenType, content: content!, description, tags },
+              {
+                target: target!,
+                path: path!,
+                type: type as TokenType,
+                content: content!,
+                description,
+                tags,
+                private: values.private,
+              },
               cwd,
             )
           } catch (error) {
@@ -212,6 +223,7 @@ export default defineCommand({
           content: content!,
           description,
           tags,
+          private: values.private,
         })
       }
 
@@ -284,7 +296,7 @@ export default defineCommand({
         tags = splitList(entered)
       }
 
-      await save({ target, path, type: tokenType, content, description, tags })
+      await save({ target, path, type: tokenType, content, description, tags, private: values.private })
     } catch (error) {
       const details = message(error)
       presentError(
@@ -309,7 +321,11 @@ export default defineCommand({
       const override = overrides ? 'yes' : 'no'
       // Only a prompt without metadata is saved as a plain string, which is the form of an alias.
       const target =
-        draft.type === 'prompt' && !draft.content.file && !draft.description && !draft.tags.length
+        draft.type === 'prompt' &&
+        !draft.content.file &&
+        !draft.description &&
+        !draft.tags.length &&
+        draft.private === undefined
           ? aliasTarget(draft.content.exec)
           : undefined
       const type = target ? `alias of ${target}` : draft.type
@@ -324,6 +340,7 @@ export default defineCommand({
             ['Content', content],
             ['Description', description],
             ['Tags', tags],
+            ['Private', draft.private ? 'yes' : 'no'],
             ['Overrides a shared token', override],
           ]),
           recovery: `Check it with ${inlineCodeText(command)}.`,
@@ -337,6 +354,7 @@ export default defineCommand({
             content,
             description,
             tags,
+            private: draft.private ? 'yes' : 'no',
             override,
             command: `${command} --agent`,
           },

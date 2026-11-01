@@ -42,10 +42,12 @@ export default defineCommand({
     content: { description: 'New content; - reads standard input', type: 'string' },
     description: { description: 'New description; an empty value removes it', type: 'string' },
     tag: { description: 'New tag set (repeatable); an empty value removes all tags', type: 'string' },
+    private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
+    'no-private': { description: 'Include the token content in exports', type: 'boolean' },
     shared: { description: 'Change a shared token for every project', type: 'boolean' },
     override: { description: 'Override a shared token in the selected project', type: 'boolean' },
   },
-  meta: { description: 'Edit the content, description, or tags of a token', name: 'edit' },
+  meta: { description: 'Edit the content, metadata, or export privacy of a token', name: 'edit' },
   async run({ rawArgs }) {
     try {
       const { values, positionals } = parseArgs({
@@ -57,6 +59,8 @@ export default defineCommand({
           content: { type: 'string' },
           description: { type: 'string' },
           tag: { type: 'string', multiple: true },
+          private: { type: 'boolean' },
+          'no-private': { type: 'boolean' },
           shared: { type: 'boolean' },
           override: { type: 'boolean' },
         },
@@ -105,6 +109,7 @@ export default defineCommand({
           : {}),
         ...(values.description !== undefined ? { description: values.description } : {}),
         ...(values.tag ? { tags: values.tag.map(tag => tag.trim()).filter(Boolean) } : {}),
+        ...(values.private ? { private: true } : values['no-private'] ? { private: false } : {}),
       }
       const changes = Object.keys(edit).length > 0
       // A shared token seen from a project changes for all projects, or for this project only through an override.
@@ -140,7 +145,7 @@ export default defineCommand({
               .join('\n')
           : `none needed: the token is defined in ${targetLabel(token.definition)}`
         const content = token.content ?? `The content is in ${token.files.join(', ')}.`
-        const command = `woof edit ${shellQuote(path)}${projectFlag}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
+        const command = `woof edit ${shellQuote(path)}${projectFlag}${values.private ? ' --private' : values['no-private'] ? ' --no-private' : ''}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
           token.kind === 'fixed' ? suffix : ` --content -${suffix} <<'WOOF'\nCONTENT\nWOOF`
         }`
         const description = token.description ?? 'none'
@@ -148,7 +153,7 @@ export default defineCommand({
         presentSelection(
           {
             summary: `Edit ${path}.`,
-            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
+            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\nPrivate: ${token.private ? 'yes' : 'no'}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
             recovery: 'Pass only the fields that change.',
           },
           {
@@ -161,6 +166,7 @@ export default defineCommand({
               location,
               description,
               tags,
+              private: token.private ? 'yes' : 'no',
               content,
               layers,
               command,

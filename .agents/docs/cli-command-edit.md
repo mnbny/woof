@@ -2,19 +2,21 @@
 
 ## Purpose and ownership
 
-Edit changes the content, description, or tags of one token. People edit prompt content in a local browser page. They edit the description and tags in the terminal. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
+Edit changes the content, description, tags, or export privacy of one token. People edit prompt content in a local browser page. They edit the description and tags in the terminal. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
 
 ## Inputs
 
 - The path of a token in the effective view, and an optional registered project.
 - The changes: new content, a description, or a tag set. A flag that is not given keeps its field. An empty description or an empty tag removes that field.
+- Privacy flags include or omit the content in exports. They cannot be combined. Other edits, including replacement of a placeholder and creation of an override, preserve the privacy setting.
 - A layer, when a project context shows a shared token: change the shared token for all projects, or add an override for this project only.
 
 ## What changes
 
 - Inline content changes in the configuration.
+- Disabling privacy removes the field and preserves the content and other metadata. A prompt with no remaining metadata uses the plain string form. Disabling privacy alone on an already public definition makes no change.
 - A prompt file changes in place. An override keeps its text inline, so the shared file stays the same.
-- Edit does not change the content of a script file. Edit shows commands that open the file. For a script, edit changes only the description and tags.
+- Edit does not change the content of a script file. Edit shows commands that open the file. For a script file, edit changes only the description, tags, and export privacy.
 - An override of a script gets its own copy of the script files, so a change to the copy stays in the project. A repository keeps the copies next to its configuration. A registered project keeps them in woof home. If the edit does not finish, woof removes the copies.
 
 Edit runs the same checks as add, and writes nothing until all checks pass. Edit also refuses a change when the token changed after it was opened.
@@ -36,7 +38,7 @@ The page server listens only on the local loopback address. It answers only requ
 
 ## Agents
 
-An agent without changes receives the current token: the type, the layer, the files, the description, the tags, and the content. The handoff tells the agent to draft the change from the conversation, to show the user the current and the new version, and to apply the change only after approval. It gives the exact command, with the content on standard input. For a script, the override flag alone creates the override with its own copy of the script files. The agent then edits the copy.
+An agent without changes receives the current token: the type, layer, files, description, tags, export privacy setting, and content. The agent drafts the change from the conversation and shows the user the current and new versions. The agent applies the change only after approval. The handoff gives the exact command, with the content on standard input. For a script, the override flag alone creates the override with its own copy of the script files. The agent then edits the copy.
 
 ## Output and exit status
 

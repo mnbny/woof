@@ -140,11 +140,16 @@ test('adds a token only when the whole configuration still works', async ({ cli,
   )
   const original = await readFile(file, 'utf8')
   const add = (path: string, content: string) =>
-    run(cli, home, ['add', path, '--type', 'prompt', '--shared', '--content', content, '--agent'])
+    run(cli, home, ['add', '--type', 'prompt', '--shared', '--content', content, '--agent', '--', path])
 
   expect((await add('agents', 'a shared leaf over a project namespace')).status).toBe(1)
   expect((await add('broken', 'see {{missing}}')).status).toBe(1)
   expect((await add('conventions.commit.default', 'a duplicate')).status).toBe(1)
+  for (const path of ['-x-', '-nested.value-']) {
+    const rejected = await add(path, 'cannot be referenced')
+    expect(rejected.status).toBe(1)
+    expect(rejected.stdout).toContain('reserved for internal markers')
+  }
   expect(await readFile(file, 'utf8')).toBe(original)
 
   expect((await add('conventions.commit.short', 'Keep {{conventions.commit.default}} short.')).status).toBe(0)
@@ -154,6 +159,9 @@ test('adds a token only when the whole configuration still works', async ({ cli,
     short: 'Keep {{conventions.commit.default}} short.',
   })
   expect(added.$projects).toEqual({ acme: { agents: { local: 'acme agents' } } })
+  expect((await add('conventions.-draft-', 'valid nested name')).status).toBe(0)
+  expect((await add('draft', '{{conventions.-draft-}}')).status).toBe(0)
+  expect((await run(cli, home, ['get', 'draft', '--agent'])).stdout).toBe('valid nested name')
 })
 
 test('copies a file from outside woof home so that the new token resolves', async ({ cli, directory, expect }) => {

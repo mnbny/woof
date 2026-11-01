@@ -35,7 +35,7 @@ import {
   isMarkedResourceReference,
   resolveResourceLocation,
 } from './resources.ts'
-import { createTokenGraph, preflightToken } from './tokens.ts'
+import { createTokenGraph, internalMarker, preflightToken } from './tokens.ts'
 
 export const TOKEN_TYPES = ['prompt', 'bash', 'node', 'tsx', 'bun'] as const
 
@@ -49,6 +49,7 @@ export type TokenDraft = {
   content: TokenContent
   description: string | undefined
   tags: string[]
+  private?: boolean | undefined
 }
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
@@ -135,19 +136,25 @@ function insert(document: Record<string, unknown>, base: string[], path: string,
   return next
 }
 
-// A prompt without metadata is a plain string. Every other token is a resource object.
-function resourceValue(type: TokenType, exec: string | string[], description: string | undefined, tags: string[]) {
-  if (type === 'prompt' && typeof exec === 'string' && !description && !tags.length) return exec
+function resourceValue(
+  type: TokenType,
+  exec: string | string[],
+  description: string | undefined,
+  tags: string[],
+  privacy?: boolean,
+) {
+  if (type === 'prompt' && typeof exec === 'string' && !description && !tags.length && !privacy) return exec
   return {
     $type: type,
     $exec: exec,
     ...(description ? { $description: description } : {}),
     ...(tags.length ? { $tags: tags } : {}),
+    ...(privacy ? { $private: true } : {}),
   } as TokenValue
 }
 
-export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>): TokenValue {
-  return resourceValue(draft.type, draft.content.exec, draft.description, draft.tags)
+export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>) {
+  return resourceValue(draft.type, draft.content.exec, draft.description, draft.tags, draft.private)
 }
 
 // A copied file does not exist in woof home until the save, so checks read the source instead. A prompt file and
@@ -158,7 +165,9 @@ function checkedValue(draft: Omit<TokenDraft, 'target' | 'path'>) {
   return tokenValue({ ...draft, content: { exec } })
 }
 
-export function assertTokenPath(path: string) {
+export function assertTokenPath(path: string, replace = false) {
+  if (!replace && internalMarker(path))
+    throw new Error(`Token path ${inlineCodeText(path)} is reserved for internal markers.`)
   const segments = path.split('.')
   if (!segments.every(segment => SEGMENT.test(segment) && !PROTOTYPE_NAMES.has(segment)))
     throw new Error(
@@ -206,7 +215,7 @@ export function checkToken(
   draft: Omit<TokenDraft, 'type' | 'content' | 'description' | 'tags'> & { value: TokenValue; replace?: boolean },
   cwd: string,
 ) {
-  assertTokenPath(draft.path)
+  assertTokenPath(draft.path, draft.replace)
   const target = destination(draft.target, cwd)
   const document = JSON.parse(readFileSync(target.file, 'utf8')) as Record<string, unknown>
   const next = insert(document, target.base, draft.path, draft.value, draft.replace)
@@ -305,8 +314,14 @@ export async function saveToken(draft: TokenDraft, cwd: string) {
 }
 
 export type TokenLayer = 'definition' | 'override'
-/** The script references replace those of the token, such as for an override with its own copy of the files. */
-export type TokenEdit = { content?: string; description?: string; tags?: string[]; exec?: string | string[] }
+export type TokenEdit = {
+  content?: string
+  description?: string
+  tags?: string[]
+  /** Replaces script references, such as when an override uses its own copies of the files. */
+  exec?: string | string[]
+  private?: boolean
+}
 
 function digest(files: string[]) {
   const hash = createHash('sha256')
@@ -364,6 +379,7 @@ export function describeToken(address: string, options: { cwd: string; project?:
     content: kind === 'file' ? readFileSync(files[0]!, 'utf8') : kind === 'inline' ? (exec as string) : undefined,
     description: typeof value === 'string' ? undefined : value.$description,
     tags: typeof value === 'string' ? [] : (value.$tags ?? []),
+    private: typeof value === 'string' ? undefined : value.$private,
     definition,
     // Only a shared token seen from a project can get an override in that project.
     override: token.origin === 'root' && project ? projectTarget(project) : undefined,
@@ -395,8 +411,11 @@ export async function editToken(
         `The content of ${inlineCodeText(address)} is in ${token.files.map(file => inlineCodeText(file)).join(', ')}. Edit the file directly.`,
       )
     if (edit.content !== undefined && !edit.content.trim()) throw new Error('The token content is empty.')
+    if (options.layer === 'definition' && edit.private === false && !token.private && Object.keys(edit).length === 1)
+      return { file, contentFile: undefined, changed: false }
     const description = edit.description === undefined ? token.description : edit.description.trim() || undefined
     const tags = edit.tags ?? token.tags
+    const privacy = edit.private ?? token.private
     const changed = edit.content !== undefined && edit.content !== token.content
     // A definition takes new prompt text into its file. An override keeps its text inline, so the shared file stays.
     const writesFile = changed && token.kind === 'file' && options.layer === 'definition'
@@ -405,6 +424,7 @@ export async function editToken(
       changed && !writesFile ? edit.content! : (edit.exec ?? token.exec),
       description,
       tags,
+      privacy,
     )
     if (options.layer === 'definition' && !writesFile && isDeepStrictEqual(value, token.value))
       return { file, contentFile: undefined, changed: false }
@@ -413,7 +433,7 @@ export async function editToken(
       {
         target,
         path: address,
-        value: writesFile ? resourceValue(token.type, edit.content!, description, tags) : value,
+        value: writesFile ? resourceValue(token.type, edit.content!, description, tags, privacy) : value,
         replace: options.layer === 'definition',
       },
       options.cwd,
