@@ -7,7 +7,7 @@ Draft the token from the conversation:
 3. Choose a path that fits the existing namespaces below. Each name in the path contains only ASCII letters, digits, underscores and hyphens.
 4. Choose the type: prompt for instructions or other text, or bash, node, tsx or bun for a script.
 5. Write a one-line description and a few tags, so that discovery can find the token.
-6. Choose one target below. Shared tokens apply to every project.
+6. Choose one target below. Shared tokens are available in every project. A project token exists only in that project, and it overrides a shared token at the same path.
 7. Show the user the path, target, type, description, tags and content. Save only after the user approves.
 
 Existing namespaces:
