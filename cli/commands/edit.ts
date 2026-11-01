@@ -5,21 +5,26 @@ import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
-import { describeToken, editToken, targetLabel } from '../utils/authoring.ts'
-import { shellQuote } from '../utils/display.ts'
+import { copyScriptForOverride, describeToken, editToken, targetLabel, targetPath } from '../utils/authoring.ts'
+import { discoverResources } from '../utils/discovery.ts'
+import { fieldsText, hintText, inlineCodeText, markdownText, shellQuote } from '../utils/display.ts'
 import { openBrowser, renderPreview, runEditor } from '../utils/editor.ts'
 import {
+  browserCountdown,
   chooseOption,
+  chooseToken,
+  enterText,
+  presentCancel,
   presentCode,
   presentError,
+  presentNotice,
   presentResult,
   presentSelection,
-  searchOption,
 } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { isTTY } from '../utils/terminal.ts'
-import { createTokenGraph, enumerateEffectiveTokens } from '../utils/tokens.ts'
+import { createTokenGraph } from '../utils/tokens.ts'
 
 type EditResult = Awaited<ReturnType<typeof editTokenType>>
 
@@ -62,44 +67,39 @@ export default defineCommand({
       const cwd = process.cwd()
       const project = values.project
       const projectFlag = project ? ` --project ${shellQuote(project)}` : ''
-      if (values.shared && values.override) throw new Error('Choose --shared or --override, not both.')
+      if (values.shared && values.override)
+        throw new Error(`Choose ${inlineCodeText('--shared')} or ${inlineCodeText('--override')}, not both.`)
 
       let path = positionals[0]
+      // A person at a terminal picks the token when the path is missing or inexact.
+      if (interactive) {
+        const graph = createTokenGraph(
+          selectProjectContext({ cwd, loader: createResourceLoader({ cwd }), ...(project ? { project } : {}) }),
+        )
+        if (path === undefined || !graph.tokens.has(path)) {
+          path = await chooseToken({ message: 'Token to edit', tokens: discoverResources(graph), query: path ?? '' })
+          if (!path) return presentCancel('Edit cancelled. Nothing was changed.')
+        }
+      }
       if (path === undefined) {
-        if (!interactive) {
-          presentSelection(
-            {
-              summary: 'Name the token to edit.',
-              details: `Find it with woof get 'TERMS' --search${projectFlag}, then run woof edit 'PATH'${projectFlag}.`,
-              recovery: 'Nothing was changed.',
-            },
-            { template: 'edit-path', values: { project: projectFlag } },
-          )
-          process.exitCode = 1
-          return
-        }
-        const context = selectProjectContext({
-          cwd,
-          loader: createResourceLoader({ cwd }),
-          ...(project ? { project } : {}),
-        })
-        path = await searchOption({
-          message: 'Token to edit',
-          options: enumerateEffectiveTokens(createTokenGraph(context)).map(token => ({
-            value: token.path,
-            label: token.path,
-            ...(token.description ? { hint: token.description } : {}),
-          })),
-        })
-        if (!path) {
-          process.exitCode = 130
-          return
-        }
+        presentSelection(
+          {
+            summary: 'Name the token to edit.',
+            details: `Find it with woof get 'TERMS' --search${projectFlag}, then run woof edit 'PATH'${projectFlag}.`,
+          },
+          { template: 'edit-path', values: { project: projectFlag } },
+        )
+        process.exitCode = 1
+        return
       }
 
       const token = describeToken(path, { cwd, project })
       if (values.override && !token.override)
-        throw new Error(`${path} is defined in ${targetLabel(token.definition)}, so it cannot get an override.`)
+        throw new Error(
+          token.definition.kind === 'shared'
+            ? `${inlineCodeText(path)} is a shared token, but no project is selected to hold an override. Run edit in a project, or pass ${inlineCodeText('--project NAME')}.`
+            : `${inlineCodeText(path)} is a project token. Only a shared token can get an override.`,
+        )
       const edit: TokenEdit = {
         ...(values.content !== undefined
           ? { content: values.content === '-' ? readFileSync(0, 'utf8').trimEnd() : values.content }
@@ -108,13 +108,27 @@ export default defineCommand({
         ...(values.tag ? { tags: values.tag.map(tag => tag.trim()).filter(Boolean) } : {}),
       }
       const changes = Object.keys(edit).length > 0
+      // A shared token seen from a project changes for all projects, or for this project only through an override.
+      const layerChoices = token.override
+        ? (
+            [
+              ['definition', '--shared', 'all projects (global)', { kind: 'shared' }],
+              ['override', '--override', 'this project only (override)', token.override],
+            ] as const
+          ).map(([value, flag, label, target]) => {
+            const path = targetPath(target, cwd)
+            return { value, flag, label, ...(path ? { hint: path } : {}) }
+          })
+        : []
       let layer: TokenLayer | undefined = values.override
         ? 'override'
         : values.shared || !token.override
           ? 'definition'
           : undefined
 
-      if (!interactive && (!changes || !layer)) {
+      // An override of a script is a change by itself: it gives the project its own copy of the script files.
+      const scriptOverride = !interactive && layer === 'override' && token.kind === 'fixed'
+      if (!interactive && ((!changes && !scriptOverride) || !layer)) {
         const location =
           token.kind === 'inline'
             ? 'inline'
@@ -122,7 +136,9 @@ export default defineCommand({
               ? token.files[0]!
               : `script files: ${token.files.join(', ') || 'none'}`
         const layers = token.override
-          ? `--shared  change the shared token for every project\n--override  add an override in ${targetLabel(token.override)}`
+          ? layerChoices
+              .map(choice => `${choice.flag}  ${choice.label}${choice.hint ? `: ${choice.hint}` : ''}`)
+              .join('\n')
           : `none needed: the token is defined in ${targetLabel(token.definition)}`
         const content = token.content ?? `The content is in ${token.files.join(', ')}.`
         const command = `woof edit ${shellQuote(path)}${projectFlag}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
@@ -134,7 +150,7 @@ export default defineCommand({
           {
             summary: `Edit ${path}.`,
             details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
-            recovery: 'Pass only the fields that change. Nothing was changed.',
+            recovery: 'Pass only the fields that change.',
           },
           {
             template: 'edit-draft',
@@ -158,101 +174,139 @@ export default defineCommand({
 
       if (!layer) {
         const selected = await chooseOption({
-          message: `${path} is a shared token. What should change?`,
-          options: [
-            { value: 'definition', label: 'The shared token', hint: 'every project sees the change' },
-            { value: 'override', label: `An override in ${targetLabel(token.override!)}`, hint: 'only this project' },
-          ],
+          message: `Change ${inlineCodeText(path)} for`,
+          options: layerChoices.map(({ value, label, hint }) => ({ value, label, ...(hint ? { hint } : {}) })),
         })
-        if (!selected) {
-          process.exitCode = 130
-          return
-        }
+        if (!selected) return presentCancel('Edit cancelled. Nothing was changed.')
         layer = selected as TokenLayer
       }
       const target = layer === 'override' ? token.override! : token.definition
+      const where = layerChoices.find(choice => choice.value === layer)?.label ?? targetLabel(target)
+      // An override of a script gets its own copy of the files. The copy goes away if the edit does not finish.
+      const copy =
+        layer === 'override' && token.kind === 'fixed' ? copyScriptForOverride(path, { cwd, project }) : undefined
+      const cancel = () => {
+        copy?.remove()
+        presentCancel('Edit cancelled. Nothing was changed.')
+      }
+      const save = async (changes: TokenEdit) => {
+        try {
+          const result = await editToken(
+            path!,
+            { ...changes, ...(copy ? { exec: copy.exec } : {}) },
+            { cwd, project, layer, version: token.version },
+          )
+          report(path!, target, copy ? { ...result, contentFile: copy.files.join(', ') } : result, where)
+        } catch (error) {
+          copy?.remove()
+          throw error
+        }
+      }
 
-      if (changes) return report(path, target, await editToken(path, edit, { cwd, project, layer }))
+      if (changes || scriptOverride) return await save(edit)
 
+      // The content comes first: a prompt in the browser page, a script in the editor of the person's choice. The
+      // description and tags follow in the terminal, and woof writes everything once at the end.
       const editingPath = path
       const editingLayer = layer
-      const outcome = await runEditor<EditResult>(
-        {
-          state: () => {
-            const current = describeToken(editingPath, { cwd, project })
-            return {
+      let content: string | undefined
+      if (token.kind === 'fixed') {
+        presentCode(
+          `Edit ${inlineCodeText(path)} in an editor ${hintText('the content is a script file')}`,
+          (copy?.files ?? token.files)
+            .flatMap(file => EDITORS.map(editor => `${editor} ${shellQuote(file)}`))
+            .join('\n'),
+          null,
+        )
+      } else {
+        const outcome = await runEditor<{ content: string }>(
+          {
+            state: () => ({
               path: editingPath,
-              type: current.type,
-              where: editingLayer === 'override' ? `new override in ${targetLabel(target)}` : targetLabel(target),
-              description: current.description ?? '',
-              tags: current.tags,
-              kind: current.kind,
-              files: current.files,
-              editable: current.kind !== 'fixed',
-              content: current.content ?? '',
-              commands: current.files.flatMap(file => EDITORS.map(editor => `${editor} ${shellQuote(file)}`)),
-              version: current.version,
-            }
-          },
-          preview: content => renderPreview(content, token.type),
-          save: async input => {
-            try {
-              const result = await editToken(
-                editingPath,
-                {
-                  ...(typeof input['content'] === 'string' ? { content: input['content'] } : {}),
-                  description: String(input['description'] ?? ''),
-                  tags: Array.isArray(input['tags']) ? input['tags'].map(String) : [],
-                },
-                { cwd, project, layer: editingLayer, version: String(input['version']) },
-              )
-              return {
-                saved: true,
-                result: { ...result, summary: result.changed ? `Saved ${editingPath}.` : 'Nothing changed.' },
+              type: token.type,
+              where,
+              kind: token.kind,
+              files: token.files,
+              content: token.content ?? '',
+            }),
+            preview: text => renderPreview(text, token.type),
+            save: async input => {
+              const text = String(input['content'] ?? '')
+              try {
+                await markdownText(() =>
+                  editToken(
+                    editingPath,
+                    { content: text },
+                    { cwd, project, layer: editingLayer, version: token.version, check: true },
+                  ),
+                )
+                return { saved: true, result: { content: text } }
+              } catch (error) {
+                return { saved: false, error: markdownText(() => message(error)) }
               }
-            } catch (error) {
-              return { saved: false, error: message(error) }
-            }
+            },
           },
-        },
-        url => {
-          presentCode(
-            `Editing ${editingPath} in the browser. If it did not open, visit this address. Press Ctrl+C to cancel.`,
-            url,
+          url => {
+            presentCode(
+              `Editing ${inlineCodeText(editingPath)} in browser ${hintText('If it does not open, visit this address. Press Ctrl+C to cancel.')}`,
+              url,
+              null,
+            )
+            const stop = browserCountdown(() => openBrowser(url))
+            return outcome => stop(outcome === 'saved' ? 'Content saved in browser' : undefined)
+          },
+        )
+        if (outcome.outcome !== 'saved') {
+          presentNotice(
+            {
+              summary:
+                outcome.outcome === 'expired'
+                  ? 'The edit page closed after 30 minutes without activity. Nothing was changed.'
+                  : 'Edit cancelled. Nothing was changed.',
+            },
             null,
           )
-          openBrowser(url)
-        },
-      )
-      if (outcome.outcome === 'saved') return report(editingPath, target, outcome.result)
-      presentError(
-        {
-          summary:
-            outcome.outcome === 'expired'
-              ? 'The edit page closed after 30 minutes without activity. Nothing was changed.'
-              : 'Edit cancelled. Nothing was changed.',
-        },
-        null,
-      )
-      process.exitCode = outcome.outcome === 'expired' ? 1 : 130
+          process.exitCode = outcome.outcome === 'expired' ? 1 : 130
+          return
+        }
+        content = outcome.result.content
+      }
+
+      const description = await enterText(`Description ${hintText('optional')}`, {
+        ...(token.description ? { initialValue: token.description } : {}),
+        optional: true,
+      })
+      if (description === undefined) return cancel()
+      const tags = await enterText(`Tags ${hintText('comma separated - optional')}`, {
+        ...(token.tags.length ? { initialValue: token.tags.join(', ') } : {}),
+        optional: true,
+      })
+      if (tags === undefined) return cancel()
+      await save({
+        ...(content !== undefined ? { content } : {}),
+        description,
+        tags: tags
+          .split(',')
+          .map(tag => tag.trim())
+          .filter(Boolean),
+      })
     } catch (error) {
       const details = message(error)
       presentError(
         {
           summary: 'woof could not edit the token.',
           details,
-          recovery: 'Correct the reported problem, then retry. No configuration was changed.',
         },
         { template: 'edit-error', values: { details } },
       )
       process.exitCode = 1
     }
 
-    function report(path: string, target: TokenTarget, result: EditResult) {
+    function report(path: string, target: TokenTarget, result: EditResult, where: string) {
       if (!result.changed)
-        return presentResult(
+        return presentNotice(
           {
-            summary: `No changes to ${path}.`,
+            summary: `No changes to ${inlineCodeText(path)}.`,
             details: 'The new values match the current token. Nothing was written.',
           },
           { template: 'edit-unchanged', values: { path } },
@@ -260,12 +314,15 @@ export default defineCommand({
       const project = target.kind === 'project' ? ` --project ${shellQuote(target.name)}` : ''
       const command = `woof get ${shellQuote(path)}${project}`
       const contentFile = result.contentFile ?? 'none'
-      const where = targetLabel(target)
       presentResult(
         {
-          summary: `Edited ${path}.`,
-          details: `Configuration: ${result.file}\nContent file: ${contentFile}\nChanged in: ${where}`,
-          recovery: `Check it with ${command}.`,
+          summary: `Edited ${inlineCodeText(path)}.`,
+          details: fieldsText([
+            ['Configuration', result.file],
+            ['Content file', contentFile],
+            ['Changed in', where],
+          ]),
+          recovery: `Check it with ${inlineCodeText(command)}.`,
         },
         {
           template: 'edit-result',

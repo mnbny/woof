@@ -63,7 +63,11 @@ function readBody(request: IncomingMessage) {
 
 // Any site in the browser can send requests to a local port. Only requests with the address host, the page origin,
 // and the secret path reach the session. The page runs only its own script, and loads styles only from daisyUI.
-export function runEditor<Result>(session: EditorSession, announce: (url: string) => void) {
+// The announcement can return a cleanup. It runs as soon as the session ends, before other interrupt listeners print.
+export function runEditor<Result>(
+  session: EditorSession,
+  announce: (url: string) => ((outcome: EditorOutcome<Result>['outcome']) => void) | void,
+) {
   const secret = randomBytes(24).toString('base64url')
   const nonce = randomBytes(16).toString('base64')
   const page = renderTemplate(readFileSync(getWoofRoot('cli', 'templates', 'editor.html'), 'utf8'), { nonce })
@@ -77,9 +81,11 @@ export function runEditor<Result>(session: EditorSession, announce: (url: string
   return new Promise<EditorOutcome<Result>>((resolve, reject) => {
     let port = 0
     let timer: NodeJS.Timeout | undefined
+    let cleanup: ((outcome: EditorOutcome<Result>['outcome']) => void) | void
     const finish = (outcome: EditorOutcome<Result>) => {
       clearTimeout(timer)
       process.off('SIGINT', interrupt)
+      cleanup?.(outcome.outcome)
       server.close()
       server.closeAllConnections()
       resolve(outcome)
@@ -133,7 +139,7 @@ export function runEditor<Result>(session: EditorSession, announce: (url: string
       const url = `http://127.0.0.1:${port}/${secret}/`
       process.on('SIGINT', interrupt)
       idle()
-      announce(url)
+      cleanup = announce(url)
     })
   })
 }
