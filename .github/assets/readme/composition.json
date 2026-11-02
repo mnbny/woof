@@ -1,0 +1,5 @@
+{
+  "agents": {
+    "instructions": "Follow these coding conventions:\n{{code.style}}\n\nBefore you finish, check your work using this testing policy:\n{{testing.policy}}\n\nWhen you're ready to commit, {{~git.commit~}}."
+  }
+}

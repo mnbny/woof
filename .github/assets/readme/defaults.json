@@ -1,0 +1,21 @@
+{
+  "git": {
+    "commits": {
+      "seven_rules": "Follow the seven rules of a great commit message…",
+      "conventional": "Use Conventional Commits: type(scope): summary…"
+    },
+    "commit": "{{git.commits.seven_rules}}"
+  },
+  "$projects": {
+    "acme": {
+      "git": {
+        "commit": "{{git.commits.conventional}}"
+      }
+    },
+    "globex": {
+      "git": {
+        "commit": "Start every subject with the ticket ID, such as GLX-142…"
+      }
+    }
+  }
+}

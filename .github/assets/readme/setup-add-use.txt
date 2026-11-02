@@ -1,0 +1,18 @@
+you    run npx @mnbny/woof readme to set up woof
+
+agent  › npx @mnbny/woof readme
+         Reading the guide and setting up woof…
+
+you    let's add a reusable commit token for this project
+       start every message with the ticket ID
+
+agent  › woof init --repo
+         Created a woof config in the repo.
+       › woof add git.commit --type prompt --repo …
+         Saved the commit rule.
+
+you    use woof to commit these changes
+
+agent  › woof get git.commit
+         Start every commit message with the ticket ID.
+       › git commit -m "GLX-142 Add export command"

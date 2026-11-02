@@ -1,0 +1,28 @@
+{
+  "git": {
+    "branch": {
+      "$type": "bash",
+      "$exec": "git branch --show-current"
+    }
+  },
+  "gh": {
+    "username": {
+      "$type": "bash",
+      "$exec": "gh api user --jq .login"
+    }
+  },
+  "$projects": {
+    "acme": {
+      "commands": {
+        "build_info": {
+          "$type": "node",
+          "$exec": "const pkg = require('./package.json'); …"
+        },
+        "check_all": {
+          "$type": "bash",
+          "$exec": "pnpm lint && pnpm test && pnpm build"
+        }
+      }
+    }
+  }
+}

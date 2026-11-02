@@ -9,11 +9,11 @@ My prompts, conventions, skills, and scripts were everywhere: copied between rep
 
 Design systems solved this a long time ago. You don't paste a hex code into every component. You name the color once, point an alias like `color.primary` at it, and dark mode changes what the alias means. woof brings that to your agent instructions. You write each convention, prompt, or script once, as a named token. Tokens reference each other and build bigger instructions. Each of your projects overrides only what's different. Keep tokens shared or private, in the repo or out of it.
 
-You don't run woof. Your agent does:
+**You don't run woof. Your agent does:**
 
-<img src=".github/assets/readme/commit.jpg" alt="you: use woof to commit this. agent: runs woof get commit convention, finds git.commit, runs woof get git.commit, follows the seven rules of a great commit message, and commits with the message Add export command.">
+<img src=".github/assets/readme/setup-add-use.jpg" alt="you: run npx @mnbny/woof readme to set up woof. agent: reads the guide and sets up woof. you: add a reusable commit token that starts every message with the ticket ID. agent: runs woof init --repo and woof add git.commit --type prompt --repo to save the rule. you: use woof to commit these changes. agent: runs woof get git.commit and commits with the message GLX-142 Add export command.">
 
-In a repo that overrides `git.commit` with Conventional Commits, the same request gets you `feat(cli): add export command` instead. Nothing copied. A companion skill teaches your agent to search woof, use what it finds, and check with you before it changes anything.
+…but woof also has an interactive CLI if you want to run it yourself.
 
 ## How it works
 
@@ -21,18 +21,7 @@ In a repo that overrides `git.commit` with Conventional Commits, the same reques
 
 Your shared tokens live in your woof home, and your agent can find them from any project. A project overrides only what's different. Everything else comes from the shared tokens.
 
-```text
-shared
-├─ git.commits.seven_rules    "Follow the seven rules of a great commit message…"
-├─ git.commits.conventional   "Use Conventional Commits: type(scope): summary…"
-└─ git.commit                 → git.commits.seven_rules
-
-acme (project)
-└─ git.commit                 → git.commits.conventional
-
-globex (project)
-└─ git.commit                 "Start every subject with the ticket ID, such as GLX-142…"
-```
+<img src=".github/assets/readme/defaults.jpg" alt="Root tokens: git.commits.seven_rules says Follow the seven rules of a great commit message. git.commits.conventional says Use Conventional Commits: type(scope): summary. git.commit references {{git.commits.seven_rules}}. Under $projects, acme overrides git.commit with {{git.commits.conventional}}, and globex overrides it with Start every subject with the ticket ID, such as GLX-142.">
 
 `acme` points the alias at the other shared rule. `globex` writes its own. Every other project keeps the seven rules.
 
@@ -40,34 +29,29 @@ Say `acme` is your team's repo. Its woof configuration lives in the repo, and ev
 
 ### Build instructions from pieces
 
-A token can pull in other tokens with `{{…}}`. Build your agent instructions from pieces you already have:
+Use `{{…}}` to include another token’s instructions, or `{{~…~}}` to have your agent fetch them later. Here’s what `agents.instructions` could say:
+
+<img src=".github/assets/readme/composition.jpg" alt="agents.instructions: Follow these coding conventions: {{code.style}}. Before you finish, check your work using this testing policy: {{testing.policy}}. When you're ready to commit, {{~git.commit~}}.">
+
+woof includes the coding conventions and testing policy when your agent reads this token. The last line tells your agent to fetch `git.commit` when it’s ready to commit.
+
+Your AGENTS.md or CLAUDE.md shrinks to one line:
 
 ```text
-agents.instructions
-  # Working in this repo
-  - Commits: {{git.commit}}
-  - Testing: {{testing.policy}}
-  - Style: {{code.style}}
+Use the woof token `agents.instructions` and follow its instructions.
 ```
 
-Your AGENTS.md or CLAUDE.md shrinks to one line, and the same line works in every repo:
-
-```markdown
-Run `woof get agents.instructions` and follow it.
-```
-
-In `acme`, the commit line comes out as Conventional Commits. In `globex`, it's the ticket rule. You never touch `agents.instructions`.
+When your agent fetches the commit rules, `acme` gets Conventional Commits and `globex` gets the ticket rule. The same prompt works in both.
 
 ### Tokens that run
 
 A token can also be a bash, node, tsx, or bun script. Some scripts feed your instructions. Others just do a job.
 
-```text
-git.branch    bash   git branch --show-current
-checks.all    bash   pnpm lint && pnpm test && pnpm build
-```
+<img src=".github/assets/readme/scripts.jpg" alt="Root bash tokens: git.branch runs git branch --show-current; gh.username runs gh api user --jq .login. Under $projects.acme.commands, build_info is an abbreviated node script beginning const pkg = require('./package.json'); followed by an ellipsis, and check_all is a bash script running pnpm lint && pnpm test && pnpm build.">
 
-`You're on {{git.branch}}.` reads as `You're on feat/export.` And when you say "run the checks", your agent runs `checks.all`. Projects override scripts like any other token, so the same ask does the right thing in every repo.
+`You're on {{git.branch}}.` reads as `You're on feat/export.` `{{gh.username}}` gives your signed-in GitHub username. In `acme`, `commands.build_info` can report details from `package.json`, and “run the checks” uses `commands.check_all`.
+
+Projects override scripts like any other token, so the same ask does the right thing in every repo.
 
 ### Ask in plain words
 
