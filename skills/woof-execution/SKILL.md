@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof token for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
 metadata:
-  version: 11
+  version: 12
 ---
 
 # woof execution
@@ -31,9 +31,9 @@ Keep the user's task, scope, and constraints. When the request is clear, use the
 
 For a request to use a name or task outside this list, follow **Use a token**. The user does not need to say "token". For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Run every woof command through `npx --yes @mnbny/woof`, including commands shown in CLI output. This skill uses `woof` as shorthand for that invocation.
+Run every woof command through `npx --yes @mnbny/woof@0.1.5`, including commands shown in CLI output. This skill uses `woof` as shorthand for that invocation. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.5 <command> --agent`.
 
 Read the output, also after a nonzero exit. A handoff writes nothing and exits with status 1. The handoff gives the decision and the exact next command. Follow the instructions in the output.
 
