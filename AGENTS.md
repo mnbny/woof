@@ -6,6 +6,10 @@ After a feature or change reaches its logical conclusion, use `woof-living-docs`
 
 Read [.agents/docs/project-vision.md](./.agents/docs/project-vision.md) to learn how woof started and where the owner wants woof to go. The vision is not a specification. The project, domain, and command briefs describe current behavior. The questions brief holds open decisions. Do not infer additional requirements from the vision, the project name, or the MAACS reference project.
 
+## Local CLI
+
+During development, use this checkout's CLI: `node cli/woof.mjs <command> --agent`. This overrides the skills' npx invocation. Use npx for checks of the published package or a packed release.
+
 ## Run Validations Smartly
 
 Validation command: `pnpm validate`

@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof token for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
 metadata:
-  version: 10
+  version: 11
 ---
 
 # woof execution
@@ -31,13 +31,13 @@ Keep the user's task, scope, and constraints. When the request is clear, use the
 
 For a request to use a name or task outside this list, follow **Use a token**. The user does not need to say "token". For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Run woof as `woof` when it's on the PATH. Otherwise, run `npx @mnbny/woof`, which fetches the package. This skill writes `woof` for both.
+Run every woof command through `npx --yes @mnbny/woof`, including commands shown in CLI output. This skill uses `woof` as shorthand for that invocation.
 
-Pass `--agent` to every command: `woof <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof <command> --agent`.
 
 Read the output, also after a nonzero exit. A handoff writes nothing and exits with status 1. The handoff gives the decision and the exact next command. Follow the instructions in the output.
 
-Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. If neither form runs, report it. Report an unresolved failure. Do not install other packages to guess a remedy.
+Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. Report an unresolved failure. Do not install other packages to guess a remedy.
 
 When a migration changes a repository configuration, tell the user. Git shares that file, so each user of the checkout then needs a woof release that supports the new schema version.
 
