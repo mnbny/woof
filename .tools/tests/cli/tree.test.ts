@@ -182,7 +182,7 @@ test('shows repository definitions only when selected and never substitutes a re
   expect(await readFile(repository, 'utf8')).toBe(original)
 })
 
-test('keeps definition order across shared tokens, the project registry and external project namespaces', async ({
+test('keeps token definition order with registered projects after shared tokens', async ({
   cli,
   directory,
   expect,
@@ -214,15 +214,15 @@ test('keeps definition order across shared tokens, the project registry and exte
   expect(tree(result.stdout)).toBe(
     [
       '├─ zShared: ...',
-      '├─ $projects',
-      '│  ├─ zProject',
-      '│  │  ├─ zRule: ...',
-      '│  │  └─ aRule: ...',
-      '│  └─ aProject',
-      '│     └─ empty',
-      '└─ aShared',
-      '   ├─ zRule: ...',
-      '   └─ aRule: ...',
+      '├─ aShared',
+      '│  ├─ zRule: ...',
+      '│  └─ aRule: ...',
+      '└─ $projects',
+      '   ├─ zProject',
+      '   │  ├─ zRule: ...',
+      '   │  └─ aRule: ...',
+      '   └─ aProject',
+      '      └─ empty',
     ].join('\n'),
   )
 })

@@ -1,10 +1,15 @@
 import type { ConfigurationKind } from './config.ts'
 
-import { lstatSync, realpathSync } from 'node:fs'
+import { lstatSync, readFileSync, realpathSync } from 'node:fs'
 
 import { initializeWoofHome } from './bootstrap.ts'
-import { readConfigurationDocument } from './config.ts'
-import { applyConfigurationMigration, prepareConfigurationMigration } from './migrations.ts'
+import {
+  orderConfigurationText,
+  parseConfigurationDocument,
+  readConfigurationDocument,
+  replaceFileContent,
+} from './config.ts'
+import { applyConfigurationMigration, prepareConfigurationMigration, withConfigurationLock } from './migrations.ts'
 import { getWoofHome } from './paths.ts'
 import { presentWarning } from './presentation.ts'
 import { insideWoofHome, repositoryConfiguration } from './projects.ts'
@@ -75,5 +80,28 @@ export async function prepareStartup(options: { migrate: boolean; passive: boole
   } else {
     for (const document of documents)
       if (document.kind !== 'root') readConfigurationDocument(document.file, document.kind)
+  }
+
+  if (!options.passive || options.migrate) {
+    // A broken project must prevent ordering writes to every configuration.
+    const ordered = documents.map(({ file, kind }) => {
+      const target = realpathSync(file)
+      const source = readFileSync(target, 'utf8')
+      if (kind === 'root') parseConfigurationDocument(source, kind, file)
+      else parseConfigurationDocument(source, kind, file)
+      return { file, target, source, content: orderConfigurationText(source) }
+    })
+    for (const document of ordered) {
+      if (document.source === document.content) continue
+      await withConfigurationLock(document.file, target => {
+        if (target !== document.target)
+          throw new Error(`Configuration changed location while ordering fields: ${document.file}. Retry.`)
+        const current = readFileSync(target, 'utf8')
+        if (current === document.content) return
+        if (current !== document.source)
+          throw new Error(`Configuration changed while ordering fields: ${document.file}. Retry.`)
+        replaceFileContent(target, document.content, current)
+      })
+    }
   }
 }

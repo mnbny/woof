@@ -13,6 +13,8 @@ The configuration domain owns woof's JSON documents, their structure and version
 
 Every standalone document declares `$schemaVersion` 2. An inline project uses the version of the document that contains it. One physical file cannot be both the root configuration and a project configuration. Configuration references cannot form a cycle.
 
+The schema version is the first field in a standalone document. The root configuration puts the project registry last, after all shared tokens. A project configuration puts its metadata immediately after the schema version. An inline project puts its metadata first. These rules also apply when woof saves or exports configuration. Other fields keep their relative order.
+
 ## Structure rules
 
 - woof-owned keys start with `$`. An unknown reserved key causes a failure.
@@ -25,7 +27,7 @@ Every standalone document declares `$schemaVersion` 2. An inline project uses th
 
 Tree shows where definitions belong without their content. The full view includes shared tokens and all registered projects. A project view includes only that project's definitions, without inherited shared tokens. Repository configurations have a separate project view.
 
-The view uses branch lines to show namespaces, project wrappers, and empty namespaces. Visible keys follow their definition order, including the position of the project registry. Names that JavaScript treats as array indices appear first in numeric order. Each token becomes a marker that distinguishes a script from a prompt or alias. Project metadata and document versions are omitted.
+The view uses branch lines to show namespaces, project wrappers, and empty namespaces. Visible tokens follow their definition order, with the project registry after shared tokens. Names that JavaScript treats as array indices appear first in numeric order. Each token becomes a marker that distinguishes a script from a prompt or alias. Project metadata and document versions are omitted.
 
 References to project configuration files expand into project structure. Tree does not read token payload files, evaluate references, or run scripts. An exact dotted path is relative to the selected scope. It selects a branch or leaf and preserves its parent keys. A missing path fails without a search.
 
@@ -42,7 +44,7 @@ A string token, a prompt, or a script execution value that starts with a marker 
 
 ## Home lifecycle
 
-If woof home is missing, the first operational invocation creates woof home with a copy of the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create woof home. woof never rewrites an existing file implicitly.
+If woof home is missing, the first operational invocation creates woof home with a copy of the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create woof home or repair field order unless migration is requested.
 
 Each invocation except the readme command checks these documents:
 
@@ -51,6 +53,8 @@ Each invocation except the readme command checks these documents:
 - The repository configuration of the current checkout. If the caller is inside woof home, woof skips this check.
 
 These checks parse and validate the documents only. They do not read prompt or script payloads.
+
+After all documents pass these checks, operational invocations repair reserved-field order. This repairs manual reordering on the next invocation. The repair preserves token values, their formatting, and their relative order. It follows symbolic links, preserves file permissions, and checks for concurrent edits before replacement. Correctly ordered files are not rewritten. Invalid documents are not repaired.
 
 ## Versions and migration
 

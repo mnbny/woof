@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { chmod, lstat, mkdir, readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { chmod, lstat, mkdir, readdir, readFile, symlink } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 import { put, test } from '../fixtures.ts'
 
@@ -35,6 +35,90 @@ test('creates a complete current config once across concurrent first launches', 
   expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ $schemaVersion: 2 })
   expect((await lstat(file)).mode & 0o777).toBe(0o600)
   expect(await readdir(home)).toEqual(['woof.config.json'])
+})
+
+test('repairs reserved field order without changing values, token order, links or already ordered files', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'ordered-home')
+  const root = join(home, 'woof.config.json')
+  const target = join(home, 'root.json')
+  const project = join(home, 'project.json')
+  const repository = join(cli.project, 'woof.config.json')
+  execFileSync('git', ['init', '-q', cli.project])
+  const metadata = '"$metadata":{"$worktreePaths":["~/work/*"],"$basePaths":[]}'
+  const prompt = JSON.stringify({ $type: 'prompt', $tags: ['one', 'two'], $exec: 'Keep ",}: [ \\ and {{missing}}' })
+  const registry = `"$projects":{"inline":{"z":"first",${metadata},"a":"last"},"external":"<root>/project.json"}`
+  const orderedRegistry = `"$projects":{"inline":{${metadata},"z":"first","a":"last"},"external":"<root>/project.json"}`
+  const documents = [
+    {
+      file: target,
+      source: `{${registry},"10":"ten","z":${prompt},"$schemaVersion":2,"2":"two","a":"last"}\n`,
+      ordered: `{"$schemaVersion":2,"10":"ten","z":${prompt},"2":"two","a":"last",${orderedRegistry}}\n`,
+    },
+    {
+      file: project,
+      source: `{"z":"first",${metadata},"a":"last","$schemaVersion":2}\n`,
+      ordered: `{"$schemaVersion":2,${metadata},"z":"first","a":"last"}\n`,
+    },
+    {
+      file: repository,
+      source: '{"z":"first","$schemaVersion":2,"a":"last"}\n',
+      ordered: '{"$schemaVersion":2,"z":"first","a":"last"}\n',
+    },
+  ]
+  for (const document of documents) await put(document.file, document.source)
+  await chmod(target, 0o640)
+  await symlink(target, root)
+
+  const results = await Promise.all(Array.from({ length: 4 }, () => run(cli, home, ['tree', '--agent'])))
+  for (const result of results) expect(result.status).toBe(0)
+  for (const document of documents) {
+    expect(await readFile(document.file, 'utf8')).toBe(document.ordered)
+    expect(JSON.parse(document.ordered)).toEqual(JSON.parse(document.source))
+  }
+  expect((await lstat(root)).isSymbolicLink()).toBe(true)
+  expect((await lstat(target)).mode & 0o777).toBe(0o640)
+
+  const before = await Promise.all(documents.map(({ file }) => lstat(file)))
+  expect((await run(cli, home, ['tree'])).status).toBe(0)
+  for (const [index, document] of documents.entries()) {
+    expect(await readFile(document.file, 'utf8')).toBe(document.ordered)
+    const after = await lstat(document.file)
+    expect(after.ino).toBe(before[index]!.ino)
+    expect(after.mtimeMs).toBe(before[index]!.mtimeMs)
+  }
+  await put(project, documents[1]!.source)
+  expect((await run(cli, home, ['tree', '--project', 'external', '--agent'])).status).toBe(0)
+  expect(await readFile(project, 'utf8')).toBe(documents[1]!.ordered)
+})
+
+test('leaves order untouched for passive invocations and when any configuration is invalid', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'passive-order-home')
+  const root = join(home, 'woof.config.json')
+  const project = join(home, 'project.json')
+  const source = '{"$projects":{"demo":"<root>/project.json"},"shared":"keep","$schemaVersion":2}\n'
+  const projectSource = '{"token":"keep","$schemaVersion":2}\n'
+  await put(root, source)
+  await put(project, projectSource)
+  await put(join(dirname(dirname(cli.entry)), 'README.md'), '# Test guide\n')
+  for (const args of [['--help'], ['--version'], ['readme', '--agent']]) {
+    expect((await run(cli, home, args)).status).toBe(0)
+    expect(await readFile(root, 'utf8')).toBe(source)
+    expect(await readFile(project, 'utf8')).toBe(projectSource)
+  }
+  for (const invalid of ['{"unfinished":', '{"token":false,"$schemaVersion":2}']) {
+    await put(project, invalid)
+    expect((await run(cli, home, ['tree', '--agent'])).status).toBe(1)
+    expect(await readFile(root, 'utf8')).toBe(source)
+    expect(await readFile(project, 'utf8')).toBe(invalid)
+  }
 })
 
 test('rejects unversioned, future and invalid configurations without rewriting them', async ({
@@ -106,7 +190,7 @@ test('registers a home project in place and never replaces one', async ({ cli, d
 
   expect((await run(cli, home, [...register, '--base-path', '~/work/acme'])).status).toBe(0)
   const registered = await readFile(file, 'utf8')
-  expect(Object.keys(JSON.parse(registered))).toEqual(['$schemaVersion', 'shared', '$projects', 'tail'])
+  expect(Object.keys(JSON.parse(registered))).toEqual(['$schemaVersion', 'shared', 'tail', '$projects'])
   expect(JSON.parse(registered).$projects).toEqual({ old: {}, acme: { $metadata: { $basePaths: ['~/work/acme'] } } })
   expect((await lstat(file)).mode & 0o777).toBe(0o600)
 
@@ -161,6 +245,12 @@ test('adds a token only when the whole configuration still works', async ({ cli,
   expect(added.$projects).toEqual({ acme: { agents: { local: 'acme agents' } } })
   expect((await add('conventions.-draft-', 'valid nested name')).status).toBe(0)
   expect((await add('draft', '{{conventions.-draft-}}')).status).toBe(0)
+  expect(Object.keys(JSON.parse(await readFile(file, 'utf8')))).toEqual([
+    '$schemaVersion',
+    'conventions',
+    'draft',
+    '$projects',
+  ])
   expect((await run(cli, home, ['get', 'draft', '--agent'])).stdout).toBe('valid nested name')
 })
 
