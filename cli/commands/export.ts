@@ -7,7 +7,7 @@ import { isDeepStrictEqual, parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
 import { createBundleArchive } from '../utils/bundles.ts'
-import { validateConfigurationDocument } from '../utils/config.ts'
+import { serializeConfigurationDocument, validateConfigurationDocument } from '../utils/config.ts'
 import { fieldsText, inlineCodeText, shellQuote } from '../utils/display.ts'
 import { getWoofHome } from '../utils/paths.ts'
 import { chooseOption, presentCancel, presentCode, presentError, presentResult } from '../utils/presentation.ts'
@@ -154,7 +154,7 @@ export default defineCommand({
         const path = definition.slice('<root>/'.length)
         const bytes = isDeepStrictEqual(exportedProject, project.data)
           ? readFileSync(project.source.file)
-          : Buffer.from(`${JSON.stringify(exportedProject, null, 2)}\n`)
+          : Buffer.from(serializeConfigurationDocument(exportedProject))
         add(path, bytes)
       }
 

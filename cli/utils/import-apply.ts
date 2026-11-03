@@ -18,7 +18,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } fr
 import { isDeepStrictEqual } from 'node:util'
 
 import { createBackupArchive, referencedResources } from './bundles.ts'
-import { parseConfigurationDocument } from './config.ts'
+import { parseConfigurationDocument, serializeConfigurationDocument } from './config.ts'
 
 export type ReviewedImportCandidate = Extract<ReturnType<typeof reviewImport>, { status: 'ready' }>['candidate']
 
@@ -142,7 +142,7 @@ export function inspectWriteDestination(home: string, path: string) {
 }
 
 function serialized(value: unknown) {
-  return new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`)
+  return new TextEncoder().encode(serializeConfigurationDocument(value))
 }
 
 function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string, Uint8Array | undefined>) {

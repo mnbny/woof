@@ -3,13 +3,14 @@ import { link, mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import template from '../templates/woof.config.json' with { type: 'json' }
+import { serializeConfigurationDocument } from './config.ts'
 import { getWoofHome } from './paths.ts'
 
 export async function initializeWoofHome(file = getWoofHome('woof.config.json')) {
   const temporary = join(dirname(file), `.woof.config.${process.pid}.${randomUUID()}.tmp`)
   try {
     await mkdir(dirname(file), { recursive: true })
-    await writeFile(temporary, `${JSON.stringify(template, null, 2)}\n`, {
+    await writeFile(temporary, serializeConfigurationDocument(template), {
       flag: 'wx',
       mode: 0o600,
     })

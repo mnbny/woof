@@ -7,7 +7,7 @@ import { mkdir, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 
-import { validateConfigurationDocument } from './config.ts'
+import { serializeConfigurationDocument, validateConfigurationDocument } from './config.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
 
 export class ConfigurationMigrationError extends Error {
@@ -131,7 +131,7 @@ export function prepareConfigurationMigration(documents: ConfigurationMigrationI
 }
 
 function serialized(document: PreparedConfigurationMigration['documents'][number]) {
-  return `${JSON.stringify(document.migrated, null, 2)}\n`
+  return serializeConfigurationDocument(document.migrated)
 }
 
 function assertUnchanged(document: PreparedConfigurationMigration['documents'][number]) {

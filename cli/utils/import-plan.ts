@@ -8,7 +8,7 @@ import { isAbsolute, relative, resolve, sep, win32 } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { readBundleArchive } from './bundles.ts'
-import { parseConfigurationDocument, validateConfigurationDocument } from './config.ts'
+import { parseConfigurationDocument, serializeConfigurationDocument, validateConfigurationDocument } from './config.ts'
 import { inspectWriteDestination } from './import-apply.ts'
 import {
   assertImportAddress,
@@ -586,7 +586,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
     ...(plan.bundle.project.$metadata ? { $metadata: plan.bundle.project.$metadata } : {}),
     $schemaVersion: CURRENT_SCHEMA_VERSION,
   }
-  const projectBytes = new TextEncoder().encode(`${JSON.stringify(importedProject, null, 2)}\n`)
+  const projectBytes = new TextEncoder().encode(serializeConfigurationDocument(importedProject))
   projectItem.candidates = [...plan.snapshots.values()]
     .filter(source => source.path !== 'woof.config.json' && source.data && equalBytes(source.data, projectBytes))
     .map(source => source.path)
@@ -796,7 +796,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
   function checkReuses(projectFile?: ProjectFile) {
     const replacements = new Map(files)
     if (projectFile)
-      replacements.set(projectFile.path, new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`))
+      replacements.set(projectFile.path, new TextEncoder().encode(serializeConfigurationDocument(projectFile.data)))
     const readAfter = (reference: string) => {
       if (!reference.startsWith('<root>/')) return readLocal(plan, reference)
       const path = reference.slice('<root>/'.length)
@@ -960,7 +960,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
       'project',
       definition,
     )
-    const bytes = new TextEncoder().encode(`${JSON.stringify(data, null, 2)}\n`)
+    const bytes = new TextEncoder().encode(serializeConfigurationDocument(data))
     const existing = snapshot(plan, path).data
     if (
       described.projectChoice &&
@@ -1039,7 +1039,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
   if (projectFile) {
     const target = snapshot(plan, projectFile.path)
     const prior = intents.get(target.physical!)
-    const bytes = new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`)
+    const bytes = new TextEncoder().encode(serializeConfigurationDocument(projectFile.data))
     if (prior && (!prior.data || !equalBytes(prior.data, bytes))) {
       prior.item.invalid = true
       prior.item.notice = 'This destination conflicts with the imported project configuration.'
@@ -1058,7 +1058,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
     'import candidate',
   )
   if (projectFile && files.has(projectFile.path)) {
-    const projectBytes = new TextEncoder().encode(`${JSON.stringify(projectFile.data, null, 2)}\n`)
+    const projectBytes = new TextEncoder().encode(serializeConfigurationDocument(projectFile.data))
     if (!equalBytes(files.get(projectFile.path)!, projectBytes))
       throw new Error(`Project configuration and raw payload require incompatible writes to ${projectFile.path}.`)
   }

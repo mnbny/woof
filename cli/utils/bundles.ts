@@ -6,7 +6,7 @@ import { strToU8, Unzip, UnzipInflate, unzipSync, zipSync } from 'fflate'
 import { isAbsolute } from 'node:path'
 import { crc32 } from 'node:zlib'
 
-import { parseConfigurationDocument } from './config.ts'
+import { parseConfigurationDocument, serializeConfigurationDocument } from './config.ts'
 import { isMarkedResourceReference } from './resources.ts'
 
 export type BundleFile = { path: string; data: Uint8Array }
@@ -310,7 +310,7 @@ export function readBundleArchive(archive: Uint8Array) {
 
 export function createBundleArchive(configuration: RootConfiguration, resources: Iterable<BundleFile>) {
   const files = indexedFiles([
-    { path: 'woof.config.json', data: strToU8(`${JSON.stringify(configuration, null, 2)}\n`) },
+    { path: 'woof.config.json', data: strToU8(serializeConfigurationDocument(configuration)) },
     ...resources,
   ])
   validateBundle(files)

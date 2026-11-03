@@ -9,7 +9,12 @@ import * as v from 'valibot'
 
 import template from '../templates/woof.config.json' with { type: 'json' }
 import { isAgent } from '../utils/agent.ts'
-import { parseConfigurationDocument, replaceConfigurationFile, validateConfigurationDocument } from '../utils/config.ts'
+import {
+  parseConfigurationDocument,
+  replaceConfigurationFile,
+  serializeConfigurationDocument,
+  validateConfigurationDocument,
+} from '../utils/config.ts'
 import { fieldsText, hintText, inlineBadge, inlineCodeText, listFieldText, shellQuote } from '../utils/display.ts'
 import { withConfigurationLock } from '../utils/migrations.ts'
 import { getWoofHome } from '../utils/paths.ts'
@@ -51,7 +56,7 @@ function createRepositoryConfiguration(checkout: string, location: string) {
   if (existing) throw new Error(`This checkout already has a repository configuration: ${inlineCodeText(existing)}`)
   const file = join(checkout, location)
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify(template, null, 2)}\n`, { flag: 'wx' })
+  writeFileSync(file, serializeConfigurationDocument(template), { flag: 'wx' })
   return file
 }
 
