@@ -220,13 +220,73 @@ export function readConfigurationDocument(file: string, kind: ConfigurationKind)
   return kind === 'root' ? parseConfigurationDocument(text, kind, file) : parseConfigurationDocument(text, kind, file)
 }
 
+/** Reorder validated JSON without reformatting values or changing numeric token names' source order. */
+export function orderConfigurationText(source: string) {
+  function orderObject(text: string, scope: 'document' | 'registry' | 'project') {
+    if (!text.trimStart().startsWith('{')) return text
+    const entries: { key: string; text: string; colon: number }[] = []
+    let depth = 0
+    let start = 0
+    let colon = 0
+    let key: string | undefined
+    let prefix = ''
+    let suffix = ''
+    for (const match of text.matchAll(/"(?:\\.|[^"\\])*"|[{}[\],:]/g)) {
+      const token = match[0]
+      const index = match.index
+      if (token.startsWith('"')) {
+        if (depth === 1 && key === undefined) key = JSON.parse(token) as string
+      } else if (token === '{' || token === '[') {
+        depth += 1
+        if (depth === 1) {
+          start = index + 1
+          prefix = text.slice(0, start)
+        }
+      } else if (token === ':' && depth === 1) colon = index + 1 - start
+      else if ((token === ',' && depth === 1) || (token === '}' && depth === 1)) {
+        const part = text.slice(start, index)
+        const content = token === '}' ? part.trimEnd() : part
+        if (key !== undefined) entries.push({ key, text: content, colon })
+        if (token === '}') {
+          suffix = part.slice(content.length) + text.slice(index)
+          break
+        }
+        start = index + 1
+        key = undefined
+      } else if (token === '}' || token === ']') depth -= 1
+    }
+    if (!entries.length) return text
+    for (const entry of entries) {
+      const childScope =
+        scope === 'registry' ? 'project' : scope === 'document' && entry.key === '$projects' ? 'registry' : undefined
+      if (childScope)
+        entry.text = entry.text.slice(0, entry.colon) + orderObject(entry.text.slice(entry.colon), childScope)
+    }
+    const rank = (name: string) => {
+      if (scope === 'registry') return 0
+      if (name === '$schemaVersion') return -2
+      if (name === '$metadata') return -1
+      return name === '$projects' ? 1 : 0
+    }
+    entries.sort((left, right) => rank(left.key) - rank(right.key))
+    return prefix + entries.map(entry => entry.text).join(',') + suffix
+  }
+  return orderObject(source, 'document')
+}
+
+export function serializeConfigurationDocument(value: unknown) {
+  return orderConfigurationText(`${JSON.stringify(value, null, 2)}\n`)
+}
+
 /** Writing a staged copy and renaming it replaces the file in one step and keeps its mode. */
-export function replaceFileContent(target: string, content: string | Uint8Array) {
+export function replaceFileContent(target: string, content: string | Uint8Array, expected?: string) {
   const staging = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`)
   const { mode } = statSync(target)
   try {
     writeFileSync(staging, content, { flag: 'wx', mode })
     chmodSync(staging, mode & 0o7777)
+    if (expected !== undefined && readFileSync(target, 'utf8') !== expected)
+      throw new Error(`Configuration changed while ordering fields: ${target}. Retry.`)
     renameSync(staging, target)
   } finally {
     rmSync(staging, { force: true })
@@ -234,5 +294,5 @@ export function replaceFileContent(target: string, content: string | Uint8Array)
 }
 
 export function replaceConfigurationFile(target: string, value: unknown) {
-  replaceFileContent(target, `${JSON.stringify(value, null, 2)}\n`)
+  replaceFileContent(target, serializeConfigurationDocument(value))
 }
