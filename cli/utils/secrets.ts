@@ -5,9 +5,20 @@ import { basename, resolve } from 'node:path'
 import * as v from 'valibot'
 
 import { getWoofHome } from './paths.ts'
-import { secretBindingsSchema, secretKeySchema } from './schema.ts'
+import { secretBindingsSchema, tokenNameSchema } from './schema.ts'
+import { tokenValueAt } from './token-paths.ts'
 
 export const SECRETS_FILE = 'woof.secrets.json'
+
+type SecretNamespace = { [name: string]: string | SecretNamespace }
+
+function isSecretNamespace(value: unknown): value is SecretNamespace {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.entries(value).every(
+    ([name, entry]) =>
+      v.is(tokenNameSchema, name) && (typeof entry === 'string' ? !entry.includes('\0') : isSecretNamespace(entry)),
+  )
+}
 
 /** Checks names and physical identity so links cannot accidentally bundle the store. */
 export function assertNotSecretsFile(file: string, home = getWoofHome()) {
@@ -64,8 +75,7 @@ export class MissingSecretsError extends Error {
   }
 }
 
-// Never surface JSON/schema exceptions: they can contain the secret input itself.
-function readSecrets(): Record<string, string> {
+function readSecrets() {
   let text: string
   try {
     text = readFileSync(getWoofHome(SECRETS_FILE), 'utf8')
@@ -77,25 +87,23 @@ function readSecrets(): Record<string, string> {
   try {
     value = JSON.parse(text)
   } catch {
+    // JSON parsing errors can contain secret values.
     throw new Error(`Invalid JSON in ${SECRETS_FILE}. Correct the file locally without displaying its contents.`)
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new Error(`${SECRETS_FILE} must contain an object of secret names and string values.`)
-  for (const [key, secret] of Object.entries(value))
-    if (!v.safeParse(secretKeySchema, key).success || typeof secret !== 'string' || secret.includes('\0'))
-      throw new Error(
-        `${SECRETS_FILE} contains an invalid entry. Use dotted names and string values without null bytes.`,
-      )
-  return value as Record<string, string>
+  if (!isSecretNamespace(value))
+    throw new Error(
+      `${SECRETS_FILE} contains an invalid entry. Use nested namespaces with token names and string values without null bytes.`,
+    )
+  return value
 }
 
 /** Keeps reference checks and script execution on the same lazy snapshot. */
 export function createSecretLookup() {
-  let store: Record<string, string> | undefined
+  let store: SecretNamespace | undefined
   return (key: string) => {
     store ??= readSecrets()
-    const value = Object.hasOwn(store, key) ? store[key] : undefined
-    if (value === undefined || value.length === 0) throw new MissingSecretsError([key])
+    const value = tokenValueAt(store, key)
+    if (typeof value !== 'string' || value.length === 0) throw new MissingSecretsError([key])
     return value
   }
 }

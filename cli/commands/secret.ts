@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util'
 import * as v from 'valibot'
 
 import { renderTemplateFile } from '../utils/presentation.ts'
-import { secretKeySchema } from '../utils/schema.ts'
+import { tokenPathSchema } from '../utils/schema.ts'
 import { createSecretLookup, MissingSecretsError } from '../utils/secrets.ts'
 
 export function reportSecretError(error: unknown) {
@@ -20,7 +20,7 @@ export default defineCommand({
   meta: { name: 'secret', description: 'Read one local secret for shell command substitution' },
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    key: { description: 'Secret key', type: 'positional', required: true },
+    key: { description: 'Secret token path', type: 'positional', required: true },
   },
   run({ rawArgs }) {
     try {
@@ -29,8 +29,8 @@ export default defineCommand({
         allowPositionals: true,
         options: { agent: { type: 'boolean' } },
       })
-      if (positionals.length !== 1 || !v.safeParse(secretKeySchema, positionals[0]).success)
-        throw new Error('Supply one dotted secret key: woof secret KEY.')
+      if (positionals.length !== 1 || !v.is(tokenPathSchema, positionals[0]))
+        throw new Error('Supply one secret token path: woof secret PATH.')
       process.stdout.write(createSecretLookup()(positionals[0]!))
     } catch (error) {
       reportSecretError(error)
