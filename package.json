@@ -1,6 +1,6 @@
 {
   "name": "@mnbny/woof",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Local CLI for reusable instructions, prompts, and computed resources",
   "homepage": "https://github.com/mnbny/woof#readme",
   "bugs": {

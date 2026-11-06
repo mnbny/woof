@@ -86,7 +86,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 Paste this into your agent:
 
 ```text
-Run `npx @mnbny/woof@0.1.6 readme` and set up woof for me.
+Run `npx @mnbny/woof@0.1.7 readme` and set up woof for me.
 ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -379,9 +379,9 @@ And `acme`'s repo config:
 
 #### Secret bindings
 
-- `$secrets` maps environment variable names to keys in `~/.woof/woof.secrets.json`. Prompt and script resources support it. Bindings contain names only.
-- The secrets file is a flat JSON object with string values. Create it locally and restrict access to its owner with `chmod 600 ~/.woof/woof.secrets.json`.
-- Secret keys use dotted token-style names, separate from token addresses. Environment names use letters, digits, and underscores and cannot start with a digit. `CI`, `npm_config_*`, and prototype-sensitive names are reserved.
+- `$secrets` maps environment variable names to paths in `~/.woof/woof.secrets.json`. Prompt and script resources support it. Bindings contain names only.
+- The secrets file uses the same nested namespaces and token names as the configuration. Values are literal strings. woof creates an empty file with owner-only permissions (`0600`) when it initializes your home, including when your config already exists. Existing files stay untouched. If permissions prevent creation, commands without secret dependencies can still run.
+- The secrets file has no `$schemaVersion` and takes no migrations. Dots separate names in a path; they cannot appear in JSON keys. Environment names use letters, digits, and underscores and cannot start with a digit. `CI`, `npm_config_*`, and prototype-sensitive names are reserved.
 - Reference checks require every declared key to have a nonempty value. Missing values fail `get`, `explain`, `validate`, authoring, and export. Errors identify the token, environment name, and key without displaying values.
 - `get` checks all immediate dependencies before any script runs. It checks deferred targets' dependencies when retrieved. `validate` follows deferred references too.
 
@@ -413,7 +413,7 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.6 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.7 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
@@ -511,7 +511,7 @@ Everything woof keeps lives in your woof home, `~/.woof`.
 #### In your woof home
 
 - `woof.config.json`: your shared tokens and private projects.
-- `woof.secrets.json`: optional local secret values, excluded from exports and import backups.
+- `woof.secrets.json`: local secret values in nested namespaces, excluded from exports and import backups.
 - `resources/`: files woof copied in for your tokens.
 - `exports/`: archives from `woof export`.
 - `.backups/`: backups that `woof import` saves before it writes.
@@ -522,7 +522,7 @@ Everything woof keeps lives in your woof home, `~/.woof`.
 
 #### Notes
 
-- woof creates its home and `woof.config.json` the first time it needs them.
+- woof creates its home, `woof.config.json`, and an empty `woof.secrets.json` the first time it needs them. Later operational commands create either file if it is missing. Help, version, and readme skip initialization unless you pass `--migrate`. Single-secret lookup always skips it.
 - woof keeps every backup. To restore one, extract it over woof home.
 
 ### Limits and decisions

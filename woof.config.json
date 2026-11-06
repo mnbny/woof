@@ -66,7 +66,7 @@
     },
     "version": {
       "$type": "prompt",
-      "$exec": "Bump woof using the patch, minor, or major level requested in the conversation.\n\nUpdate these together:\n\n1. `package.json` — package version.\n2. `README.md` — both npx command pins.\n3. `skills/woof-execution/SKILL.md` — both npx pins and the skill version.\n4. `skills/woof-living-docs/SKILL.md` — the npx pin and skill version.\n\nAll woof pins must match the new package version. Increase each skill’s integer version only if it hasn’t already advanced for this release.\n\nReview the conversation for any new npx references. If you find additional places that need pins, propose them to the user.\n\nRun `pnpm validate` and report the new version.",
+      "$exec": "Bump woof using the patch, minor, or major level requested in the conversation.\n\nUpdate these together:\n\n1. `package.json` — package version.\n2. `README.md` — both npx command pins.\n3. `skills/woof-execution/SKILL.md` — both npx pins and the skill version.\n4. `skills/woof-living-docs/SKILL.md` — the npx pin.\n\nAll woof pins must match the new package version. Increase the execution skill’s integer version only if it hasn’t already advanced for this release.\n\nReview the conversation for any new npx references. If you find additional places that need pins, propose them to the user.\n\nRun `pnpm validate` and report the new version.",
       "$description": "Bump the woof package version and all recommended npx pins together",
       "$tags": ["version", "release", "npm"]
     }

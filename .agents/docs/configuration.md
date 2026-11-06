@@ -11,7 +11,7 @@ The configuration domain owns woof's JSON documents, their structure and version
 - A repository configuration is one project object without a name, in a checkout. It has no registry wrapper. It holds tokens only, because its checkout selects it.
 - A registered project holds tokens and optional metadata. The metadata lists checkout paths and worktree patterns.
 
-Every standalone document declares `$schemaVersion` 2. An inline project uses the version of the document that contains it. One physical file cannot be both the root configuration and a project configuration. Configuration references cannot form a cycle.
+Every standalone configuration document declares `$schemaVersion` 2. An inline project uses the version of the document that contains it. One physical file cannot be both the root configuration and a project configuration. Configuration references cannot form a cycle.
 
 The schema version is the first field in a standalone document. The root configuration puts the project registry last, after all shared tokens. A project configuration puts its metadata immediately after the schema version. An inline project puts its metadata first. These rules also apply when woof saves or exports configuration. Other fields keep their relative order.
 
@@ -21,7 +21,7 @@ The schema version is the first field in a standalone document. The root configu
 - Token names use case-sensitive ASCII letters, digits, underscores, and hyphens. woof rejects prototype-sensitive names explicitly.
 - A value is a string, a namespace, or a resource object. Other scalars and generic arrays are not valid.
 - A resource object declares a type and an execution value. A description, tags, and a boolean privacy field are optional. Privacy controls export of the content. A prompt takes one string. A script takes one string or a nonempty list of strings.
-- A resource can declare secret bindings. Each binding maps an environment variable name to a key in the local secrets store. The declaration contains no secret values. Secret keys are separate from token addresses. Configuration validation checks the names and structure without reading the store.
+- A resource can declare secret bindings. Each binding maps an environment variable name to a path in the local secrets store. The declaration contains no secret values. Secret paths use the same namespace lookup and name rules as configuration tokens. Configuration validation checks the names and structure without reading the store.
 - A failure names the source file and the failing path. woof never drops valid ad hoc content.
 
 ## Structure views
@@ -45,9 +45,13 @@ A string token, a prompt, or a script execution value that starts with a marker 
 
 ## Home lifecycle
 
-An optional secrets store in woof home holds a flat map of dotted names to string values. All projects and worktrees use this store. The store cannot serve as a configuration document, resource, or import destination. Export and import backups exclude it. Reference checks, script resolution, and single-secret lookup share the same store reader. A missing or invalid store affects only operations that reach a secret dependency. Discovery and unrelated token operations remain available.
+The secrets store in woof home holds nested namespaces with literal string values. It has no version field or migrations. All projects and worktrees use this store. The store cannot serve as a configuration document, resource, or import destination. Export and import backups exclude it.
 
-The first operational invocation that uses configuration startup creates a missing woof home from the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create woof home or repair field order unless migration is requested.
+Reference checks, script resolution, and single-secret lookup share the same store reader. An invalid store affects only operations that reach a secret dependency. Discovery and unrelated token operations remain available.
+
+Operational invocations that use configuration startup create either missing personal file. The root configuration uses its starter template. The secrets store starts empty. Each creation is atomic and restricts access to the owner. Concurrent first launches produce complete files without replacing existing files or their permissions. Passive invocations do not initialize woof home or repair field order unless migration is requested.
+
+If permissions prevent secrets-store creation, operations without secret dependencies can still use the existing configuration. A later operational invocation attempts creation again.
 
 Single-secret lookup skips configuration checks. Unless migration is requested, readme skips them too. Other invocations check these documents:
 

@@ -1,8 +1,6 @@
 ---
 name: woof-living-docs
 description: Review, update, audit, and scaffold the agent-facing `.agents/docs` system. It includes the registry, project/technical/domain briefs, and agent entry points. Use only for that system. Do not use for README files, user-facing documentation, changelogs, inline comments, or one-off documentation edits unless the user explicitly asks for living docs.
-metadata:
-  version: 7
 ---
 
 # Living Docs
@@ -122,7 +120,7 @@ When replacing or retiring existing documentation, complete the coverage review 
 
 ## Apply the editorial pass
 
-After preparing all documentation and registry changes, run `npx --yes @mnbny/woof@0.1.6 get 'writing.editorial.pass.ste' --agent` and follow the instructions it prints. Apply them to the changed documentation prose, including registry descriptions.
+After preparing all documentation and registry changes, run `npx --yes @mnbny/woof@0.1.7 get 'writing.editorial.pass.ste' --agent` and follow the instructions it prints. Apply them to the changed documentation prose, including registry descriptions.
 
 Preserve every supported fact and introduce no new claims. Keep headings, document ordering, registry structure, registry references, and tags intact.
 

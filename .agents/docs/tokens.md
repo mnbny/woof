@@ -59,7 +59,7 @@ Root definitions form the base. The selected project overlays whole tokens, incl
 
 ## Secret bindings
 
-Secret bindings belong to resource objects. A project override replaces them with the rest of the token. They name entries in a separate local store. They do not introduce token references or reference syntax.
+Secret bindings belong to resource objects. A project override replaces them with the rest of the token. They address string values through nested namespaces in a separate local store. Namespace lookup and name rules are shared with configuration tokens. Secret values remain literal text. They do not introduce token references or reference syntax.
 
 Secret bindings participate in the same reference checks as token dependencies. Each named store entry must exist and contain a nonempty value. Immediate preflight checks the expanded tokens; full validation also follows deferred targets. These checks apply to prompts and scripts, including bindings retained on private placeholders.
 
