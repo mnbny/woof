@@ -113,8 +113,8 @@ Add each document using this format:
 
 #### [configuration.md](./configuration.md)
 
-- Description: Configuration documents, structure rules and views, resource references, home lifecycle, versions, and migration.
-- Tags: `configuration`, `schema`, `tree`, `migration`
+- Description: Configuration documents, structure views, resource references, local secret storage and lookup, home lifecycle, versions, and migration.
+- Tags: `configuration`, `schema`, `tree`, `migration`, `secrets`
 
 #### [projects.md](./projects.md)
 
@@ -124,12 +124,12 @@ Add each document using this format:
 #### [tokens.md](./tokens.md)
 
 - Description: Design-token lineage, project overlay, references, private placeholders, preflight and provenance, and discovery rules.
-- Tags: `tokens`, `design-tokens`, `resolution`, `discovery`, `privacy`
+- Tags: `tokens`, `design-tokens`, `resolution`, `discovery`, `privacy`, `secrets`
 
 #### [scripts.md](./scripts.md)
 
 - Description: Computed resource runtimes, execution, output, failure, and cancellation.
-- Tags: `scripts`, `execution`
+- Tags: `scripts`, `execution`, `secrets`
 
 #### [sharing.md](./sharing.md)
 

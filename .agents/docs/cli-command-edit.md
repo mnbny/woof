@@ -8,6 +8,7 @@ Edit changes the content, description, tags, or export privacy of one token. Peo
 
 - The path of a token in the effective view, and an optional registered project.
 - The changes: new content, a description, or a tag set. A flag that is not given keeps its field. An empty description or an empty tag removes that field.
+- Secret bindings can be replaced or removed as a set. Other edits and overrides preserve them. The same reference checks used for other dependencies require the declared local values before saving.
 - Privacy flags include or omit the content in exports. They cannot be combined. Other edits, including replacement of a placeholder and creation of an override, preserve the privacy setting.
 - A layer, when a project context shows a shared token: change the shared token for all projects, or add an override for this project only.
 

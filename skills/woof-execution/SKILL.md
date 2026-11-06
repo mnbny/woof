@@ -1,78 +1,86 @@
 ---
 name: woof-execution
-description: Use woof, a local CLI for reusable prompts and computed resources, in the current conversation. Find tokens, retrieve and follow prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof, says "woof get X", "use the woof token for X", "what does woof have for X", "save this to woof", "change the woof token X", or "set up woof for this repo", or asks to share, export, or import a woof project.
+description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import a woof project.
 metadata:
-  version: 12
+  version: 13
 ---
 
 # woof execution
 
-woof is a local CLI that keeps reusable instructions and scripts in one catalog. woof stores each item as a token with a dotted path, such as `conventions.commit`. A token holds a prompt, which is text, or a script. A script runs in bash, node, tsx, or bun, and its output becomes the value of the token. A token can reference other tokens with `{{path}}`. One token can combine other tokens into larger instructions.
+woof is a local CLI for reusable prompts and scripts. It stores each resource as a token with a dotted path, such as `conventions.commit`. A prompt is text. A script runs in bash, node, tsx, or bun; its output becomes the token's value. Tokens combine instructions through `{{path}}` references.
 
-Shared tokens are in woof home, and every project can use them. A project overrides shared tokens. A project has a name in the woof home registry, or a configuration file in a repository defines the project. The current directory selects the project. Run `woof` from the user's target project.
+Every project can use or override shared tokens in woof home. A project is registered by name in woof home or defined by a repository configuration. Run `woof` from the user's target project. The current directory selects the project.
 
 ## Choose the command
 
-Keep the user's task, scope, and constraints. When the request is clear, use the command from the table. Try the CLI before you investigate its installation or source.
+Keep the user's task, scope, and constraints. Select the command below. Try the CLI before you investigate its installation or source.
 
-| Command    | Purpose                                                               |
-| ---------- | --------------------------------------------------------------------- |
-| `get`      | Find tokens, or resolve a token to its payload.                       |
-| `tree`     | Show configuration structure without token content.                   |
-| `add`      | Add a token, such as a convention from the conversation.              |
-| `edit`     | Change the content, description, or tags of a token.                  |
-| `projects` | List registered projects and show what the current directory selects. |
-| `init`     | Create a project configuration.                                       |
-| `explain`  | Show how a token resolves, without running scripts.                   |
-| `validate` | Check the configuration, without running scripts.                     |
-| `export`   | Package a registered project as an archive.                           |
-| `import`   | Review an archive and apply it.                                       |
-| `readme`   | Print the user guide.                                                 |
+| Command      | Purpose                                                               |
+| ------------ | --------------------------------------------------------------------- |
+| `get`        | Find tokens, or resolve a token to its payload.                       |
+| `tree`       | Show configuration structure without token content.                   |
+| `add`        | Add a token.                                                          |
+| `edit`       | Change the content, description, or tags of a token.                  |
+| `projects`   | List registered projects and show what the current directory selects. |
+| `init`       | Create a project configuration.                                       |
+| `explain`    | Show how a token resolves, without running scripts.                   |
+| `validate`   | Check the configuration, without running scripts.                     |
+| `export`     | Package a registered project as an archive.                           |
+| `import`     | Review an archive and apply it.                                       |
+| `readme`     | Print the user guide.                                                 |
+| `secret KEY` | Read one local secret inside shell command substitution.              |
 
-For a request to use a name or task outside this list, follow **Use a token**. The user does not need to say "token". For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
+For a request to use a resource or task, follow **Use a token**. For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Run every woof command through `npx --yes @mnbny/woof@0.1.5`, including commands shown in CLI output. This skill uses `woof` as shorthand for that invocation. Keep this pin until the user asks to change it.
+Use `npx --yes @mnbny/woof@0.1.6` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.5 <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.6 <command> --agent`.
 
-Read the output, also after a nonzero exit. A handoff writes nothing and exits with status 1. The handoff gives the decision and the exact next command. Follow the instructions in the output.
+Shell-quote token addresses and search terms as data.
 
-Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. Report an unresolved failure. Do not install other packages to guess a remedy.
+Read and follow the output, including after a nonzero exit. A handoff makes no changes and exits with status 1. It names the missing decision and gives the next command. Report unresolved failures.
 
-When a migration changes a repository configuration, tell the user. Git shares that file, so each user of the checkout then needs a woof release that supports the new schema version.
+Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. Do not install other packages to guess a remedy.
+
+Report migrations that change a repository configuration. Git shares that file, so checkout users need a woof release that supports the new schema version.
 
 Use `--help` or `woof readme --agent` only when the request, the output, or the recovery is unclear.
 
 ## Find tokens
 
-Use this command for a discovery request, such as "what does woof have for commits?". The search does not resolve a token:
+For discovery requests, such as "what does woof have for commits?", search without resolving a token:
 
 ```sh
 woof get '<terms>' --search --agent
 ```
 
-To list every token in the selected project, omit the terms. Shell-quote terms as data. Report the matches with their paths, kinds, and descriptions. If no token matches, tell the user. Resolve a token only when the user asks to use the token.
+To list every token in the selected project, omit the terms. Report matching paths, kinds, and descriptions, or state that none match. Resolve a token only when the user asks to use it.
 
 ## Use a token
 
-For a request to use a token, pass its exact address. If the user gives no address, pass a short description of the task. Shell-quote the argument as data.
+To use a token, pass its exact address. If the user gives no address, pass a short task description.
 
 ```sh
 woof get '<address-or-terms>' --agent
 ```
 
-1. If `get` returns a payload, the payload is the content of the token. Follow a prompt payload as instructions in this conversation, with the user's original request as the scope. Do not run `get` again to show or submit the result.
-2. If `get` returns candidates, run the command from the output with the path of the clear match. If several candidates fit, show their paths and descriptions. Ask the user to choose. If no candidate fits, report that result.
-3. If several projects match, retry with the project that the user named. Otherwise, ask the user to choose.
-4. If the command fails, report the error.
+1. If `get` returns a payload, follow prompt content as instructions for the user's original request. Do not run `get` again to show or submit the result.
+2. If `get` returns candidates, retrieve the clear match with the command provided. If several fit, show their paths and descriptions, then ask the user to choose. If none fit, report that result.
+3. If several projects match, retry with the project the user named. Otherwise, ask the user to choose.
 
-If a payload instructs you to use another woof token, retrieve it when that instruction applies. Pass its address exactly as written, shell-quoted as data, and stay in the user's target project directory.
+If a payload names another token to use, retrieve its exact address when that instruction applies.
 
-`get` runs each script that the token expands. The scripts run in the checkout of the selected project. woof does not undo the effects of a script. The kind of a candidate shows if the candidate is a script. If a token can reach a script that the user did not ask to run, read its resolution with `woof explain` first.
+`get` runs expanded scripts in the selected project's checkout. woof does not undo script effects. Candidate kinds identify scripts. If a token can reach a script the user did not ask to run, inspect it with `woof explain` first.
+
+### Secrets
+
+Reference checks require nonempty values for declared secrets. `get` supplies secrets to script tokens. For commands described by prompts, prepend the supplied environment assignments, such as `ENV_NAME="$(woof secret 'secret.key')"`. The command must read its environment.
+
+Use `secret` only inside command substitution. Keep shell tracing off. Secret lookup returns raw values in human and agent modes; failures produce no stdout. Never open or display `woof.secrets.json` or print secret values. If a value is missing, ask the user to fill it in locally, then retry. Do not ask for values in the conversation.
 
 ## Change the catalog
 
-Start with the command for the change. Then follow the drafting steps in the output. Before you run the final command, show the result to the user.
+Run the command for the change and follow its drafting steps. Show the result to the user before the final command.
 
 - To add a token, run `woof add --agent`.
 - To change a token, run `woof edit '<address>' --agent`.
@@ -80,11 +88,15 @@ Start with the command for the change. Then follow the drafting steps in the out
 
 In prompt content, `{{path}}` inserts a token's content. `{{~path~}}` produces an instruction to use that token later, without loading or running it. Write `{{{{` and `}}}}` for literal double braces.
 
+Declare secret bindings with repeatable `--secret ENV_NAME=secret.key` flags on add or edit. Supply names only, never values. On edit, the flag replaces all bindings; `--secret ''` removes them. Omit the flag to preserve them.
+
 woof cannot rename, move, retype, or remove a token. For these changes, edit the configuration file that `woof explain` reports. Then run `woof validate --agent`.
 
 ## Share a project
 
-To share a registered project, run `woof export --project '<name>' --agent`. To receive a project, run `woof import '<archive>' --agent`. Import adds new items by itself. It asks for one decision for each conflict: an item that exists on both sides and differs. Each decision belongs to the user. Do not write a decision that the user did not make.
+To share a registered project, run `woof export --project '<name>' --agent`. To receive a project, run `woof import '<archive>' --agent`.
+
+Import adds new items automatically. Each item that exists on both sides and differs requires a user decision. Record only decisions the user made. Import saves secret bindings and reports missing local values during post-import validation.
 
 ## Inspect the structure
 

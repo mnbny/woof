@@ -27,4 +27,6 @@ When import saved a backup, it shows the backup location after the report, also 
 
 ## Validation findings
 
+After application, import lists the imported project's secret requirements and checks them through ordinary reference validation. It imports only the bindings, never the values. Missing local values produce setup findings without undoing the import.
+
 After a save, import validates the shared catalog and every registered project. It does not run scripts. Findings go to standard error after the success report, and the command still exits with status 0. If a finding shows an unreadable configuration, import asks for a repair before the next woof run. Other findings point to the affected tokens and to project validation.

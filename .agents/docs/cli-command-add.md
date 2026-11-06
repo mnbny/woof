@@ -11,6 +11,7 @@ Add creates one token in the shared tokens, in a registered project, or in the r
 - The content, as text or from standard input.
 - An optional description and tags, for discovery.
 - An optional privacy flag, to omit the content from exports.
+- Optional secret bindings, containing environment names and secret keys only. Reference checks require the declared local values before the token is saved.
 - One target: the shared tokens, the repository configuration, or a registered project.
 
 ## Content

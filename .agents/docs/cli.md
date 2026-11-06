@@ -6,18 +6,19 @@ The CLI owns argument parsing, startup order, command dispatch, and shared prese
 
 ## Commands
 
-The commands are readme, init, add, edit, get, tree, projects, explain, validate, export, and import. Command briefs describe individual operations. The configuration brief owns structure views.
+The commands are readme, init, add, edit, get, tree, projects, explain, validate, export, import, and secret. Command briefs describe individual operations. The configuration brief owns structure views and local secret storage. Single-secret lookup supplies values for shell command substitution; the user guide owns its invocation details.
 
 Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified token address that names a project has the same effect as that option. If the address and the option select different projects, the command fails. Tree paths are relative to the selected scope instead.
 
 ## Invocation and startup
 
-Before startup, woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag for every command. The commands do not read the flag.
+Before startup, woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag. Single-secret lookup rejects migration because it does not use configuration startup.
 
 After these checks, startup checks the configuration and applies an explicit migration. The configuration brief describes these steps.
 
 - Help and version are passive. They do not create woof home.
 - Unless migration is requested, readme skips all configuration checks. This keeps the guide readable when the configuration is broken.
+- Single-secret lookup skips home initialization and configuration checks. Its only data source is the local secrets store.
 - An invalid invocation fails before woof creates its home or runs a migration.
 
 ## Presentation and exit status
@@ -37,8 +38,9 @@ After these checks, startup checks the configuration and applies an explicit mig
   - A success message reports a change. An outcome that changes nothing, such as a cancellation, is a warning.
   - Errors say plainly what is wrong and which token or file is at fault. An error or a handoff does not add that nothing changed.
   - A code block has a guide line above it and padding on all sides.
-- Agent mode prints only text from markdown templates. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template. Agents get the same choices and labels as people, with each path after its label. Agent text has no styles and no alignment. An agent list puts each item on its own bulleted line. A command that applies to all items follows the list once. Templates do not repeat the guidance of the execution skill.
+- Agent-facing messages come from markdown templates. Token payloads and single-secret lookup return their data directly. The command supplies the values in the template, such as names, paths, candidate lists, diffs, and error details. Each agent message, warning, and notice has its own template. Agents get the same choices and labels as people, with each path after its label. Agent text has no styles and no alignment. An agent list puts each item on its own bulleted line. A command that applies to all items follows the list once. Templates do not repeat the guidance of the execution skill.
 - Payloads, results, and reports go to standard output. Warnings, migration notices, the execution skill recommendation, and script error output go to standard error.
+- Single-secret lookup writes only its value to standard output. Its errors go to standard error, and it suppresses skill recommendations.
 - A failure exits with status 1. An interactive cancellation exits with status 130.
 - If a human has no terminal, woof returns the agent handoff and exits with status 1. woof does not report a cancellation in this case.
 

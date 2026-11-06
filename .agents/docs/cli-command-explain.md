@@ -10,14 +10,14 @@ Explain takes one token address. It also takes an optional registered project, f
 
 ## Behavior
 
-Explain selects the project in the same way as lookup. Then explain preflights the token's immediate references. It loads prompt files and checks declared script files. It checks that deferred targets exist but does not load their files or descend into them. It never runs scripts.
+Explain selects the project in the same way as lookup. Then explain preflights the token's immediate references. It loads prompt files and checks declared script files and secret dependencies. It checks that deferred targets exist but does not load their files or descend into them. It never runs scripts.
 
 ## Output and exit status
 
 Explain reports these items:
 
 - The selected project and the reason for the selection, or that only shared tokens apply.
-- The requested token first, then each token that it reaches, in the order of the references, with an arrow between tokens. For each token, explain shows its scope badge, its runtime badge if it is a script, its source file, the shared definition that it overrides, its description, tags, references, and resolved resource files.
+- The requested token first, then each token that it reaches, in the order of the references, with an arrow between tokens. For each token, explain shows its scope badge, its runtime badge if it is a script, its source file, the shared definition that it overrides, its description, tags, references, secret binding names, and resolved resource files.
 - Deferred references in a separate field on the token that names them.
 
-If a target is missing or immediate references form a cycle, explain reports the reference chain and exits with status 1.
+Missing token targets, missing or empty secrets, and immediate reference cycles stop explanation with status 1. Errors identify the dependency without displaying secret values.

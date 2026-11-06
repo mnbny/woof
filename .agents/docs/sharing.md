@@ -27,6 +27,10 @@ Local recovery backups retain private values and files. Export privacy does not 
 
 ## Review
 
+Secret declarations travel with their tokens. Secret values and their store never enter archives, import writes, or import backups. Export checks declared secret dependencies through ordinary reference validation. Import can save the bindings before local values are configured. After saving, it lists the imported project's requirements and reports missing local values as validation findings.
+
+Secret bindings affect execution and are part of token identity for reuse. Tokens with different bindings are not interchangeable. Review shows binding differences. Token remapping leaves secret keys unchanged because they are not token addresses.
+
 Import compares the archive with the local home. The items are shared tokens, the project entry, project tokens, project metadata, and files.
 
 These items need no decision:

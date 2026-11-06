@@ -26,10 +26,10 @@ Explicit permission that the user already gave in the conversation stays valid. 
 
 ## Output and recovery
 
-Agent output is plain text from markdown templates. It has no prompts, progress animation, color, or terminal hyperlinks. Help and early failures stay plain, even when the environment requests color.
+Agent messages are plain text from markdown templates. Token payloads and single-secret lookup return their data directly. It has no prompts, progress animation, color, or terminal hyperlinks. Help and early failures stay plain, even when the environment requests color.
 
-Results, handoffs, errors, and recovery guidance go to standard output. A failure returns a nonzero status, even when the output contains guidance. Follow-up commands keep explicit agent mode and the selected registered project. Reports keep completed work separate from pending recovery.
+Results, handoffs, errors, and recovery guidance go to standard output. A failure returns a nonzero status, even when the output contains guidance. Single-secret lookup writes errors to standard error and keeps standard output empty on failure. Follow-up commands keep explicit agent mode and the selected registered project. Reports keep completed work separate from pending recovery.
 
 ## Execution skill recommendation
 
-At the end of each agent-mode run, woof looks for the woof-execution skill in the Claude and shared agent skill directories of the user's home. If no copy exists, or an installed copy has an older version than the skill in the package, woof writes a recommendation to standard error. The recommendation tells the agent to inform the user, gives the install source and locations, and requires the user's approval before installation. Human mode never shows the recommendation.
+Single-secret lookup suppresses skill recommendations. At the end of each other agent-mode run, woof looks for the woof-execution skill in the Claude and shared agent skill directories of the user's home. If no copy exists, or an installed copy has an older version than the skill in the package, woof writes a recommendation to standard error. The recommendation tells the agent to inform the user, gives the install source and locations, and requires the user's approval before installation. Human mode never shows the recommendation.

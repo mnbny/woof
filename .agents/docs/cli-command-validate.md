@@ -13,6 +13,7 @@ Validate takes an optional token address. It also takes an optional registered p
 - Without an address, validate preflights every token in the selected effective view. The view is the root alone, a repository project, or a registered project.
 - With an address, validate checks the token's reachable graph through both immediate and deferred references.
 - Preflight checks references, immediate cycles, the independence of shared definitions, and declared files. Deferred cycles are valid. It never runs scripts.
+- Secret declarations must have valid names and structure. The reference walk checks that their entries exist in the local store and contain nonempty values. Findings contain names only.
 - Validate checks only the selected view. Each other registered project needs a separate run.
 
 ## Output and exit status

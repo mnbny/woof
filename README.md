@@ -77,7 +77,7 @@ On Sam's side, anything new comes straight in. Anything that differs from what S
 
 Before it writes anything, woof saves a backup.
 
-For values Sam should supply, like staging credentials, ask your agent to mark the token private before you share it. Sam gets a placeholder to fill in.
+For values Sam should supply, like a local preview URL, ask your agent to mark the token private before you share it. Sam gets a placeholder to fill in.
 
 ## Getting started
 
@@ -86,7 +86,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 Paste this into your agent:
 
 ```text
-Run `npx @mnbny/woof@0.1.5 readme` and set up woof for me.
+Run `npx @mnbny/woof@0.1.6 readme` and set up woof for me.
 ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -196,17 +196,49 @@ The script runs in the repo root, and its output becomes the value. `$exec` can 
 
 ### Private values
 
-You might keep `globex`'s staging accounts in woof. Ask your agent to mark that token private before you share it with Sam. It adds `$private` to the token:
+You might keep `globex`'s local preview URL in woof. Ask your agent to mark that token private before you share it with Sam. It adds `$private` to the token:
 
 ```json
 {
   "$type": "prompt",
-  "$exec": "user1:pass user2:pass",
+  "$exec": "http://localhost:5173",
   "$private": true
 }
 ```
 
 You still get the real value locally. The export replaces it with `{{-woof:private-}}`. Sam can import the configuration and ask their agent to fill in their own value. Until then, woof warns whenever their agent uses the token.
+
+### Secrets
+
+Some tasks need credentials, like an API key for `acme`'s tests. Add those values to your local woof secrets file, outside the conversation.
+
+Once a token declares what it needs, you use it as usual. woof checks that the secrets are available and supplies them when needed. If something is missing, it tells you what to add locally.
+
+Here's `checks.all` with `$secrets` connecting the saved `acme.tests` key to the `TEST_API_KEY` variable its tests use:
+
+```json
+{
+  "$type": "bash",
+  "$exec": ["pnpm lint", "pnpm test", "pnpm build"],
+  "$secrets": { "TEST_API_KEY": "acme.tests" }
+}
+```
+
+When your agent uses this token, woof supplies the key to those commands automatically.
+
+A prompt can declare the same secret:
+
+```json
+{
+  "$type": "prompt",
+  "$exec": "Run pnpm test and summarize any failures.",
+  "$secrets": { "TEST_API_KEY": "acme.tests" }
+}
+```
+
+woof adds instructions telling your agent how to supply the key when it runs `pnpm test`. The value stays out of the prompt.
+
+When you share the token with Sam, your credentials stay out of the export. Sam supplies their own values.
 
 ### Projects
 
@@ -339,10 +371,19 @@ And `acme`'s repo config:
 | `$description` | A resource | Optional text for search |
 | `$tags` | A resource | Optional list of strings for search |
 | `$private` | A resource | Optional boolean. `true` replaces the content with `{{-woof:private-}}` on export. |
+| `$secrets` | A resource | Optional map of environment variable names to local secret keys. Values stay in the secrets store. |
 | `$projects` | Your shared file | Private projects by name: inline, or a `<root>/` path to the project's own file, like `initech` |
 | `$metadata` | A private project | Optional `$basePaths` and `$worktreePaths` |
 | `$basePaths` | `$metadata` | Paths that select the project, including everything below them |
 | `$worktreePaths` | `$metadata` | Patterns that match the current directory or one of its parents |
+
+#### Secret bindings
+
+- `$secrets` maps environment variable names to keys in `~/.woof/woof.secrets.json`. Prompt and script resources support it. Bindings contain names only.
+- The secrets file is a flat JSON object with string values. Create it locally and restrict access to its owner with `chmod 600 ~/.woof/woof.secrets.json`.
+- Secret keys use dotted token-style names, separate from token addresses. Environment names use letters, digits, and underscores and cannot start with a digit. `CI`, `npm_config_*`, and prototype-sensitive names are reserved.
+- Reference checks require every declared key to have a nonempty value. Missing values fail `get`, `explain`, `validate`, authoring, and export. Errors identify the token, environment name, and key without displaying values.
+- `get` checks all immediate dependencies before any script runs. It checks deferred targets' dependencies when retrieved. `validate` follows deferred references too.
 
 #### Template strings
 
@@ -372,23 +413,24 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.5 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.6 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
 | `woof readme` | Prints this guide. Agents run it first. | — |
 | `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>` |
 | `woof tree [path]` | Shows token structure without content | `--project <name>` or `--repo` |
-| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
-| `woof edit [path]` | Changes a token's content, description, tags, or privacy | `--content`, `--description`, `--tag`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
+| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--secret`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
+| `woof edit [path]` | Changes a token's content, description, tags, or privacy | `--content`, `--description`, `--tag`, `--secret`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
 | `woof init [location]` | Creates a repo config or a private project | `--repo`, or `--name <name>` with `--base-path` and `--worktree-path` |
+| `woof secret KEY` | Reads one local secret for command substitution | — |
 | `woof projects` | Shows which project the current directory selects, and lists private projects | — |
 | `woof explain [path]` | Traces how a token resolves, without running scripts | `--project <name>` |
 | `woof validate [path]` | Checks every token, or one token's graph, without running scripts | `--project <name>` |
 | `woof export` | Packs a private project into a zip in `~/.woof/exports/` | `--project <name>` |
 | `woof import <archive>` | Asks about each conflict in an archive, then applies it | `--decisions <file>` |
 
-Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --version` work too.
+Every command takes `--agent`. All commands except `secret` also accept `--migrate`. `woof --help` and `woof --version` work too.
 
 #### Options
 
@@ -396,6 +438,7 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - `--tag`, `--base-path`, and `--worktree-path` repeat: `--tag git --tag commits`.
 - In `edit`, an empty `--description` or `--tag` removes it. `--shared` changes a shared token for every project, and `--override` overrides it in the selected project only.
 - `--private` on `add` or `edit` sets `$private: true`. `edit --no-private` removes the field. Other edits preserve the privacy setting. Disabling privacy alone on an already public definition makes no change.
+- `--secret ENV_NAME=secret.key` on `add` or `edit` declares a secret binding. Repeat it for multiple bindings. On edit, the flags replace the entire binding set; `--secret ''` removes it. Omitting the flag preserves existing bindings. Supply names only, never values.
 - In `tree`, `--project` and `--repo` show only that project's own definitions. An optional exact path selects a branch or leaf.
 - A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone. Tree paths instead start at the selected scope.
 
@@ -407,6 +450,21 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - `get` prints the value exactly as resolved, so you can pipe it.
 - Exit status is `0` on success, `1` on a failure or a handoff, and `130` on a cancellation.
 
+#### Secret lookup
+
+For commands described by a prompt, the agent prepends the environment assignments supplied by `get`:
+
+```sh
+TEST_API_KEY="$(woof secret 'acme.tests')" pnpm test
+```
+
+- Use the same woof executable or package invocation that retrieved the prompt.
+- `secret` writes only the requested value to stdout, with no added newline, in both human and agent mode. Errors go to stderr, leave stdout empty, and exit with status 1.
+- Lookup reads the secrets file without initializing or loading the token catalog.
+- Use lookup inside command substitution. Do not run it on its own in an agent session or enable shell tracing. The command must read the supplied environment variables.
+- Shell command substitution removes trailing newlines. Direct script-token execution preserves them.
+- Agents must not open or display the secrets file, print values, or ask for values in a conversation. Scripts must not log credentials; woof does not mask their output.
+
 #### Export and import
 
 - Export starts with the selected project's tokens and follows their references after applying overrides. It omits unrelated shared tokens, overridden defaults, and unused files. An empty project exports no shared tokens.
@@ -415,6 +473,8 @@ Every command also takes `--agent` and `--migrate`. `woof --help` and `woof --ve
 - Privacy applies only to the marked token. An unmarked token can still export the same file. Local values and source files stay unchanged, and recovery backups retain private values.
 - Import warns about placeholders and continues. A differing value at the same address in the same layer needs conflict review. A new project token is added even if it overrides a shared token.
 - Each lookup that reaches a private placeholder names the token, asks for its value, and warns on stderr. Replacing the marker with `woof edit` stops the warning and preserves the privacy flag.
+- Export keeps secret bindings but excludes the secrets file and values. The file cannot serve as a token resource or import destination, and import backups exclude it.
+- Import can save bindings before local values exist. Post-import validation reports missing secrets as setup findings without undoing the import.
 
 ### Scripts
 
@@ -437,11 +497,12 @@ A script token runs each time your agent gets it, and whatever it prints becomes
 #### Notes
 
 - Scripts run in the selected project's checkout, the same root as `<repo>`. Without one, they run in the current repo root, or in the current directory outside a repo.
+- Each script receives its own declared secrets in its environment. Bindings override matching inherited variables without changing woof's environment. Two scripts can bind the same variable to different keys. An inherited variable does not replace a missing store entry.
 - A list of scripts runs in order and stops at the first failure.
 - A private placeholder returns a request for the missing value without starting a runtime. If any entry in a script list is a placeholder, none of the list runs.
 - The first `tsx` or `bun` run may need the network.
 - If a script fails, the lookup fails. woof doesn't undo what a script already did, and there's no timeout.
-- Only `get` runs scripts. Searching, `explain`, and `validate` never do.
+- `get` runs script tokens. Searching, `explain`, `validate`, and `secret` do not execute scripts.
 
 ### Files and folders
 
@@ -450,6 +511,7 @@ Everything woof keeps lives in your woof home, `~/.woof`.
 #### In your woof home
 
 - `woof.config.json`: your shared tokens and private projects.
+- `woof.secrets.json`: optional local secret values, excluded from exports and import backups.
 - `resources/`: files woof copied in for your tokens.
 - `exports/`: archives from `woof export`.
 - `.backups/`: backups that `woof import` saves before it writes.

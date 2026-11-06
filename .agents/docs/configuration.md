@@ -21,6 +21,7 @@ The schema version is the first field in a standalone document. The root configu
 - Token names use case-sensitive ASCII letters, digits, underscores, and hyphens. woof rejects prototype-sensitive names explicitly.
 - A value is a string, a namespace, or a resource object. Other scalars and generic arrays are not valid.
 - A resource object declares a type and an execution value. A description, tags, and a boolean privacy field are optional. Privacy controls export of the content. A prompt takes one string. A script takes one string or a nonempty list of strings.
+- A resource can declare secret bindings. Each binding maps an environment variable name to a key in the local secrets store. The declaration contains no secret values. Secret keys are separate from token addresses. Configuration validation checks the names and structure without reading the store.
 - A failure names the source file and the failing path. woof never drops valid ad hoc content.
 
 ## Structure views
@@ -44,9 +45,11 @@ A string token, a prompt, or a script execution value that starts with a marker 
 
 ## Home lifecycle
 
-If woof home is missing, the first operational invocation creates woof home with a copy of the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create woof home or repair field order unless migration is requested.
+An optional secrets store in woof home holds a flat map of dotted names to string values. All projects and worktrees use this store. The store cannot serve as a configuration document, resource, or import destination. Export and import backups exclude it. Reference checks, script resolution, and single-secret lookup share the same store reader. A missing or invalid store affects only operations that reach a secret dependency. Discovery and unrelated token operations remain available.
 
-Each invocation except the readme command checks these documents:
+The first operational invocation that uses configuration startup creates a missing woof home from the starter configuration template. The creation is atomic and private. Concurrent first launches produce one complete file. Passive invocations do not create woof home or repair field order unless migration is requested.
+
+Single-secret lookup skips configuration checks. Unless migration is requested, readme skips them too. Other invocations check these documents:
 
 - The root configuration.
 - Each referenced project configuration.

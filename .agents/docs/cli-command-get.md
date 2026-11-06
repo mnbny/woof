@@ -13,7 +13,7 @@ Get is the main way to use a token. It resolves an exact address into its payloa
 ## Flow
 
 1. Get selects the project context. If several projects match, a human chooses in a picker. Other callers receive the project names and one retry command.
-2. If the query is an exact address and search is not forced, get preflights its immediate references and checks that deferred targets exist. Then get runs the scripts that the resolution needs and writes the payload. Deferred references produce instructions for later retrieval without loading or running their targets.
+2. If the query is an exact address and search is not forced, get preflights its immediate references and checks that deferred targets exist. Then get runs the scripts that the resolution needs and writes the payload. Deferred references produce instructions for later retrieval without loading or running their targets. The same reference walk checks declared secret dependencies on prompts and scripts. Missing or empty values stop lookup before any script runs. Script values pass to the existing child-process environment. Prompts receive environment-prefix instructions with secret names only.
 3. Otherwise, a human at a terminal searches all tokens in one picker. If the caller gave a query, the picker starts with the query in the search. Forced search behaves the same. The list shows the project tokens first. The search matches every word against the path, description, tags, and alias target. Get resolves the chosen token like an exact address.
 4. An agent caller or a caller without a terminal receives the candidates from discovery instead. Agent guidance favors a project token that fits the request. A shared token remains a choice when it fits clearly better or the user requests it.
 

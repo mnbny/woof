@@ -8,7 +8,7 @@ woof is written in TypeScript and runs on Node.js. Three entry points have the s
 - The standalone bundle is one generated module. It embeds the runtime code. It reads the agent templates, the edit page, the readme, and the execution skill from the package at runtime. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
 - Package execution runs the bundle from the npm package through npx, or from a packed tarball. It needs no global installation.
 
-Each invocation parses the arguments, runs the startup checks, and runs one command. The readme command skips the configuration checks. woof keeps no daemon, persistent cache, or index between invocations.
+Each invocation parses the arguments, runs the startup checks, and runs one command. The readme and single-secret lookup commands skip the configuration checks. Single-secret lookup also skips home initialization and skill notices to keep its output suitable for command substitution. woof keeps no daemon, persistent cache, or index between invocations.
 
 Personal data is in woof home, outside all checkouts. An environment setting can move woof home to a different location.
 
@@ -37,7 +37,7 @@ The bundle embeds every runtime library. For this reason, all packages are devel
 - woof stages each write to configuration and woof home files. Before the write, woof checks the source state again. woof keeps the original bytes and modes for rollback.
 - Startup checks, discovery, structure views, explanation, validation, export, and import never run scripts.
 - Human mode and agent mode run the same operations. They differ only in presentation.
-- All text that agent mode prints comes from a markdown template. Code supplies only the values. Human mode keeps its wording in the code.
+- Agent-facing messages come from markdown templates. Code supplies only the values. Token payloads and single-secret lookup return their data directly. Human mode keeps its wording in the code.
 - POSIX is the supported target for process cleanup. Other operating systems have weaker guarantees.
 
 ## Validation and tests

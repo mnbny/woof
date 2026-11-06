@@ -57,6 +57,16 @@ Root definitions form the base. The selected project overlays whole tokens, incl
 - A token that contains only a deferred reference is a prompt, not an alias.
 - woof never scans script source or script output for references.
 
+## Secret bindings
+
+Secret bindings belong to resource objects. A project override replaces them with the rest of the token. They name entries in a separate local store. They do not introduce token references or reference syntax.
+
+Secret bindings participate in the same reference checks as token dependencies. Each named store entry must exist and contain a nonempty value. Immediate preflight checks the expanded tokens; full validation also follows deferred targets. These checks apply to prompts and scripts, including bindings retained on private placeholders.
+
+Authoring, explanation, export, and post-import validation reuse this boundary. Errors report names without values.
+
+A prompt with bindings returns environment-prefix instructions beside its own resolved content. Aliases and compositions retain those instructions with their source prompt. A deferred target produces its instructions only when retrieved. Script evaluation receives the values already checked during preflight. The values stay outside the public resolution trace.
+
 ## Private values and internal markers
 
 A resource can mark its content as private. The flag controls export only. Local lookup returns the value as usual. The flag belongs to the whole token, so a project override supplies its own privacy setting.
