@@ -28,6 +28,7 @@ import {
 } from '../utils/presentation.ts'
 import { checkoutPath, loadRegisteredProjects, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
+import { parseSecretBindings, secretBindingText } from '../utils/secrets.ts'
 import { isTTY } from '../utils/terminal.ts'
 import { aliasTarget, createTokenGraph } from '../utils/tokens.ts'
 
@@ -83,6 +84,7 @@ export default defineCommand({
     description: { description: 'Description for discovery', type: 'string' },
     tag: { description: 'Tag for discovery (repeatable)', type: 'string' },
     private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
+    secret: { description: 'ENV_NAME=secret.key binding (repeatable; names only)', type: 'string' },
     shared: { description: 'Add the token to the shared tokens', type: 'boolean' },
     repo: { description: 'Add the token to the repository configuration', type: 'boolean' },
     project: { description: 'Add the token to this registered project', type: 'string' },
@@ -100,6 +102,7 @@ export default defineCommand({
           description: { type: 'string' },
           tag: { type: 'string', multiple: true },
           private: { type: 'boolean' },
+          secret: { type: 'string', multiple: true },
           shared: { type: 'boolean' },
           repo: { type: 'boolean' },
           project: { type: 'string' },
@@ -141,6 +144,7 @@ export default defineCommand({
       let rawContent = values.content === '-' ? readFileSync(0, 'utf8').trimEnd() : values.content
       let description = values.description?.trim() || undefined
       let tags = values.tag ?? []
+      const secrets = parseSecretBindings(values.secret ?? [])
 
       if (!interactive) {
         const missing = [
@@ -163,6 +167,7 @@ export default defineCommand({
             type ?? 'TYPE',
             target ? targetFlag(target) : 'TARGET',
             ...(values.private ? ['--private'] : []),
+            ...(values.secret ?? []).flatMap(binding => ['--secret', shellQuote(binding)]),
             '--description',
             description === undefined ? 'DESCRIPTION' : shellQuote(description),
             ...(tags.length ? tags.flatMap(tag => ['--tag', shellQuote(tag)]) : ['--tag', 'TAG']),
@@ -208,6 +213,7 @@ export default defineCommand({
                 description,
                 tags,
                 private: values.private,
+                secrets,
               },
               cwd,
             )
@@ -224,6 +230,7 @@ export default defineCommand({
           description,
           tags,
           private: values.private,
+          secrets,
         })
       }
 
@@ -296,7 +303,7 @@ export default defineCommand({
         tags = splitList(entered)
       }
 
-      await save({ target, path, type: tokenType, content, description, tags, private: values.private })
+      await save({ target, path, type: tokenType, content, description, tags, private: values.private, secrets })
     } catch (error) {
       const details = message(error)
       presentError(
@@ -325,6 +332,7 @@ export default defineCommand({
         !draft.content.file &&
         !draft.description &&
         !draft.tags.length &&
+        !Object.keys(draft.secrets ?? {}).length &&
         draft.private === undefined
           ? aliasTarget(draft.content.exec)
           : undefined
@@ -341,6 +349,7 @@ export default defineCommand({
             ['Description', description],
             ['Tags', tags],
             ['Private', draft.private ? 'yes' : 'no'],
+            ['Secrets', secretBindingText(draft.secrets ?? {}) || 'none'],
             ['Overrides a shared token', override],
           ]),
           recovery: `Check it with ${inlineCodeText(command)}.`,
@@ -355,6 +364,7 @@ export default defineCommand({
             description,
             tags,
             private: draft.private ? 'yes' : 'no',
+            secrets: secretBindingText(draft.secrets ?? {}) || 'none',
             override,
             command: `${command} --agent`,
           },

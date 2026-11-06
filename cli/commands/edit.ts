@@ -23,6 +23,7 @@ import {
 } from '../utils/presentation.ts'
 import { selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
+import { parseSecretBindings, secretBindingText } from '../utils/secrets.ts'
 import { isTTY } from '../utils/terminal.ts'
 import { createTokenGraph } from '../utils/tokens.ts'
 
@@ -44,6 +45,10 @@ export default defineCommand({
     tag: { description: 'New tag set (repeatable); an empty value removes all tags', type: 'string' },
     private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
     'no-private': { description: 'Include the token content in exports', type: 'boolean' },
+    secret: {
+      description: 'Replace secret bindings with ENV_NAME=secret.key (repeatable); empty removes all',
+      type: 'string',
+    },
     shared: { description: 'Change a shared token for every project', type: 'boolean' },
     override: { description: 'Override a shared token in the selected project', type: 'boolean' },
   },
@@ -61,6 +66,7 @@ export default defineCommand({
           tag: { type: 'string', multiple: true },
           private: { type: 'boolean' },
           'no-private': { type: 'boolean' },
+          secret: { type: 'string', multiple: true },
           shared: { type: 'boolean' },
           override: { type: 'boolean' },
         },
@@ -110,6 +116,9 @@ export default defineCommand({
         ...(values.description !== undefined ? { description: values.description } : {}),
         ...(values.tag ? { tags: values.tag.map(tag => tag.trim()).filter(Boolean) } : {}),
         ...(values.private ? { private: true } : values['no-private'] ? { private: false } : {}),
+        ...(values.secret
+          ? { secrets: parseSecretBindings(values.secret.length === 1 && values.secret[0] === '' ? [] : values.secret) }
+          : {}),
       }
       const changes = Object.keys(edit).length > 0
       // A shared token seen from a project changes for all projects, or for this project only through an override.
@@ -145,7 +154,7 @@ export default defineCommand({
               .join('\n')
           : `none needed: the token is defined in ${targetLabel(token.definition)}`
         const content = token.content ?? `The content is in ${token.files.join(', ')}.`
-        const command = `woof edit ${shellQuote(path)}${projectFlag}${values.private ? ' --private' : values['no-private'] ? ' --no-private' : ''}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
+        const command = `woof edit ${shellQuote(path)}${projectFlag}${values.private ? ' --private' : values['no-private'] ? ' --no-private' : ''}${(values.secret ?? []).map(binding => ` --secret ${shellQuote(binding)}`).join('')}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
           token.kind === 'fixed' ? suffix : ` --content -${suffix} <<'WOOF'\nCONTENT\nWOOF`
         }`
         const description = token.description ?? 'none'
@@ -153,7 +162,7 @@ export default defineCommand({
         presentSelection(
           {
             summary: `Edit ${path}.`,
-            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\nPrivate: ${token.private ? 'yes' : 'no'}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
+            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\nPrivate: ${token.private ? 'yes' : 'no'}\nSecrets: ${secretBindingText(token.secrets) || 'none'}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
             recovery: 'Pass only the fields that change.',
           },
           {
@@ -167,6 +176,7 @@ export default defineCommand({
               description,
               tags,
               private: token.private ? 'yes' : 'no',
+              secrets: secretBindingText(token.secrets) || 'none',
               content,
               layers,
               command,

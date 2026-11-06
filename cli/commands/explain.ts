@@ -22,6 +22,7 @@ import {
 } from '../utils/presentation.ts'
 import { checkoutPath, selectedProjectText, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
+import { secretBindingText } from '../utils/secrets.ts'
 import { createTokenGraph, explainToken, splitProjectAddress } from '../utils/tokens.ts'
 
 export default defineCommand({
@@ -117,6 +118,7 @@ export default defineCommand({
           if (token.overridden) fields.push(['Overrides', token.overridden.source.file])
           if (token.description !== undefined) fields.push(['Description', token.description])
           if (token.tags !== undefined) fields.push(['Tags', token.tags.join(', ')])
+          if (Object.keys(token.secrets).length) fields.push(['Secrets', secretBindingText(token.secrets)])
           return [
             `${inlineCodeText(token.path)} ${scopeBadge(token.origin)}${runtime ? ` ${runtime}` : ''}`,
             ...[

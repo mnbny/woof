@@ -6,6 +6,7 @@ type Option = { type: 'boolean' | 'string'; short?: string; multiple?: boolean }
 
 const commandOptions: Record<string, Record<string, Option>> = {
   add: {
+    secret: { type: 'string', multiple: true },
     private: { type: 'boolean' },
     type: { type: 'string' },
     content: { type: 'string' },
@@ -17,6 +18,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
   },
   get: { project: { type: 'string' }, search: { type: 'boolean' } },
   edit: {
+    secret: { type: 'string', multiple: true },
     private: { type: 'boolean' },
     'no-private': { type: 'boolean' },
     project: { type: 'string' },
@@ -39,6 +41,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
     'worktree-path': { type: 'string', multiple: true },
   },
   readme: {},
+  secret: {},
 }
 
 export function parseInvocation(rawArgs: string[]) {
@@ -77,6 +80,8 @@ export function parseInvocation(rawArgs: string[]) {
     if (command === 'tree' && values['repo'] && values['project'] !== undefined)
       throw new Error('Choose --repo or --project, not both.')
     const count = parsed.positionals.length
+    if (command === 'secret' && (count !== 1 || migrate))
+      throw new Error('Use woof secret KEY. This command does not accept --migrate.')
     if (command === 'import' && count !== 1) throw new Error('import requires exactly one argument.')
     // Without an address, explain offers a picker to a person and asks an agent for the address.
     if (command === 'explain' && count > 1) throw new Error('explain accepts one token address.')

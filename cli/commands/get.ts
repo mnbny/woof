@@ -21,6 +21,7 @@ import {
 import { checkoutPath, selectProjectContext } from '../utils/projects.ts'
 import { createResourceLoader } from '../utils/resources.ts'
 import { createScriptEvaluator } from '../utils/scripts.ts'
+import { MissingSecretsError } from '../utils/secrets.ts'
 import { createTokenGraph, resolveToken, splitProjectAddress } from '../utils/tokens.ts'
 
 function warnOnPreflight(explanation: ReturnType<typeof preflightToken>, graph: ReturnType<typeof createTokenGraph>) {
@@ -142,15 +143,21 @@ export default defineCommand({
       }
 
       const graph = createTokenGraph(context)
+      async function resolve(address: string) {
+        return resolveToken(
+          graph,
+          address,
+          createScriptEvaluator({
+            checkoutRoot: context.checkoutRoot,
+            signal: controller.signal,
+          }),
+          explanation => warnOnPreflight(explanation, graph),
+        )
+      }
       const exactPath = qualified?.path ?? query
       const exact = Boolean(query) && !search && graph.tokens.has(exactPath)
       if (exact) {
-        const output = await resolveToken(
-          graph,
-          query,
-          createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-          explanation => warnOnPreflight(explanation, graph),
-        )
+        const output = await resolve(query)
         writePayload(output)
         return
       }
@@ -162,14 +169,7 @@ export default defineCommand({
           query: exactPath,
         })
         if (!selected) return presentCancel('Lookup cancelled.')
-        writePayload(
-          await resolveToken(
-            graph,
-            selected,
-            createScriptEvaluator({ checkoutRoot: context.checkoutRoot, signal: controller.signal }),
-            explanation => warnOnPreflight(explanation, graph),
-          ),
-        )
+        writePayload(await resolve(selected))
         return
       }
 
@@ -202,6 +202,22 @@ export default defineCommand({
       )
       if (!search && query) process.exitCode = 1
     } catch (error) {
+      if (error instanceof MissingSecretsError) {
+        presentError(
+          {
+            summary: 'Required secrets are missing.',
+            details: error.requirements.join('\n'),
+            recovery:
+              'Add these values to woof.secrets.json in woof home, then retry. Keep the values out of the conversation.',
+          },
+          {
+            template: 'secrets-missing',
+            values: { requirements: error.requirements.map(item => `- ${item}`).join('\n') },
+          },
+        )
+        process.exitCode = 1
+        return
+      }
       const details = error instanceof Error ? error.message : String(error)
       if (controller.signal.aborted) {
         presentNotice(
