@@ -1,8 +1,10 @@
 import type { Resource, TokenValue } from './schema.ts'
 
 import { createHash } from 'node:crypto'
+import * as v from 'valibot'
 
 import { isPrivateToken } from './private.ts'
+import { tokenPathSchema } from './schema.ts'
 import { internalMarker, rewriteTokenReferences } from './tokens.ts'
 
 export type ImportLeaf = string | Resource
@@ -22,15 +24,6 @@ export function flattenImportTokens(value: object) {
   return result
 }
 
-export function importValueAt(value: object, path: string): unknown {
-  let node: unknown = value
-  for (const part of path.split('.')) {
-    if (!node || typeof node !== 'object' || Array.isArray(node) || !Object.hasOwn(node, part)) return undefined
-    node = (node as Record<string, unknown>)[part]
-  }
-  return node
-}
-
 export function putImportValue(value: Record<string, unknown>, path: string, incoming: unknown) {
   const parts = path.split('.')
   let node = value
@@ -46,11 +39,7 @@ export function putImportValue(value: Record<string, unknown>, path: string, inc
 
 export function assertImportAddress(path: string) {
   if (internalMarker(path)) throw new Error(`Token address ${path} is reserved for internal markers.`)
-  if (
-    !/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(path) ||
-    path.split('.').some(part => ['__proto__', 'prototype', 'constructor'].includes(part))
-  )
-    throw new Error(`Invalid token address: ${path}`)
+  if (!v.is(tokenPathSchema, path)) throw new Error(`Invalid token address: ${path}`)
 }
 
 export function rewriteImportToken(value: ImportLeaf, mappings: ReadonlyMap<string, string>): ImportLeaf {

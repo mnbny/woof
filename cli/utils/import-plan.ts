@@ -15,7 +15,6 @@ import {
   flattenImportTokens,
   importTokenFiles,
   importTokenFingerprint,
-  importValueAt,
   isImportLeaf,
   putImportValue,
   replaceImportTokenFiles,
@@ -28,6 +27,7 @@ import { namedProjectCheckout } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
 import { assertNotSecretsFile } from './secrets.ts'
+import { tokenValueAt } from './token-paths.ts'
 import { tokenReferencePaths, tokenReferences } from './tokens.ts'
 
 export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
@@ -450,7 +450,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
     const bound = mappings.get(path) ?? path
     const destination = origin === 'root' && choice && typeof choice === 'object' ? choice.address : bound
     const base = origin === 'root' ? plan.local : (plan.selected.data ?? {})
-    const existing = importValueAt(base, origin === 'root' ? path : destination)
+    const existing = tokenValueAt(base, origin === 'root' ? path : destination)
     const item = tokenIssue(
       plan,
       kind,
@@ -497,7 +497,7 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
         const alias: ImportLeaf = Object.keys(metadata).length
           ? { $type: 'prompt', $exec: `{{${choice.address}}}`, ...metadata }
           : `{{${choice.address}}}`
-        const existingBinding = importValueAt(plan.selected.data ?? {}, bound)
+        const existingBinding = tokenValueAt(plan.selected.data ?? {}, bound)
         if (existingBinding !== undefined && !isDeepStrictEqual(existingBinding, alias)) {
           const binding = conflict('project-token', `${path}\0binding`, existingBinding, alias)
           binding.path = bound
@@ -543,8 +543,8 @@ function describeImport(plan: ImportPlan, choices: Readonly<Record<string, Impor
         return
       }
       if (
-        importValueAt(plan.local, target) !== undefined ||
-        importValueAt(plan.selected.data ?? {}, target) !== undefined
+        tokenValueAt(plan.local, target) !== undefined ||
+        tokenValueAt(plan.selected.data ?? {}, target) !== undefined
       ) {
         item.invalid = true
         item.notice = `The new token address ${target} is occupied; choose another address.`
@@ -834,8 +834,8 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
           if (address === check.item.path || hasPrivatePlaceholder(check.value) || hasPrivatePlaceholder(original))
             return false
           const current =
-            (check.origin === 'project' ? importValueAt(described.project, address) : undefined) ??
-            importValueAt(described.root, address)
+            (check.origin === 'project' ? tokenValueAt(described.project, address) : undefined) ??
+            tokenValueAt(described.root, address)
           return (
             expected !== undefined &&
             isDeepStrictEqual(current, original) &&
@@ -863,7 +863,7 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
           if (path === reuse.binding) return true
           if (seen.has(path)) return false
           seen.add(path)
-          const value = importValueAt(described.project, path) ?? importValueAt(described.root, path)
+          const value = tokenValueAt(described.project, path) ?? tokenValueAt(described.root, path)
           if (!isImportLeaf(value as TokenValue)) return false
           const token = value as ImportLeaf
           if (typeof token !== 'string' && token.$type !== 'prompt') return false
@@ -885,8 +885,8 @@ export function reviewImport(plan: ImportPlan, choices: Readonly<Record<string, 
         }
       }
       const current =
-        (reuse.origin === 'project' ? importValueAt(described.project, reuse.address) : undefined) ??
-        importValueAt(described.root, reuse.address)
+        (reuse.origin === 'project' ? tokenValueAt(described.project, reuse.address) : undefined) ??
+        tokenValueAt(described.root, reuse.address)
       const incoming = importTokenFingerprint(reuse.value, ref => readIncoming(plan, ref), described.mappings)
       const after = isImportLeaf(current as TokenValue)
         ? importTokenFingerprint(current as ImportLeaf, readAfter)

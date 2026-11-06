@@ -6,13 +6,18 @@ export const CURRENT_SCHEMA_VERSION = template.$schemaVersion
 
 export type SecretBindings = Record<string, string>
 
-export const secretKeySchema = v.pipe(
+export const tokenNameSchema = v.pipe(
   v.string(),
-  v.regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/, 'Secret keys must be dotted names.'),
+  v.regex(/^[A-Za-z0-9_-]+$/, 'Token names contain only ASCII letters, digits, underscores and hyphens.'),
   v.check(
-    value => !value.split('.').some(part => ['__proto__', 'prototype', 'constructor'].includes(part)),
-    'Invalid secret key.',
+    value => !['__proto__', 'prototype', 'constructor'].includes(value),
+    'Prototype-sensitive token names are not supported.',
   ),
+)
+
+export const tokenPathSchema = v.pipe(
+  v.string(),
+  v.check(value => value.split('.').every(part => v.is(tokenNameSchema, part)), 'Invalid token path.'),
 )
 
 export const secretBindingsSchema = v.record(
@@ -24,7 +29,7 @@ export const secretBindingsSchema = v.record(
       'This environment name is reserved.',
     ),
   ),
-  secretKeySchema,
+  tokenPathSchema,
 )
 
 export type PromptResource = {
@@ -67,11 +72,6 @@ export type RootConfiguration = TokenNamespace & {
   $schemaVersion: typeof CURRENT_SCHEMA_VERSION
   $projects?: { [key: string]: string | InlineProject }
 }
-
-export const tokenNameSchema = v.pipe(
-  v.string(),
-  v.regex(/^[A-Za-z0-9_-]+$/, 'Token names contain only ASCII letters, digits, underscores and hyphens.'),
-)
 
 const metadataSchema = v.strictObject({
   $basePaths: v.exactOptional(v.array(v.string())),
