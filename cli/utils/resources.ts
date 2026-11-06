@@ -7,6 +7,7 @@ import { isAbsolute, relative, resolve, sep, win32 } from 'node:path'
 
 import { readConfigurationDocument } from './config.ts'
 import { getWoofHome } from './paths.ts'
+import { assertNotSecretsFile } from './secrets.ts'
 
 export type ResourceRootKind = 'root' | 'repo'
 export type ResourceLocation = {
@@ -59,8 +60,10 @@ function contained(root: string, file: string) {
 
 function physicalFile(root: string, candidate: string, reference: string) {
   try {
+    assertNotSecretsFile(candidate)
     const physicalRoot = realpathSync(root)
     const file = realpathSync(candidate)
+    assertNotSecretsFile(file)
     if (!contained(physicalRoot, file))
       throw new ResourceLoadError(reference, 'the resolved path escapes its declared root.')
     if (!statSync(file).isFile()) throw new ResourceLoadError(reference, 'the marked resource is not a regular file.')

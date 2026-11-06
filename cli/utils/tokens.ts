@@ -1,8 +1,8 @@
 import type { selectProjectContext } from './projects.ts'
 import type { ConfigurationSource, ResourceLocation } from './resources.ts'
-import type { Resource, ScriptResource, TokenNamespace, TokenValue } from './schema.ts'
+import type { Resource, ScriptResource, SecretBindings, TokenNamespace, TokenValue } from './schema.ts'
 
-import { inlineCodeText } from './display.ts'
+import { inlineCodeText, shellQuote } from './display.ts'
 import { renderTemplateFile } from './presentation.ts'
 import { hasPrivatePlaceholder, PRIVATE_MARKER } from './private.ts'
 import {
@@ -11,6 +11,7 @@ import {
   resolveResourceLocation,
   ResourceLoadError,
 } from './resources.ts'
+import { createSecretLookup, resolveSecretBindings, secretBindingText } from './secrets.ts'
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
 type LeafValue = string | Resource
@@ -27,6 +28,7 @@ export type ScriptEvaluation = {
   token: EffectiveToken
   resource: ScriptResource
   locations: (ResourceLocation | undefined)[]
+  secretEnvironment: NodeJS.ProcessEnv
 }
 export type TokenEvaluator = (evaluation: ScriptEvaluation) => string | Promise<string>
 
@@ -253,6 +255,8 @@ export function enumerateEffectiveTokens(graph: TokenGraph) {
 }
 
 function createWalker(graph: TokenGraph) {
+  const lookupSecret = createSecretLookup()
+  const secretEnvironments = new Map<string, NodeJS.ProcessEnv>()
   const traces = new Map<
     string,
     {
@@ -265,6 +269,7 @@ function createWalker(graph: TokenGraph) {
       deferred: string[]
       files: ResourceLocation[]
       privatePlaceholder: boolean
+      secrets: SecretBindings
       overridden: { path: string; source: ConfigurationSource } | undefined
     }
   >()
@@ -363,6 +368,7 @@ function createWalker(graph: TokenGraph) {
       deferred,
       files,
       privatePlaceholder,
+      secrets: typeof token.value === 'string' ? {} : (token.value.$secrets ?? {}),
       overridden: token.overridden ? { path: token.overridden.path, source: token.overridden.source } : undefined,
     }
     inspected.set(path, trace)
@@ -376,6 +382,8 @@ function createWalker(graph: TokenGraph) {
     for (const target of [...trace.references, ...trace.deferred])
       if (!graph.tokens.has(target) || (token.origin === 'root' && !graph.rootTokens.has(target)))
         missing(target, [...chain, path], token)
+    if (!secretEnvironments.has(path))
+      secretEnvironments.set(path, resolveSecretBindings(path, trace.secrets, lookupSecret))
     return trace
   }
 
@@ -400,7 +408,12 @@ function createWalker(graph: TokenGraph) {
         const resource = token.value as ScriptResource
         const executions = Array.isArray(resource.$exec) ? resource.$exec : [resource.$exec]
         const locations = executions.map(exec => (isMarkedResourceReference(exec) ? location(exec, token) : undefined))
-        const output = await evaluateScript({ token, resource, locations })
+        const output = await evaluateScript({
+          token,
+          resource,
+          locations,
+          secretEnvironment: secretEnvironments.get(path)!,
+        })
         if (typeof output !== 'string')
           throw new TokenResolutionError(`Computed token ${inlineCodeText(path)} returned non-text output.`)
         return output
@@ -415,6 +428,13 @@ function createWalker(graph: TokenGraph) {
           const address = project?.kind === 'registered' ? `$projects.${project.name}.${part.path}` : part.path
           output += renderTemplateFile('deferred-reference', { path: address })
         } else output += await evaluate(part.path)
+      }
+      const secrets = typeof token.value === 'string' ? undefined : token.value.$secrets
+      if (secrets && Object.keys(secrets).length) {
+        const prefix = Object.entries(secrets)
+          .map(([name, key]) => `${name}="$(woof secret ${key.startsWith('-') ? '-- ' : ''}${shellQuote(key)})"`)
+          .join(' ')
+        output = `${renderTemplateFile('secret-instructions', { path, bindings: secretBindingText(secrets), prefix })}\n\n${output}`
       }
       return output
     })()

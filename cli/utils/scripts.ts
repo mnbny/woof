@@ -194,7 +194,7 @@ export function createScriptEvaluator(
   const callerCwd = options.cwd ?? process.cwd()
   const cwd = realpathSync(options.checkoutRoot ?? detectCheckoutRoot(callerCwd) ?? callerCwd)
   const env = options.env ?? process.env
-  return async ({ resource, locations }) => {
+  return async ({ resource, locations, secretEnvironment }) => {
     const executions = Array.isArray(resource.$exec) ? resource.$exec : [resource.$exec]
     let output = ''
     for (const [index, source] of executions.entries()) {
@@ -207,7 +207,7 @@ export function createScriptEvaluator(
         )
       output += await execute(resource.$type, source, locations[index], {
         cwd,
-        env,
+        env: { ...env, ...secretEnvironment },
         signal: options.signal,
       })
     }

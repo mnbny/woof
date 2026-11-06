@@ -4,12 +4,36 @@ import template from '../templates/woof.config.json' with { type: 'json' }
 
 export const CURRENT_SCHEMA_VERSION = template.$schemaVersion
 
+export type SecretBindings = Record<string, string>
+
+export const secretKeySchema = v.pipe(
+  v.string(),
+  v.regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/, 'Secret keys must be dotted names.'),
+  v.check(
+    value => !value.split('.').some(part => ['__proto__', 'prototype', 'constructor'].includes(part)),
+    'Invalid secret key.',
+  ),
+)
+
+export const secretBindingsSchema = v.record(
+  v.pipe(
+    v.string(),
+    v.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Secret environment names must be shell identifiers.'),
+    v.check(
+      value => !['__proto__', 'prototype', 'constructor', 'CI'].includes(value) && !value.startsWith('npm_config_'),
+      'This environment name is reserved.',
+    ),
+  ),
+  secretKeySchema,
+)
+
 export type PromptResource = {
   $type: 'prompt'
   $exec: string
   $description?: string
   $tags?: string[]
   $private?: boolean
+  $secrets?: SecretBindings
 }
 
 export type ScriptResource = {
@@ -18,6 +42,7 @@ export type ScriptResource = {
   $description?: string
   $tags?: string[]
   $private?: boolean
+  $secrets?: SecretBindings
 }
 
 export type Resource = PromptResource | ScriptResource
@@ -59,6 +84,7 @@ const promptResourceSchema = v.strictObject({
   $description: v.exactOptional(v.string()),
   $tags: v.exactOptional(v.array(v.string())),
   $private: v.exactOptional(v.boolean()),
+  $secrets: v.exactOptional(secretBindingsSchema),
 })
 
 const scriptResourceSchema = v.strictObject({
@@ -67,6 +93,7 @@ const scriptResourceSchema = v.strictObject({
   $description: v.exactOptional(v.string()),
   $tags: v.exactOptional(v.array(v.string())),
   $private: v.exactOptional(v.boolean()),
+  $secrets: v.exactOptional(secretBindingsSchema),
 })
 
 export const resourceSchema = v.union([promptResourceSchema, scriptResourceSchema])

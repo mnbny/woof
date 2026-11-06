@@ -6,6 +6,7 @@ import { basename, dirname, join } from 'node:path'
 import * as v from 'valibot'
 
 import { CURRENT_SCHEMA_VERSION, projectConfigurationSchema, rootConfigurationSchema } from './schema.ts'
+import { assertNotSecretsFile } from './secrets.ts'
 
 /** A repository configuration is a project document without metadata, because its checkout already selects it. */
 export type ConfigurationKind = 'root' | 'project' | 'repository'
@@ -59,7 +60,7 @@ export class ConfigurationNotFoundError extends ConfigurationReadError {
 }
 
 const dangerousNames = new Set(['__proto__', 'prototype', 'constructor'])
-const resourceKeys = new Set(['$type', '$exec', '$description', '$tags', '$private'])
+const resourceKeys = new Set(['$type', '$exec', '$description', '$tags', '$private', '$secrets'])
 const metadataKeys = new Set(['$basePaths', '$worktreePaths'])
 
 function isDictionary(value: unknown): value is Record<string, unknown> {
@@ -209,6 +210,7 @@ export function parseConfigurationDocument(text: string, kind: ConfigurationKind
 export function readConfigurationDocument(file: string, kind: 'root'): RootConfiguration
 export function readConfigurationDocument(file: string, kind: 'project' | 'repository'): ProjectConfiguration
 export function readConfigurationDocument(file: string, kind: ConfigurationKind) {
+  assertNotSecretsFile(file)
   let text: string
   try {
     text = readFileSync(file, 'utf8')
