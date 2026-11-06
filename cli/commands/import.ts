@@ -90,12 +90,14 @@ function tokenText(value: unknown) {
     $description?: string
     $tags?: string[]
     $private?: boolean
+    $secrets?: Record<string, string>
   }
   return `${[
     ...(token.$type ? [`Type: ${token.$type}`] : []),
     ...(token.$private !== undefined ? [`Private: ${token.$private ? 'yes' : 'no'}`] : []),
     ...(token.$description !== undefined ? [`Description: ${token.$description}`] : []),
     ...(token.$tags?.length ? [`Tags: ${token.$tags.join(', ')}`] : []),
+    ...Object.entries(token.$secrets ?? {}).map(([name, key]) => `Secret: ${name} ← ${key}`),
     '',
     ...(Array.isArray(token.$exec) ? token.$exec : [token.$exec]),
   ].join('\n')}\n`
@@ -169,7 +171,7 @@ function readDecisions(file: string, plan: ReturnType<typeof planImport>): Decis
   return document
 }
 
-function validateImportedCatalog(cwd: string) {
+function validateImportedCatalog(cwd: string, projectName: string, requirements: Set<string>) {
   const findings: string[] = []
   const loader = createResourceLoader({ cwd })
   let root: ReturnType<typeof loader.loadRootConfiguration>
@@ -191,6 +193,14 @@ function validateImportedCatalog(cwd: string) {
         : { root, candidates: [], checkoutRoot: loader.repoRoot, selection: 'root' as const }
       const graph = createTokenGraph(context)
       const validation = preflightTokenGraph(graph, [...graph.tokens.keys()])
+      if (name === projectName) {
+        const projectDependencies = preflightTokenGraph(
+          graph,
+          [...graph.tokens.values()].filter(token => token.origin === 'project').map(token => token.path),
+        )
+        for (const token of projectDependencies.tokens)
+          for (const [env, key] of Object.entries(token.secrets)) requirements.add(`${token.path}: ${env} ← ${key}`)
+      }
       for (const problem of validation.problems) findings.push(`${label}: ${problem}`)
     } catch (error) {
       findings.push(`${label}: ${error instanceof Error ? error.message : String(error)}`)
@@ -464,9 +474,10 @@ export default defineCommand({
       }
 
       const result = applyImport(reviewed.candidate)
+      const requirements = new Set<string>()
       let findings: string[]
       try {
-        findings = validateImportedCatalog(cwd)
+        findings = validateImportedCatalog(cwd, plan.bundle.projectName, requirements)
       } catch (error) {
         findings = [
           renderTemplateFile('import-finding-incomplete', {
@@ -504,6 +515,18 @@ export default defineCommand({
           { template: 'import-unchanged', values: { rechecked } },
         )
       presentBackup(result.backup)
+      if (requirements.size)
+        presentNotice(
+          {
+            summary: 'This project declares secret requirements.',
+            details: [...requirements].join('\n'),
+            recovery: 'Supply the values locally in woof.secrets.json before running the affected commands.',
+          },
+          {
+            template: 'import-secrets',
+            values: { requirements: [...requirements].map(item => `- ${item}`).join('\n') },
+          },
+        )
       if (findings.length) {
         const configurationBroken = findings.some(finding =>
           /Could not parse configuration|Invalid configuration|Could not read configuration|requires an explicit \$schemaVersion|unsupported \$schemaVersion/.test(

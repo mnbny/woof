@@ -27,6 +27,7 @@ import { hasPrivatePlaceholder } from './private.ts'
 import { namedProjectCheckout } from './projects.ts'
 import { detectCheckoutRoot, resolveResourceLocation } from './resources.ts'
 import { CURRENT_SCHEMA_VERSION } from './schema.ts'
+import { assertNotSecretsFile } from './secrets.ts'
 import { tokenReferencePaths, tokenReferences } from './tokens.ts'
 
 export type ImportChoice = 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }
@@ -112,6 +113,7 @@ function equalBytes(left: Uint8Array, right: Uint8Array) {
 function readDestination(home: string, path: string): Uint8Array | undefined {
   safePath(path)
   const file = resolve(home, path)
+  assertNotSecretsFile(file, home)
   try {
     if (path !== 'woof.config.json' && !contained(realpathSync(home), realpathSync(file)))
       throw new Error(`Import destination escapes the woof home: ${path}`)

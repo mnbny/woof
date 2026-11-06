@@ -98,6 +98,9 @@ export function importTokenFingerprint(
   return JSON.stringify({
     type,
     private: isPrivateToken(value),
+    secrets: Object.entries(typeof value === 'string' ? {} : (value.$secrets ?? {})).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
     array: !prompt && typeof value !== 'string' && Array.isArray(value.$exec),
     parts,
   })

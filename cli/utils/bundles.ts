@@ -8,6 +8,7 @@ import { crc32 } from 'node:zlib'
 
 import { parseConfigurationDocument, serializeConfigurationDocument } from './config.ts'
 import { isMarkedResourceReference } from './resources.ts'
+import { SECRETS_FILE } from './secrets.ts'
 
 export type BundleFile = { path: string; data: Uint8Array }
 export type WoofBundle = {
@@ -26,6 +27,8 @@ export class BundleError extends Error {
 }
 
 function archivePath(path: string) {
+  if (path.toLowerCase().split('/').includes(SECRETS_FILE))
+    throw new BundleError('the secrets store cannot be included in a bundle.')
   if (
     !path ||
     path.includes('\0') ||

@@ -19,6 +19,7 @@ import { isDeepStrictEqual } from 'node:util'
 
 import { createBackupArchive, referencedResources } from './bundles.ts'
 import { parseConfigurationDocument, serializeConfigurationDocument } from './config.ts'
+import { assertNotSecretsFile } from './secrets.ts'
 
 export type ReviewedImportCandidate = Extract<ReturnType<typeof reviewImport>, { status: 'ready' }>['candidate']
 
@@ -84,6 +85,7 @@ function contained(root: string, file: string) {
 function readCurrent(home: string, path: string): Uint8Array | undefined {
   safePath(path)
   const file = resolve(home, path)
+  assertNotSecretsFile(file, home)
   try {
     if (path !== 'woof.config.json' && !contained(realpathSync(home), realpathSync(file)))
       throw new Error(`Import destination escapes the woof home: ${path}`)
@@ -106,6 +108,7 @@ function currentDigest(home: string, source: ImportSourceState) {
 
 export function inspectWriteDestination(home: string, path: string) {
   safePath(path)
+  assertNotSecretsFile(resolve(home, path), home)
   const physicalHome = realpathSync(home)
   const logical = resolve(physicalHome, path)
   let current = physicalHome
