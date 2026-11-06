@@ -27,9 +27,7 @@ function pathExists(file: string) {
 
 export async function prepareStartup(options: { migrate: boolean; passive: boolean; cwd: string }) {
   const rootFile = getWoofHome('woof.config.json')
-  if (!pathExists(rootFile)) {
-    if (!options.passive || options.migrate) await initializeWoofHome()
-  }
+  if (!options.passive || options.migrate) await initializeWoofHome()
 
   const rootExists = pathExists(rootFile)
   const rootPlan =
