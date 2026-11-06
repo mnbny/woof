@@ -24,19 +24,19 @@ test('checks prompt and script secrets before effects and isolates script bindin
     $exec: `require('fs').appendFileSync(${JSON.stringify(effect)}, process.env.TOKEN); process.stdout.write('ok')`,
   })
   await config(home, {
-    first: script('one'),
-    second: script('two'),
+    first: script('provider.one'),
+    second: script('provider.two'),
     both: '{{first}}{{second}}',
     prompt: { $type: 'prompt', $exec: 'Instructions', $secrets: { PROMPT_TOKEN: 'empty' } },
     mixed: '{{first}}{{prompt}}',
     deferred: '{{~second~}}',
     placeholder: { ...script('absent'), $exec: '{{-woof:private-}}', $private: true },
-    $projects: { demo: { second: script('three') } },
+    $projects: { demo: { second: script('provider.three') } },
   })
-  await put(join(home, 'woof.secrets.json'), JSON.stringify({ one: 'dummy-one\n\n', empty: '' }))
+  await put(join(home, 'woof.secrets.json'), JSON.stringify({ provider: { one: 'dummy-one\n\n' }, empty: '' }))
   const missing = await run(['get', 'both', '--agent'])
   expect(missing.status).toBe(1)
-  expect(missing.stdout).toContain('second: TOKEN ← two')
+  expect(missing.stdout).toContain('second: TOKEN ← provider.two')
   expect(missing.stdout).not.toContain('dummy-one')
   expect(existsSync(effect)).toBe(false)
   expect((await run(['get', 'mixed', '--agent'])).status).toBe(1)
@@ -45,7 +45,10 @@ test('checks prompt and script secrets before effects and isolates script bindin
   expect((await run(['get', 'placeholder', '--agent'])).status).toBe(1)
   await put(
     join(home, 'woof.secrets.json'),
-    JSON.stringify({ one: 'dummy-one\n\n', two: 'dummy-two', three: 'dummy-three', absent: 'dummy-placeholder' }),
+    JSON.stringify({
+      provider: { one: 'dummy-one\n\n', two: 'dummy-two', three: 'dummy-three' },
+      absent: 'dummy-placeholder',
+    }),
   )
   for (const flags of [[], ['--agent'], ['--agent', '--project', 'demo']])
     expect(await run(['get', 'both', ...flags])).toMatchObject({ status: 0, stdout: 'okok' })
@@ -105,27 +108,32 @@ test('secret lookup has a raw output contract in both modes, including when conf
   expect,
 }) => {
   const home = join(directory, 'lookup-secrets')
-  const dummy = 'dummy " $() ` \\ \n\n'
+  const dummy = 'dummy " $() ` \\ {{literal}} <root>/literal \n\n'
+  const path = 'provider.account.key'
   await put(join(home, 'woof.config.json'), 'INVALID_CONFIG')
   await put(
     join(home, 'woof.secrets.json'),
-    JSON.stringify({ one: dummy, empty: '', '--help': dummy, '--migrate': dummy }),
+    JSON.stringify({ provider: { account: { key: dummy, empty: '' } }, '--help': dummy, '--migrate': dummy }),
   )
   for (const entry of [cli.entry, cli.sourceEntry]) {
     const run = (args: string[]) =>
       cli.run(process.execPath, [entry, 'secret', ...args], cli.project, { WOOF_HOME: home, AI_AGENT: '1' })
     for (const flags of [[], ['--agent']]) {
-      expect(await run(['one', ...flags])).toEqual({ status: 0, stdout: dummy, stderr: '' })
+      expect(await run([path, ...flags])).toEqual({ status: 0, stdout: dummy, stderr: '' })
       for (const key of ['--help', '--migrate'])
         expect(await run([...flags, '--', key])).toEqual({ status: 0, stdout: dummy, stderr: '' })
       for (const args of [
         ['absent'],
-        ['empty'],
+        ['provider.account.empty'],
+        ['provider'],
+        ['provider.account'],
+        ['provider.account.key.child'],
+        ['provider.__proto__'],
         [],
-        ['one', 'two'],
+        [path, 'two'],
         ['bad/key'],
-        ['one', '--migrate'],
-        ['one', '--unknown'],
+        [path, '--migrate'],
+        [path, '--unknown'],
       ]) {
         const failed = await run([...args, ...flags])
         expect(failed.status).toBe(1)
@@ -143,6 +151,47 @@ test('secret lookup has a raw output contract in both modes, including when conf
   expect(existsSync(absentHome)).toBe(false)
 })
 
+test('rejects flat dotted keys and invalid secret namespaces without disclosing contents or blocking discovery', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'invalid-secret-namespaces')
+  const store = join(home, 'woof.secrets.json')
+  const dummy = 'DUMMY_MUST_NOT_LEAK'
+  await config(home, {
+    unrelated: 'No secret dependency',
+    task: { $type: 'prompt', $exec: 'Instructions', $secrets: { TOKEN: 'provider.key' } },
+  })
+  const run = (args: string[]) =>
+    cli.run(process.execPath, [cli.entry, ...args, '--agent'], cli.project, { WOOF_HOME: home })
+  for (const value of [
+    { 'provider.key': dummy },
+    { provider: { 'nested.key': dummy } },
+    { provider: { constructor: dummy } },
+    { provider: { ['__proto__']: dummy } },
+    { provider: { key: [dummy] } },
+    { provider: { key: 42 } },
+    { provider: { key: null, another: dummy } },
+    { provider: { key: `${dummy}\0` } },
+    { provider: { key: { $type: 'prompt', $exec: dummy } } },
+    { $schemaVersion: 2, provider: { key: dummy } },
+  ]) {
+    const content = JSON.stringify(value)
+    await put(store, content)
+    const raw = await run(['secret', 'provider.key'])
+    expect(raw.status).toBe(1)
+    expect(raw.stdout).toBe('')
+    expect(raw.stderr).toContain('Use nested namespaces with token names and string values')
+    const preflight = await run(['get', 'task'])
+    expect(preflight.status).toBe(1)
+    expect(preflight.stdout + preflight.stderr + raw.stderr).not.toContain(dummy)
+    expect((await run(['get', '--search'])).status).toBe(0)
+    expect((await run(['get', 'unrelated'])).stdout).toBe('No secret dependency')
+    expect(await readFile(store, 'utf8')).toBe(content)
+  }
+})
+
 test('generated prompt prefixes supply values to ordinary shell commands without displaying them', async ({
   cli,
   directory,
@@ -156,9 +205,9 @@ test('generated prompt prefixes supply values to ordinary shell commands without
     'if(process.env.TOKEN !== process.env.EXPECTED || process.env.OTHER !== "second") process.exit(1); process.stdout.write("received"); process.exit(23)',
   )
   await config(home, {
-    task: { $type: 'prompt', $exec: 'Run the consumer.', $secrets: { TOKEN: 'one', OTHER: '--help' } },
+    task: { $type: 'prompt', $exec: 'Run the consumer.', $secrets: { TOKEN: 'provider.key', OTHER: '--help' } },
   })
-  await put(join(home, 'woof.secrets.json'), JSON.stringify({ one: dummy, '--help': 'second' }))
+  await put(join(home, 'woof.secrets.json'), JSON.stringify({ provider: { key: dummy }, '--help': 'second' }))
   for (const entry of [cli.entry, cli.sourceEntry]) {
     const launcher = join(cli.bin, 'woof')
     await put(launcher, `#!/bin/sh\nexec '${process.execPath}' '${entry}' "$@"\n`)

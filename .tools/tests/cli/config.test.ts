@@ -26,7 +26,11 @@ function run(cli: Cli, home: string, args: string[], cwd = cli.project) {
   })
 }
 
-test('creates a complete current config once across concurrent first launches', async ({ cli, directory, expect }) => {
+test('creates complete configuration and secrets files once across concurrent first launches', async ({
+  cli,
+  directory,
+  expect,
+}) => {
   const home = join(directory, 'home')
   const file = join(home, 'woof.config.json')
   const launches = await Promise.all(Array.from({ length: 8 }, () => run(cli, home, ['validate'])))
@@ -34,7 +38,41 @@ test('creates a complete current config once across concurrent first launches', 
   for (const launch of launches) expect(launch.status).toBe(0)
   expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ $schemaVersion: 2 })
   expect((await lstat(file)).mode & 0o777).toBe(0o600)
-  expect(await readdir(home)).toEqual(['woof.config.json'])
+  const secrets = join(home, 'woof.secrets.json')
+  expect(await readFile(secrets, 'utf8')).toBe('{}\n')
+  expect((await lstat(secrets)).mode & 0o777).toBe(0o600)
+  expect(await readdir(home)).toEqual(['woof.config.json', 'woof.secrets.json'])
+})
+
+test('initializes either missing personal file without replacing the existing file or its permissions', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  for (const existing of ['woof.config.json', 'woof.secrets.json']) {
+    const home = join(directory, `partial-${existing}`)
+    const file = join(home, existing)
+    const content =
+      existing === 'woof.config.json'
+        ? '{"$schemaVersion":2,"keep":"existing configuration"}\n'
+        : '{ "stripe": { "key": "DUMMY_KEEP_VALUE" } }\n'
+    await put(file, content)
+    await chmod(file, 0o640)
+    const before = await lstat(file)
+    for (let invocation = 0; invocation < 2; invocation++) {
+      expect((await run(cli, home, ['validate', '--agent'])).status).toBe(0)
+      expect(await readFile(file, 'utf8')).toBe(content)
+      const after = await lstat(file)
+      expect(after.ino).toBe(before.ino)
+      expect(after.mtimeMs).toBe(before.mtimeMs)
+      expect(after.mode & 0o777).toBe(0o640)
+    }
+    const created = join(home, existing === 'woof.config.json' ? 'woof.secrets.json' : 'woof.config.json')
+    expect(JSON.parse(await readFile(created, 'utf8'))).toEqual(
+      existing === 'woof.config.json' ? {} : { $schemaVersion: 2 },
+    )
+    expect((await lstat(created)).mode & 0o777).toBe(0o600)
+  }
 })
 
 test('repairs reserved field order without changing values, token order, links or already ordered files', async ({
@@ -112,6 +150,7 @@ test('leaves order untouched for passive invocations and when any configuration 
     expect((await run(cli, home, args)).status).toBe(0)
     expect(await readFile(root, 'utf8')).toBe(source)
     expect(await readFile(project, 'utf8')).toBe(projectSource)
+    expect(await readdir(home)).toEqual(['project.json', 'woof.config.json'])
   }
   for (const invalid of ['{"unfinished":', '{"token":false,"$schemaVersion":2}']) {
     await put(project, invalid)
@@ -120,6 +159,35 @@ test('leaves order untouched for passive invocations and when any configuration 
     expect(await readFile(project, 'utf8')).toBe(invalid)
   }
 })
+
+test.skipIf(process.geteuid?.() === 0)(
+  'a read-only home can use existing configuration before a secrets store is created',
+  async ({ cli, directory, expect }) => {
+    const home = join(directory, 'readonly-home')
+    await put(
+      join(home, 'woof.config.json'),
+      JSON.stringify({
+        $schemaVersion: 2,
+        plain: 'works',
+        bound: { $type: 'prompt', $exec: 'Instructions', $secrets: { TOKEN: 'provider.key' } },
+      }),
+    )
+    await chmod(home, 0o500)
+    try {
+      expect(await run(cli, home, ['get', 'plain', '--agent'])).toMatchObject({ status: 0, stdout: 'works' })
+      expect((await run(cli, home, ['tree', '--agent'])).status).toBe(0)
+      expect((await run(cli, home, ['validate', 'plain', '--agent'])).status).toBe(0)
+      const missing = await run(cli, home, ['get', 'bound', '--agent'])
+      expect(missing.status).toBe(1)
+      expect(missing.stdout).toContain('Required secrets are missing')
+      expect(await readdir(home)).toEqual(['woof.config.json'])
+    } finally {
+      await chmod(home, 0o700)
+    }
+    expect((await run(cli, home, ['get', 'plain', '--agent'])).status).toBe(0)
+    expect(await readFile(join(home, 'woof.secrets.json'), 'utf8')).toBe('{}\n')
+  },
+)
 
 test('rejects unversioned, future and invalid configurations without rewriting them', async ({
   cli,
@@ -196,7 +264,7 @@ test('registers a home project in place and never replaces one', async ({ cli, d
 
   expect((await run(cli, home, register)).status).toBe(1)
   expect(await readFile(file, 'utf8')).toBe(registered)
-  expect(await readdir(home)).toEqual(['woof.config.json'])
+  expect(await readdir(home)).toEqual(['woof.config.json', 'woof.secrets.json'])
 })
 
 test('creates one repository configuration per checkout', async ({ cli, directory, expect }) => {
