@@ -120,7 +120,7 @@ When replacing or retiring existing documentation, complete the coverage review 
 
 ## Apply the editorial pass
 
-After preparing all documentation and registry changes, run `npx --yes @mnbny/woof@0.1.7 get 'writing.editorial.pass.ste' --agent` and follow the instructions it prints. Apply them to the changed documentation prose, including registry descriptions.
+After preparing all documentation and registry changes, run `woof get 'writing.editorial.pass' --agent`. Follow its instructions with the Simplified Technical English tone, `writing.editorial.simplified_technical_english`. Apply the pass to the changed documentation prose, including registry descriptions.
 
 Preserve every supported fact and introduce no new claims. Keep headings, document ordering, registry structure, registry references, and tags intact.
 
