@@ -4,45 +4,41 @@ import { parseArgs } from 'node:util'
 
 import { escapeHtml, renderReadmeImage } from './readme-image.ts'
 
-// Match the depth colors of woof tree.
+// Match the depth colors of the tree renderer.
 const LEVEL_COLORS = ['#afd7ff', '#afffaf', '#ffd787', '#d7afff', '#ffafaf']
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function renderTree(tree: Record<string, unknown>, depth = 0) {
-  const entries = Object.entries(tree).filter(([key]) => key !== '$schemaVersion' && key !== '$metadata')
-  return `<ul>${entries
-    .map(([key, value]) => {
-      let kind = ''
-      if (isObject(value) && '$type' in value && '$exec' in value) {
-        if (value['$type'] !== 'prompt') kind = ` <span class="kind">[${escapeHtml(String(value['$type']))}]</span>`
-        value = value['$exec']
-      }
-      let content: string
-      if (isObject(value)) content = renderTree(value, depth + 1)
-      else {
-        const text = typeof value === 'string' && value.length ? value : JSON.stringify(value, null, 2)
-        const multiline = text.includes('\n')
-        content = `${multiline ? '' : ': '}<span class="value${multiline ? ' multiline' : ''}">${escapeHtml(text)}</span>`
-      }
-      return `<li style="--level-color: ${LEVEL_COLORS[depth % LEVEL_COLORS.length]}"><span class="key">${escapeHtml(key)}</span>${kind}${content}</li>`
-    })
-    .join('')}</ul>`
+function highlightJson(source: string) {
+  const tokens = /"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}[\],:]/g
+  let html = ''
+  let offset = 0
+  let depth = -1
+  for (const match of source.matchAll(tokens)) {
+    const token = match[0]
+    const end = match.index + token.length
+    if (token === '{') depth++
+    else if (token === '}') depth--
+    let kind = 'punctuation'
+    if (token.startsWith('"')) {
+      kind = source.slice(end).trimStart().startsWith(':') ? `key-${depth % LEVEL_COLORS.length}` : 'string'
+    } else if (/^-?\d/.test(token)) kind = 'number'
+    else if (/^(true|false|null)$/.test(token)) kind = 'literal'
+    html += `${escapeHtml(source.slice(offset, match.index))}<span class="${kind}">${escapeHtml(token)}</span>`
+    offset = end
+  }
+  return html + escapeHtml(source.slice(offset))
 }
 
 const STYLES = `
-  .tree { font: var(--readme-font); }
-  ul { margin: 0; padding: 0; list-style: none; }
-  li { position: relative; padding-left: 3ch; overflow-wrap: anywhere; }
-  li::before { content: ''; position: absolute; left: .5ch; top: 0; bottom: 0; border-left: 1px solid var(--level-color); }
-  li:last-child::before { bottom: auto; height: .825em; }
-  li::after { content: ''; position: absolute; left: .5ch; top: .825em; width: 1.5ch; border-top: 1px solid var(--level-color); }
-  .key { color: var(--level-color); }
-  .kind { opacity: .7; }
-  .value { white-space: pre-wrap; }
-  .multiline { display: block; padding: 0 0 .5em 2ch; }
+  main { position: relative; }
+  .language { position: absolute; top: 12px; right: 32px; font: 600 11px/1.4 system-ui, sans-serif; letter-spacing: .12em; opacity: .55; }
+  pre { margin: 0; font: var(--readme-font); }
+  code { font: inherit; }
+  .line { display: block; padding-left: var(--indent); text-indent: calc(-1 * var(--indent)); white-space: pre-wrap; overflow-wrap: anywhere; }
+  ${LEVEL_COLORS.map((color, depth) => `.key-${depth} { color: ${color}; }`).join('\n  ')}
+  .string { color: #e7bf7f; }
+  .number { color: #ffafaf; }
+  .literal { color: #d7afff; }
+  .punctuation { color: #a99a9f; }
 `
 
 async function main() {
@@ -52,7 +48,7 @@ async function main() {
   })
   if (values.help) {
     console.log(
-      'Usage: pnpm exec tsx .tools/scripts/render-config.ts <input.json> <output.jpg> [--width 830] [--browser /path/to/chrome]\n\nRender a JSON configuration or snippet as a tree with literal values. Resource objects show their $exec value. Metadata is omitted; references and file paths are not resolved.',
+      'Usage: pnpm exec tsx .tools/scripts/render-config.ts <input.json> <output.jpg> [--width 830] [--browser /path/to/chrome]\n\nRender a JSON example as a syntax-highlighted code block. Preserves source formatting; references and file paths are not resolved.',
     )
     return
   }
@@ -63,10 +59,18 @@ async function main() {
       'Provide an input JSON file, an output JPEG, and a width between 240 and 4096 CSS pixels. Use --help for usage.',
     )
   }
-  const tree: unknown = JSON.parse(await readFile(input, 'utf8'))
-  if (!isObject(tree)) throw new Error('The configuration example must be a JSON object.')
+
+  const source = (await readFile(input, 'utf8')).replace(/\r\n/g, '\n').trimEnd()
+  JSON.parse(source)
+  const lines = highlightJson(source)
+    .split('\n')
+    .map(line => {
+      const indent = line.match(/^ */)?.[0].length ?? 0
+      return `<span class="line" style="--indent: ${indent}ch">${line || ' '}</span>`
+    })
+    .join('')
   await renderReadmeImage({
-    content: `<div class="tree">${renderTree(tree)}</div>`,
+    content: `<span class="language">JSON</span><pre><code>${lines}</code></pre>`,
     styles: STYLES,
     output,
     width,
