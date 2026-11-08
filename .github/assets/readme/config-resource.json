@@ -1,0 +1,6 @@
+{
+  "$type": "prompt",
+  "$exec": "Follow the seven rules of a great commit message: …",
+  "$description": "How to write commit messages",
+  "$tags": ["git"]
+}

@@ -83,11 +83,13 @@ For values Sam should supply, like a local preview URL, ask your agent to mark t
 
 woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 24, or 26+.
 
-Paste this into your agent:
-
-```text
-Run `npx @mnbny/woof@0.1.7 readme` and set up woof for me.
-```
+> [!NOTE]
+>
+> Paste this into your agent:
+>
+> ```text
+> Run `npx @mnbny/woof@0.1.7 readme` and set up woof for me.
+> ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
 
@@ -118,36 +120,19 @@ Your shared tokens live in one file in your woof home, `~/.woof/woof.config.json
 
 A token is a key in that file. Nested keys build its path:
 
-```json
-{
-  "git": {
-    "commits": {
-      "seven_rules": "Follow the seven rules of a great commit message: …"
-    }
-  }
-}
-```
+<img src=".github/assets/readme/config-token.jpg" alt='JSON: {"git": {"commits": {"seven_rules": "Follow the seven rules of a great commit message: …"}}}'>
 
 That's `git.commits.seven_rules`. A plain string is a prompt.
 
 To help your agent find a token, swap the string for the long form, with a description and tags:
 
-```json
-{
-  "$type": "prompt",
-  "$exec": "Follow the seven rules of a great commit message: …",
-  "$description": "How to write commit messages",
-  "$tags": ["git"]
-}
-```
+<img src=".github/assets/readme/config-resource.jpg" alt='JSON: {"$type": "prompt", "$exec": "Follow the seven rules of a great commit message: …", "$description": "How to write commit messages", "$tags": ["git"]}'>
 
 Keys that start with `$` belong to woof. Everything else is yours to name.
 
 For a long prompt, keep it in a file. A plain string or `$exec` can point at it:
 
-```json
-"<root>/resources/review-checklist.md"
-```
+<img src=".github/assets/readme/config-file.jpg" alt='JSON: {"review": {"checklist": "&lt;root&gt;/resources/review-checklist.md"}}'>
 
 `<root>` is your woof home. In a repo's config, `<repo>` points at the repo.
 
@@ -155,13 +140,7 @@ For a long prompt, keep it in a file. A plain string or `$exec` can point at it:
 
 A string that is exactly one reference is an alias:
 
-```json
-{
-  "git": {
-    "commit": "{{git.commits.seven_rules}}"
-  }
-}
-```
+<img src=".github/assets/readme/config-alias.jpg" alt='JSON: {"git": {"commit": "{{git.commits.seven_rules}}"}}'>
 
 Point `git.commit` at a different token, and everything that uses it follows.
 
@@ -169,13 +148,7 @@ Point `git.commit` at a different token, and everything that uses it follows.
 
 References work anywhere in text:
 
-```json
-{
-  "agents": {
-    "instructions": "# Working in this repo\n\n- Commits: {{git.commit}}\n- Testing: {{testing.policy}}"
-  }
-}
-```
+<img src=".github/assets/readme/config-composite.jpg" alt='JSON: {"agents": {"instructions": "# Working in this repo\n\n- Commits: {{git.commit}}\n- Testing: {{testing.policy}}"}}'>
 
 woof applies overrides first, then resolves references, so an override reaches every composite. Write `{{{{` and `}}}}` for literal double braces. A missing token or a cycle of immediate references fails before any script runs.
 
@@ -185,12 +158,7 @@ For an instruction your agent should fetch later, write `If you need the commit 
 
 Set `$type` to `bash`, `node`, `tsx`, or `bun`, and `$exec` becomes the script. Here's `git.branch`:
 
-```json
-{
-  "$type": "bash",
-  "$exec": "git branch --show-current"
-}
-```
+<img src=".github/assets/readme/config-script.jpg" alt='JSON: {"$type": "bash", "$exec": "git branch --show-current"}'>
 
 The script runs in the repo root, and its output becomes the value. `$exec` can also be a file, like `"<root>/scripts/checks.sh"`, or a list of scripts that run in order and stop at the first failure.
 
@@ -198,13 +166,7 @@ The script runs in the repo root, and its output becomes the value. `$exec` can 
 
 You might keep `globex`'s local preview URL in woof. Ask your agent to mark that token private before you share it with Sam. It adds `$private` to the token:
 
-```json
-{
-  "$type": "prompt",
-  "$exec": "http://localhost:5173",
-  "$private": true
-}
-```
+<img src=".github/assets/readme/config-private.jpg" alt='JSON: {"$type": "prompt", "$exec": "http://localhost:5173", "$private": true}'>
 
 You still get the real value locally. The export replaces it with `{{-woof:private-}}`. Sam can import the configuration and ask their agent to fill in their own value. Until then, woof warns whenever their agent uses the token.
 
@@ -216,25 +178,13 @@ Once a token declares what it needs, you use it as usual. woof checks that the s
 
 Here's `checks.all` with `$secrets` connecting the saved `acme.tests` key to the `TEST_API_KEY` variable its tests use:
 
-```json
-{
-  "$type": "bash",
-  "$exec": ["pnpm lint", "pnpm test", "pnpm build"],
-  "$secrets": { "TEST_API_KEY": "acme.tests" }
-}
-```
+<img src=".github/assets/readme/config-script-secrets.jpg" alt='JSON: {"$type": "bash", "$exec": ["pnpm lint", "pnpm test", "pnpm build"], "$secrets": {"TEST_API_KEY": "acme.tests"}}'>
 
 When your agent uses this token, woof supplies the key to those commands automatically.
 
 A prompt can declare the same secret:
 
-```json
-{
-  "$type": "prompt",
-  "$exec": "Run pnpm test and summarize any failures.",
-  "$secrets": { "TEST_API_KEY": "acme.tests" }
-}
-```
+<img src=".github/assets/readme/config-prompt-secrets.jpg" alt='JSON: {"$type": "prompt", "$exec": "Run pnpm test and summarize any failures.", "$secrets": {"TEST_API_KEY": "acme.tests"}}'>
 
 woof adds instructions telling your agent how to supply the key when it runs `pnpm test`. The value stays out of the prompt.
 
@@ -248,21 +198,7 @@ A project changes tokens for one codebase. It holds only what's different, and e
 
 A private project never enters the repo, so it works even where you can't commit, like `globex`. Ask your agent to set up a private woof project for the repo. It adds the project to your shared file under `$projects`, with the paths that select it:
 
-```json
-{
-  "$projects": {
-    "globex": {
-      "$metadata": {
-        "$basePaths": ["~/code/globex"],
-        "$worktreePaths": ["~/code/globex-*"]
-      },
-      "git": {
-        "commit": "Start every subject with the ticket ID, such as GLX-142…"
-      }
-    }
-  }
-}
-```
+<img src=".github/assets/readme/config-project-home.jpg" alt='JSON: {"$projects": {"globex": {"$metadata": {"$basePaths": ["~/code/globex"], "$worktreePaths": ["~/code/globex-*"]}, "git": {"commit": "Start every subject with the ticket ID, such as GLX-142…"}}}}'>
 
 woof selects `globex` anywhere inside `~/code/globex`, and in every worktree that matches `~/code/globex-*`.
 
@@ -270,13 +206,7 @@ woof selects `globex` anywhere inside `~/code/globex`, and in every worktree tha
 
 Ask your agent to set up woof for the repo. It creates a `woof.config.json` at the repo root, or in `.agents/` or `.claude/`. Commit it, and woof uses it whenever you work inside the repo, in any clone or worktree, so your whole team gets it. Here's `acme`'s, which points one alias elsewhere:
 
-```json
-{
-  "git": {
-    "commit": "{{git.commits.conventional}}"
-  }
-}
-```
+<img src=".github/assets/readme/config-project-repo.jpg" alt='JSON: {"git": {"commit": "{{git.commits.conventional}}"}}'>
 
 #### Which project applies
 

@@ -1,0 +1,5 @@
+{
+  "agents": {
+    "instructions": "# Working in this repo\n\n- Commits: {{git.commit}}\n- Testing: {{testing.policy}}"
+  }
+}

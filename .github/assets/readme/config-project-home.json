@@ -1,0 +1,13 @@
+{
+  "$projects": {
+    "globex": {
+      "$metadata": {
+        "$basePaths": ["~/code/globex"],
+        "$worktreePaths": ["~/code/globex-*"]
+      },
+      "git": {
+        "commit": "Start every subject with the ticket ID, such as GLX-142…"
+      }
+    }
+  }
+}
