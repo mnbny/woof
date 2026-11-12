@@ -54,7 +54,7 @@ Add each document using this format:
 #### [cli.md](./cli.md)
 
 - Description: Command set, invocation and startup order, presentation conventions and exit status, and distribution.
-- Tags: `cli`, `commands`, `presentation`, `distribution`
+- Tags: `cli`, `commands`, `presentation`, `distribution`, `upgrade`
 
 #### [cli-command-readme.md](./cli-command-readme.md)
 

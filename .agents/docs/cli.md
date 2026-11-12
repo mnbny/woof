@@ -6,19 +6,20 @@ The CLI owns argument parsing, startup order, command dispatch, and shared prese
 
 ## Commands
 
-The commands are readme, init, add, edit, get, tree, projects, explain, validate, export, import, and secret. Command briefs describe individual operations. The configuration brief owns structure views and local secret storage. Single-secret lookup supplies values for shell command substitution; the user guide owns its invocation details.
+The commands are readme, upgrade, init, add, edit, get, tree, projects, explain, validate, export, import, and secret. Command briefs describe individual operations. The configuration brief owns structure views and local secret storage. Single-secret lookup supplies values for shell command substitution; the user guide owns its invocation details.
 
 Global flags select agent mode, request explicit migration, and show help or the version. Commands that need a project context accept an option that selects a registered project. A qualified token address that names a project has the same effect as that option. If the address and the option select different projects, the command fails. Tree paths are relative to the selected scope instead.
 
 ## Invocation and startup
 
-Before startup, woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag. Single-secret lookup rejects migration because it does not use configuration startup.
+Before startup, woof checks the command name, the argument counts, the required options, and contradictory selectors. The migration flag can appear anywhere before the argument terminator. Startup reads the migration flag. Single-secret lookup and upgrade reject migration because they do not use configuration startup.
 
 After these checks, startup checks the configuration and applies an explicit migration. The configuration brief describes these steps.
 
 - Help and version are passive. They do not create woof home.
 - Unless migration is requested, readme skips all configuration checks. This keeps the guide readable when the configuration is broken.
 - Single-secret lookup skips home initialization and configuration checks. Its only data source is the local secrets store.
+- Upgrade skips home initialization and configuration checks. It works when the catalog is missing or invalid.
 - An invalid invocation fails before woof creates its home or runs a migration.
 
 ## Presentation and exit status
@@ -49,5 +50,9 @@ After these checks, startup checks the configuration and applies an explicit mig
 Source execution, standalone execution, and package execution have the same behavior. woof is published on npm under the mnbny scope. Users run the package through npx, without an installation. Command recommendations pin an exact package version. Installed skills keep their pin until the user chooses to update it.
 
 The package contains the standalone bundle, the agent templates, the edit page, the readme, the license, and the execution skill. Nothing else ships. The pack step builds the bundle. Before a release, a pack check builds the package and compares its contents with the files that woof reads at runtime. The pack check then runs the package through npx with an empty home. Tokens in the repository configuration hold the version preparation and release procedures. Version preparation keeps the package version and command pins in sync.
+
+Upgrade requires a fresh response from npm to resolve the latest release to an exact version. It reads the execution skill from that package. It reports the running version, latest release, released skill version, and installed skill copies. Package and skill versions are checked separately. woof fetches the package through npm with package scripts disabled. The command leaves catalogs and installed skills unchanged.
+
+Human output gives the new command pin and directs the user to update the skill after switching versions. Agent output gives the exact command pin and the released skill's local source. It directs the agent to verify the selected release, update older installed copies, and read the updated skill. An explicit upgrade request authorizes updates to existing skill copies. A version check alone does not authorize changes. Lookup or package-read failures stop the upgrade report with a nonzero status.
 
 A link script in the repository puts the source entry on the user's local path.

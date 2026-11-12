@@ -8,7 +8,7 @@ woof is written in TypeScript and runs on Node.js. Three entry points have the s
 - The standalone bundle is one generated module. It embeds the runtime code. It reads the agent templates, the edit page, the readme, and the execution skill from the package at runtime. It needs no installed dependencies and no TypeScript loader. The pack step builds the bundle. The repository does not commit the bundle.
 - Package execution runs the bundle from the npm package through npx, or from a packed tarball. It needs no global installation.
 
-Each invocation parses the arguments, runs the startup checks, and runs one command. The readme and single-secret lookup commands skip the configuration checks. Single-secret lookup also skips home initialization and skill notices to keep its output suitable for command substitution. woof keeps no daemon, persistent cache, or index between invocations.
+Each invocation parses the arguments, runs the startup checks, and runs one command. The readme, upgrade, and single-secret lookup commands skip the configuration checks. Single-secret lookup also skips home initialization and skill notices to keep its output suitable for command substitution. Upgrade skips home initialization and supplies its own release and skill guidance. woof keeps no daemon, persistent cache, or index between invocations.
 
 Personal data is in woof home, outside all checkouts. An environment setting can move woof home to a different location.
 
