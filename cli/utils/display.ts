@@ -69,6 +69,10 @@ export function runtimeBadge(kind: string) {
   return kind === 'prompt' ? '' : badgeText(kind, '#ffd787')
 }
 
+export function argumentsBadge() {
+  return badgeText('has arguments', '#dadada')
+}
+
 /** Added lines are green and removed lines are red, as in other diff tools. The colors are 256-color palette entries. */
 export function diffText(diff: string) {
   if (plain()) return diff

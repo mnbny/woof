@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { stripVTControlCharacters } from 'node:util'
 
 import { isAgent } from './agent.ts'
-import { codeBlockText, runtimeBadge, scopeBadge } from './display.ts'
+import { argumentsBadge, codeBlockText, runtimeBadge, scopeBadge } from './display.ts'
 import { getWoofRoot } from './paths.ts'
 import { isTTY } from './terminal.ts'
 
@@ -137,6 +137,7 @@ export type TokenChoice = {
   target?: string | undefined
   description?: string | undefined
   tags?: string[] | undefined
+  arguments?: { name: string; description?: string }[] | undefined
 }
 
 // The prompt wraps a row at the terminal width less its gutter, and it measures the gutter with its escape codes.
@@ -149,7 +150,7 @@ export function aliasedMetadata<Token extends TokenChoice>(token: Token, tokens:
     seen.add(current.path)
     current = tokens.find(candidate => candidate.path === current!.target)
   }
-  return { description: current?.description, tags: current?.tags }
+  return { description: current?.description, tags: current?.tags, arguments: current?.arguments }
 }
 
 /**
@@ -176,8 +177,8 @@ export async function chooseToken({
   )
   const options = tokens.map(token => {
     const runtime = token.target ? '' : runtimeBadge(token.kind)
-    const label = `${token.path.padEnd(width)}  ${scopeBadge(token.origin)}${runtime ? ` ${runtime}` : ''}`
-    const { description, tags } = aliasedMetadata(token, tokens)
+    const { description, tags, arguments: args } = aliasedMetadata(token, tokens)
+    const label = `${token.path.padEnd(width)}  ${scopeBadge(token.origin)}${runtime ? ` ${runtime}` : ''}${args?.length ? ` ${argumentsBadge()}` : ''}`
     const detail = [description, tags?.length ? `tags: ${tags.join(', ')}` : undefined].filter(Boolean).join(' · ')
     const room = (process.stdout.columns ?? 80) - stripVTControlCharacters(label).length - HINT_RESERVE
     const hint = room < 20 ? '' : detail.length > room ? `${detail.slice(0, room - 1)}…` : detail

@@ -6,6 +6,14 @@ export const CURRENT_SCHEMA_VERSION = template.$schemaVersion
 
 export type SecretBindings = Record<string, string>
 
+export const argumentDescriptionsSchema = v.array(
+  v.strictObject({
+    name: v.pipe(v.string(), v.minLength(1)),
+    description: v.exactOptional(v.string()),
+  }),
+)
+export type ArgumentDescriptions = v.InferOutput<typeof argumentDescriptionsSchema>
+
 export const tokenNameSchema = v.pipe(
   v.string(),
   v.regex(/^[A-Za-z0-9_-]+$/, 'Token names contain only ASCII letters, digits, underscores and hyphens.'),
@@ -48,6 +56,7 @@ export type ScriptResource = {
   $tags?: string[]
   $private?: boolean
   $secrets?: SecretBindings
+  $arguments?: ArgumentDescriptions
 }
 
 export type Resource = PromptResource | ScriptResource
@@ -94,6 +103,7 @@ const scriptResourceSchema = v.strictObject({
   $tags: v.exactOptional(v.array(v.string())),
   $private: v.exactOptional(v.boolean()),
   $secrets: v.exactOptional(secretBindingsSchema),
+  $arguments: v.exactOptional(argumentDescriptionsSchema),
 })
 
 export const resourceSchema = v.union([promptResourceSchema, scriptResourceSchema])

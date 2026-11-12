@@ -26,17 +26,38 @@ export class ScriptExecutionError extends Error {
   }
 }
 
-function commandFor(kind: ScriptResource['$type'], source: string, location: ResourceLocation | undefined) {
-  if (kind === 'bash') return { command: 'bash', args: location ? [location.file] : ['-c', source] }
-  if (kind === 'node') return { command: process.execPath, args: location ? [location.file] : ['-e', source] }
+function commandFor(
+  kind: ScriptResource['$type'],
+  source: string,
+  location: ResourceLocation | undefined,
+  args: string[],
+) {
+  if (kind === 'bash')
+    return { command: 'bash', args: location ? [location.file, ...args] : ['-c', source, 'bash', ...args] }
+  if (kind === 'node')
+    return { command: process.execPath, args: location ? [location.file, ...args] : ['-e', source, '--', ...args] }
   if (kind === 'tsx')
     return {
       command: 'npx',
-      args: ['--yes', '--package', `tsx@${TSX_VERSION}`, 'tsx', ...(location ? [location.file] : ['-e', source])],
+      args: [
+        '--yes',
+        '--package',
+        `tsx@${TSX_VERSION}`,
+        'tsx',
+        ...(location ? [location.file] : ['-e', source, '--']),
+        ...args,
+      ],
     }
   return {
     command: 'npx',
-    args: ['--yes', '--package', `bun@${BUN_VERSION}`, 'bun', ...(location ? ['run', location.file] : ['-e', source])],
+    args: [
+      '--yes',
+      '--package',
+      `bun@${BUN_VERSION}`,
+      'bun',
+      ...(location ? ['run', location.file] : ['-e', source, '--']),
+      ...args,
+    ],
   }
 }
 
@@ -84,9 +105,9 @@ function execute(
   kind: ScriptResource['$type'],
   source: string,
   location: ResourceLocation | undefined,
-  options: { cwd: string; env: NodeJS.ProcessEnv; signal?: AbortSignal | undefined },
+  options: { cwd: string; env: NodeJS.ProcessEnv; args: string[]; signal?: AbortSignal | undefined },
 ) {
-  const { command, args } = commandFor(kind, source, location)
+  const { command, args } = commandFor(kind, source, location, options.args)
   const display = `${command} ${args.join(' ')}`
   return new Promise<string>((resolve, reject) => {
     if (options.signal?.aborted) {
@@ -183,18 +204,58 @@ function execute(
   })
 }
 
+// Arguments use quoting only; variables and shell expressions stay literal.
+function parseScriptArguments(input: string) {
+  const args: string[] = []
+  let word = ''
+  let started = false
+  let quote = ''
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index]!
+    if (char === '\\' && quote !== "'") {
+      const next = input[index + 1]
+      if (next === undefined) throw new Error('Unfinished escape in --args.')
+      if (quote === '"' && !['"', '\\', '$', '`', '\n'].includes(next)) word += char
+      else {
+        if (next !== '\n') word += next
+        index++
+      }
+      if (next !== '\n') started = true
+    } else if (quote) {
+      if (char === quote) quote = ''
+      else word += char
+    } else if (char === "'" || char === '"') {
+      quote = char
+      started = true
+    } else if (/\s/.test(char)) {
+      if (started) args.push(word)
+      word = ''
+      started = false
+    } else {
+      word += char
+      started = true
+    }
+  }
+  if (quote) throw new Error('Unclosed quote in --args.')
+  if (started) args.push(word)
+  return args
+}
+
 export function createScriptEvaluator(
   options: {
     cwd?: string
     checkoutRoot?: string | undefined
     env?: NodeJS.ProcessEnv
     signal?: AbortSignal | undefined
+    args?: string
   } = {},
 ): TokenEvaluator {
   const callerCwd = options.cwd ?? process.cwd()
   const cwd = realpathSync(options.checkoutRoot ?? detectCheckoutRoot(callerCwd) ?? callerCwd)
   const env = options.env ?? process.env
+  let args: string[] | undefined
   return async ({ resource, locations, secretEnvironment }) => {
+    args ??= parseScriptArguments(options.args ?? '')
     const executions = Array.isArray(resource.$exec) ? resource.$exec : [resource.$exec]
     let output = ''
     for (const [index, source] of executions.entries()) {
@@ -209,6 +270,7 @@ export function createScriptEvaluator(
         cwd,
         env: { ...env, ...secretEnvironment },
         signal: options.signal,
+        args,
       })
     }
     return output

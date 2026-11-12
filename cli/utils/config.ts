@@ -60,7 +60,7 @@ export class ConfigurationNotFoundError extends ConfigurationReadError {
 }
 
 const dangerousNames = new Set(['__proto__', 'prototype', 'constructor'])
-const resourceKeys = new Set(['$type', '$exec', '$description', '$tags', '$private', '$secrets'])
+const resourceKeys = new Set(['$type', '$exec', '$description', '$tags', '$private', '$secrets', '$arguments'])
 const metadataKeys = new Set(['$basePaths', '$worktreePaths'])
 
 function isDictionary(value: unknown): value is Record<string, unknown> {

@@ -229,8 +229,12 @@ function graphAddress(graph: TokenGraph, address: string) {
 }
 
 function metadata(token: EffectiveToken) {
-  if (typeof token.value === 'string') return { description: undefined, tags: undefined }
-  return { description: token.value.$description, tags: token.value.$tags }
+  if (typeof token.value === 'string') return { description: undefined, tags: undefined, arguments: [] }
+  return {
+    description: token.value.$description,
+    tags: token.value.$tags,
+    arguments: token.value.$type === 'prompt' ? [] : (token.value.$arguments ?? []),
+  }
 }
 
 /** A string whose whole value is one reference is an alias. */
@@ -265,6 +269,7 @@ function createWalker(graph: TokenGraph) {
       source: ConfigurationSource
       description: string | undefined
       tags: string[] | undefined
+      arguments: { name: string; description?: string }[]
       references: string[]
       deferred: string[]
       files: ResourceLocation[]

@@ -1,5 +1,12 @@
 import type { RegisteredProject, RepositoryProject } from './projects.ts'
-import type { ProjectConfiguration, Resource, RootConfiguration, SecretBindings, TokenValue } from './schema.ts'
+import type {
+  ArgumentDescriptions,
+  ProjectConfiguration,
+  Resource,
+  RootConfiguration,
+  SecretBindings,
+  TokenValue,
+} from './schema.ts'
 
 import { createHash } from 'node:crypto'
 import {
@@ -52,6 +59,7 @@ export type TokenDraft = {
   tags: string[]
   private?: boolean | undefined
   secrets?: SecretBindings | undefined
+  arguments?: ArgumentDescriptions | undefined
 }
 
 type ProjectContext = ReturnType<typeof selectProjectContext>
@@ -145,7 +153,9 @@ function resourceValue(
   tags: string[],
   privacy?: boolean,
   secrets?: SecretBindings,
+  args?: ArgumentDescriptions,
 ) {
+  if (type === 'prompt' && args?.length) throw new Error('Argument descriptions belong to script tokens only.')
   if (
     type === 'prompt' &&
     typeof exec === 'string' &&
@@ -162,11 +172,20 @@ function resourceValue(
     ...(tags.length ? { $tags: tags } : {}),
     ...(privacy ? { $private: true } : {}),
     ...(Object.keys(secrets ?? {}).length ? { $secrets: secrets } : {}),
+    ...(args?.length ? { $arguments: args } : {}),
   } as TokenValue
 }
 
 export function tokenValue(draft: Omit<TokenDraft, 'target' | 'path'>) {
-  return resourceValue(draft.type, draft.content.exec, draft.description, draft.tags, draft.private, draft.secrets)
+  return resourceValue(
+    draft.type,
+    draft.content.exec,
+    draft.description,
+    draft.tags,
+    draft.private,
+    draft.secrets,
+    draft.arguments,
+  )
 }
 
 // A copied file does not exist in woof home until the save, so checks read the source instead. A prompt file and
@@ -335,6 +354,7 @@ export type TokenEdit = {
   exec?: string | string[]
   private?: boolean
   secrets?: SecretBindings
+  arguments?: ArgumentDescriptions
 }
 
 function digest(files: string[]) {
@@ -395,6 +415,7 @@ export function describeToken(address: string, options: { cwd: string; project?:
     tags: typeof value === 'string' ? [] : (value.$tags ?? []),
     private: typeof value === 'string' ? undefined : value.$private,
     secrets: typeof value === 'string' ? {} : (value.$secrets ?? {}),
+    arguments: typeof value === 'string' || value.$type === 'prompt' ? [] : (value.$arguments ?? []),
     definition,
     // Only a shared token seen from a project can get an override in that project.
     override: token.origin === 'root' && project ? projectTarget(project) : undefined,
@@ -432,6 +453,7 @@ export async function editToken(
     const tags = edit.tags ?? token.tags
     const privacy = edit.private ?? token.private
     const secrets = edit.secrets ?? token.secrets
+    const args = edit.arguments ?? token.arguments
     const changed = edit.content !== undefined && edit.content !== token.content
     // A definition takes new prompt text into its file. An override keeps its text inline, so the shared file stays.
     const writesFile = changed && token.kind === 'file' && options.layer === 'definition'
@@ -442,6 +464,7 @@ export async function editToken(
       tags,
       privacy,
       secrets,
+      args,
     )
     if (options.layer === 'definition' && !writesFile && isDeepStrictEqual(value, token.value))
       return { file, contentFile: undefined, changed: false }
@@ -450,7 +473,7 @@ export async function editToken(
       {
         target,
         path: address,
-        value: writesFile ? resourceValue(token.type, edit.content!, description, tags, privacy, secrets) : value,
+        value: writesFile ? resourceValue(token.type, edit.content!, description, tags, privacy, secrets, args) : value,
         replace: options.layer === 'definition',
       },
       options.cwd,
