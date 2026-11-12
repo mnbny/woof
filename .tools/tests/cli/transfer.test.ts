@@ -84,7 +84,7 @@ test('redacts private values and files from raw exports and preserves placeholde
     await put(join(source, 'public.txt'), 'public payload')
     const original = await readFile(join(source, 'woof.config.json'))
     const originalProject = separate ? await readFile(join(source, 'project.json')) : undefined
-    const exported = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+    const exported = await run(cli, source, ['export', '$projects.demo', '--agent'])
     expect(exported.status, exported.stdout).toBe(0)
     const archivePath = /^Archive: (.+)$/m.exec(exported.stdout)?.[1]
     assert(archivePath)
@@ -104,8 +104,8 @@ test('redacts private values and files from raw exports and preserves placeholde
     expect(bundle.configuration['shared']).toMatchObject({ $private: true, $exec: marker })
     expect(bundle.configuration['file']).toMatchObject({ $private: true, $exec: marker })
     expect(bundle.configuration['shadowed']).toBeUndefined()
-    expect(bundle.project['account']).toEqual({ ...project.account, $exec: marker })
-    expect(bundle.project['script']).toEqual({ ...project.script, $exec: marker })
+    expect(bundle.projects.get('demo')!.data['account']).toEqual({ ...project.account, $exec: marker })
+    expect(bundle.projects.get('demo')!.data['script']).toEqual({ ...project.script, $exec: marker })
     expect(await readFile(join(source, 'woof.config.json'))).toEqual(original)
     if (separate) expect(await readFile(join(source, 'project.json'))).toEqual(originalProject)
     expect(await readFile(join(source, 'account.txt'), 'utf8')).toBe('file:private-password')
@@ -141,11 +141,11 @@ test('redacts private values and files from raw exports and preserves placeholde
       stdout: 'replacement:private-password',
       stderr: '',
     })
-    const reexported = await run(cli, destination, ['export', '--project', 'demo', '--agent'])
+    const reexported = await run(cli, destination, ['export', '$projects.demo', '--agent'])
     expect(reexported.status, reexported.stdout).toBe(0)
     const reexportPath = /^Archive: (.+)$/m.exec(reexported.stdout)?.[1]
     assert(reexportPath)
-    expect(readBundleArchive(await readFile(reexportPath)).project['account']).toMatchObject({
+    expect(readBundleArchive(await readFile(reexportPath)).projects.get('demo')!.data['account']).toMatchObject({
       $private: true,
       $exec: marker,
     })
@@ -175,15 +175,18 @@ test('redacts only marked tokens when other tokens read the same file or read co
   })
   await put(join(home, 'accounts.txt'), 'explicitly exported by publicAccount')
   await put(join(home, 'other.json'), rawConfig)
-  const result = await run(cli, home, ['export', '--project', 'demo', '--agent'])
+  const result = await run(cli, home, ['export', '$projects.demo', '--agent'])
   expect(result.status, result.stdout).toBe(0)
   const path = /^Archive: (.+)$/m.exec(result.stdout)?.[1]
   assert(path)
   const bundle = readBundleArchive(await readFile(path))
-  expect(bundle.project['privateAccount']).toMatchObject({ $private: true, $exec: '{{-woof:private-}}' })
-  expect(bundle.project['publicAccount']).toBe('<root>/accounts.txt')
+  expect(bundle.projects.get('demo')!.data['privateAccount']).toMatchObject({
+    $private: true,
+    $exec: '{{-woof:private-}}',
+  })
+  expect(bundle.projects.get('demo')!.data['publicAccount']).toBe('<root>/accounts.txt')
   expect(strFromU8(bundle.files.get('accounts.txt')!)).toBe('explicitly exported by publicAccount')
-  expect(bundle.project['debugConfig']).toBe('<root>/other.json')
+  expect(bundle.projects.get('demo')!.data['debugConfig']).toBe('<root>/other.json')
   expect(strFromU8(bundle.files.get('other.json')!)).toBe(rawConfig)
   expect(bundle.configuration.$projects).not.toHaveProperty('other')
 })
@@ -201,7 +204,7 @@ test('preserves an unchanged project config used as a prompt payload', async ({ 
   const source = join(home, 'projects/demo.json')
   await put(source, original)
 
-  const result = await run(cli, home, ['export', '--project', 'demo', '--agent'])
+  const result = await run(cli, home, ['export', '$projects.demo', '--agent'])
   expect(result.status, result.stdout).toBe(0)
   const path = /^Archive: (.+)$/m.exec(result.stdout)?.[1]
   assert(path)
@@ -238,7 +241,7 @@ test('exports only reachable chains after overrides and redaction, keeping both 
   await put(join(source, 'projects/demo.json'), JSON.stringify(project))
   await put(join(source, 'message.txt'), '{{common.style}} / {{common.suffix}}')
   const original = await readFile(join(source, 'woof.config.json'))
-  const exported = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+  const exported = await run(cli, source, ['export', '$projects.demo', '--agent'])
   expect(exported.status, exported.stdout).toBe(0)
   const path = /^Archive: (.+)$/m.exec(exported.stdout)?.[1]
   assert(path)
@@ -250,7 +253,7 @@ test('exports only reachable chains after overrides and redaction, keeping both 
     common: { suffix: 'shared suffix' },
     $projects: { demo: '<root>/projects/demo.json' },
   })
-  expect(bundle.project).toEqual({
+  expect(bundle.projects.get('demo')!.data).toEqual({
     ...project,
     common: { style: 'project style', message: '<root>/message.txt', wrapper: 'Wrapped: {{common.message}}' },
     hidden: { $type: 'prompt', $private: true, $exec: '{{-woof:private-}}' },
@@ -269,7 +272,7 @@ test('exports only reachable chains after overrides and redaction, keeping both 
     stdout: 'Wrapped: project style / shared suffix',
   })
 
-  const empty = await run(cli, source, ['export', '--project', 'empty', '--agent'])
+  const empty = await run(cli, source, ['export', '$projects.empty', '--agent'])
   expect(empty.status, empty.stdout).toBe(0)
   const emptyPath = /^Archive: (.+)$/m.exec(empty.stdout)?.[1]
   assert(emptyPath)
@@ -278,7 +281,7 @@ test('exports only reachable chains after overrides and redaction, keeping both 
   expect(readBundleArchive(emptyArchive).configuration).toEqual({ $schemaVersion: 2, $projects: { empty: {} } })
 
   await put(join(source, 'projects/demo.json'), JSON.stringify({ ...project, entry: '{{missing}}' }))
-  const invalid = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+  const invalid = await run(cli, source, ['export', '$projects.demo', '--agent'])
   expect(invalid.status).toBe(1)
   expect(invalid.stdout).toContain('missing')
 })
@@ -312,7 +315,7 @@ test('exports deferred cycles and their files after overrides and privacy redact
   const content = '{{base}} {{~loop~}} {{~privateTarget~}} {{~script~}}'
   await put(join(source, 'helper.txt'), content)
   const original = await readFile(join(source, 'woof.config.json'))
-  const exported = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+  const exported = await run(cli, source, ['export', '$projects.demo', '--agent'])
   expect(exported.status, exported.stdout).toBe(0)
   const path = /^Archive: (.+)$/m.exec(exported.stdout)?.[1]
   assert(path)
@@ -321,7 +324,7 @@ test('exports deferred cycles and their files after overrides and privacy redact
   expect(bundle.configuration['privateTarget']).toMatchObject({ $private: true, $exec: '{{-woof:private-}}' })
   for (const name of ['workflow', 'helper', 'loop', 'style', 'unrelated'])
     expect(bundle.configuration).not.toHaveProperty(name)
-  expect(bundle.project).toMatchObject({
+  expect(bundle.projects.get('demo')!.data).toMatchObject({
     workflow: '{{~helper~}} {{~style~}}',
     helper: '<root>/helper.txt',
     loop: '{{~workflow~}}',
@@ -346,7 +349,7 @@ test('exports deferred cycles and their files after overrides and privacy redact
   expect((await run(cli, destination, ['get', 'privateTarget', '--agent'])).stderr).toContain('needs a value')
   expect(fs.existsSync(effect)).toBe(false)
   await put(join(source, 'helper.txt'), '{{~missing~}}')
-  expect((await run(cli, source, ['export', '--project', 'demo', '--agent'])).status).toBe(1)
+  expect((await run(cli, source, ['export', '$projects.demo', '--agent'])).status).toBe(1)
 })
 
 test('reports export failures once instead of repeating them for each dependency ancestor', async ({
@@ -362,7 +365,7 @@ test('reports export failures once instead of repeating them for each dependency
       b: cycle ? '{{a}}' : '<root>/missing.txt',
       $projects: { demo: { entry: '{{a}}' } },
     })
-    const result = await run(cli, home, ['export', '--project', 'demo', '--agent'])
+    const result = await run(cli, home, ['export', '$projects.demo', '--agent'])
     expect(result.status).toBe(1)
     expect(result.stdout.match(cycle ? /Circular token reference/g : /cannot load/g)).toHaveLength(1)
     expect(result.stdout).not.toContain('Archive:')
@@ -424,7 +427,15 @@ function handoff(output: string) {
   return JSON.parse(match[0]) as {
     archive: string
     choices: Record<string, 'keep' | 'take' | { action: 'add' | 'reuse'; address: string }>
-    next?: { id: string; kind: string; path: string; notice?: string; requiredNewPath?: boolean; candidates?: string[] }
+    next?: {
+      id: string
+      kind: string
+      path: string
+      project?: string
+      notice?: string
+      requiredNewPath?: boolean
+      candidates?: string[]
+    }
     invalidated?: string[]
     conflicts: { id: string; kind: string; path: string }[]
   }
@@ -512,19 +523,19 @@ test('round trips shared definitions and raw files without executing project scr
   await writeFile(join(source, 'shared/commit.md'), 'unused shared default')
   await writeFile(join(source, 'shared/raw.md'), raw)
   const original = await readFile(join(source, 'woof.config.json'))
-  const exported = await run(cli, source, ['export', '--project', 'demo', '--agent'])
+  const exported = await run(cli, source, ['export', '$projects.demo', '--agent'])
   expect(exported.status).toBe(0)
   const archivePath = /^Archive: (.+)$/m.exec(exported.stdout)?.[1]
   assert(archivePath, exported.stdout)
   const archive = await readFile(archivePath)
   const bundle = readBundleArchive(archive)
-  expect(bundle.projectName).toBe('demo')
+  expect(bundle.projects.get('demo')!.name).toBe('demo')
   expect(Object.keys(bundle.configuration.$projects!)).toEqual(['demo'])
   expect(bundle.files.has('manifest.json')).toBe(false)
   expect(bundle.files.has('shared/commit.md')).toBe(false)
   expect(bundle.configuration['conventions']).toBeUndefined()
   expect(bundle.configuration['agents']).toBeUndefined()
-  expect(bundle.project['agents']).toBe('{{conventions.commit}}')
+  expect(bundle.projects.get('demo')!.data['agents']).toBe('{{conventions.commit}}')
   expect(Buffer.from(bundle.files.get('shared/raw.md')!)).toEqual(raw)
   expect(await readFile(join(source, 'woof.config.json'))).toEqual(original)
   expect(fs.existsSync(marker)).toBe(false)
@@ -793,14 +804,17 @@ test('exports referenced checkout files without changing the source or running s
   await put(join(home, 'project.json'), sourceProjectBytes.toString())
   await put(join(checkout, 'scripts/run.js'), sourceScriptBytes.toString())
   assert(home.includes('woof-test-'), 'WOOF_HOME must belong to the test fixture')
-  const result = await cli.run(process.execPath, [cli.entry, 'export', '--project', 'demo', '--agent'], checkout, {
+  const result = await cli.run(process.execPath, [cli.entry, 'export', '$projects.demo', '--agent'], checkout, {
     WOOF_HOME: home,
   })
   expect(result.status).toBe(0)
   const path = /^Archive: (.+)$/m.exec(result.stdout)?.[1]
   assert(path)
   const bundle = readBundleArchive(await readFile(path))
-  expect(bundle.project['script']).toEqual({ $type: 'node', $exec: '<root>/demo-repo-export/scripts/run.js' })
+  expect(bundle.projects.get('demo')!.data['script']).toEqual({
+    $type: 'node',
+    $exec: '<root>/demo-repo-export/scripts/run.js',
+  })
   expect(Buffer.from(bundle.files.get('demo-repo-export/scripts/run.js')!)).toEqual(sourceScriptBytes)
   expect(await readFile(join(home, 'project.json'))).toEqual(sourceProjectBytes)
   expect(fs.existsSync(marker)).toBe(false)
@@ -1351,4 +1365,374 @@ test('reopens additions that claim a missing file destination already used by th
     if (withBytes)
       expect(await readFile(join(home, String(resultConfig['b_new']).replace('<root>/', '')), 'utf8')).toBe('B payload')
   }
+})
+
+test('exports shared namespaces independently of project detection and imports them without a project', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const source = join(directory, 'shared-selection-source')
+  const destination = join(directory, 'shared-selection-destination')
+  await config(source, {
+    $schemaVersion: 2,
+    rules: {
+      entry: '{{deps.message}} {{~deps.later~}}',
+      private: { $type: 'prompt', $private: true, $exec: '{{missing}}' },
+    },
+    rulesExtra: 'not selected',
+    deps: { message: '<root>/message.txt', later: '{{~rules.entry~}}' },
+    base: 'shared base',
+    unrelated: '{{missing}}',
+    $projects: {
+      app: { $metadata: { $basePaths: [cli.project] }, base: 'project base', rules: { entry: 'project entry' } },
+    },
+  })
+  await put(join(source, 'message.txt'), '{{base}}')
+  const result = await run(cli, source, ['export', 'rules', 'rules.entry', '--agent'])
+  expect(result.status, result.stdout).toBe(0)
+  const path = /^Archive: (.+)$/m.exec(result.stdout)![1]!
+  const bundle = readBundleArchive(await readFile(path))
+  expect(bundle.projects.size).toBe(0)
+  expect(bundle.configuration.$projects).toBeUndefined()
+  expect(bundle.configuration['base']).toBe('shared base')
+  expect(bundle.configuration).not.toHaveProperty('rulesExtra')
+  expect(bundle.configuration).not.toHaveProperty('unrelated')
+  expect(bundle.configuration['rules']).toMatchObject({ private: { $exec: '{{-woof:private-}}' } })
+  await config(destination, { $schemaVersion: 2, untouched: 'local value' })
+  expect((await run(cli, destination, ['import', path, '--agent'])).status).toBe(0)
+  const before = await readFile(join(destination, 'woof.config.json'))
+  const backups = await readdir(join(destination, '.backups'))
+  expect(JSON.parse(before.toString()).$projects).toBeUndefined()
+  expect(JSON.parse(before.toString()).untouched).toBe('local value')
+  expect(await readFile(join(destination, 'message.txt'), 'utf8')).toBe('{{base}}')
+  const repeated = await run(cli, destination, ['import', path, '--agent'])
+  expect(repeated.status, repeated.stdout).toBe(0)
+  expect(repeated.stdout).toContain('Nothing was imported')
+  expect(await readFile(join(destination, 'woof.config.json'))).toEqual(before)
+  expect(await readdir(join(destination, '.backups'))).toEqual(backups)
+})
+
+test('rejects unknown and inherited export selections even when another selection covers the project', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'selection-errors')
+  await config(home, { $schemaVersion: 2, inherited: 'shared only', $projects: { app: { own: 'own', empty: {} } } })
+  for (const paths of [
+    ['$projects.app.inherited'],
+    ['$projects.app', '$projects.app.missing'],
+    ['$projects.app.missing', '$projects.app'],
+    ['$projects.app.empty'],
+    ['missing'],
+    ['own'],
+    ['$projects.app.ow'],
+    ['--project', 'app'],
+    ['--project', 'app.own'],
+    ['inherited', '--project', 'app'],
+  ]) {
+    const result = await run(cli, home, ['export', ...paths, '--agent'])
+    expect(result.status, result.stdout).toBe(1)
+    expect(fs.existsSync(join(home, 'exports'))).toBe(false)
+  }
+})
+
+test('round trips mixed selections with project-specific dependency chains and prunes private unselected definitions', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const source = join(directory, 'mixed-source')
+  const destination = join(directory, 'mixed-destination')
+  await config(source, {
+    $schemaVersion: 2,
+    style: 'shared style',
+    common: 'common dependency',
+    helper: '<root>/helper.md',
+    loop: '{{~helper~}}',
+    $projects: { app: '<root>/app.json', docs: '<root>/docs.json' },
+  })
+  for (const name of ['app', 'docs'])
+    await put(
+      join(source, `${name}.json`),
+      JSON.stringify({
+        $schemaVersion: 2,
+        entry: '{{helper}}',
+        style: `${name} style`,
+        omitted: { $type: 'prompt', $private: true, $exec: `${name} secret must not travel` },
+      }),
+    )
+  await put(join(source, 'helper.md'), '{{style}} / {{common}} {{~loop~}}')
+  const result = await run(cli, source, ['export', 'style', '$projects.app.entry', '$projects.docs.entry', '--agent'])
+  expect(result.status, result.stdout).toBe(0)
+  const path = /^Archive: (.+)$/m.exec(result.stdout)![1]!
+  const archive = await readFile(path)
+  const bundle = readBundleArchive(archive)
+  expect([...bundle.projects.keys()]).toEqual(['app', 'docs'])
+  expect(bundle.configuration['style']).toBe('shared style')
+  expect(bundle.configuration['common']).toBe('common dependency')
+  expect(bundle.configuration).not.toHaveProperty('helper')
+  for (const name of ['app', 'docs']) {
+    expect(bundle.projects.get(name)!.data).toMatchObject({
+      entry: '{{helper}}',
+      style: `${name} style`,
+      helper: '<root>/helper.md',
+      loop: '{{~helper~}}',
+    })
+    expect(bundle.projects.get(name)!.data).not.toHaveProperty('omitted')
+  }
+  for (const bytes of Object.values(unzipSync(archive)))
+    expect(strFromU8(bytes)).not.toContain('secret must not travel')
+  await config(destination, { $schemaVersion: 2, $projects: { app: '<root>/app.json', docs: '<root>/docs.json' } })
+  for (const name of ['app', 'docs'])
+    await put(join(destination, `${name}.json`), JSON.stringify({ $schemaVersion: 2, local: `${name} kept` }))
+  const imported = await run(cli, destination, ['import', path, '--agent'])
+  expect(imported.status, imported.stdout).toBe(0)
+  for (const name of ['app', 'docs']) {
+    expect(JSON.parse(await readFile(join(destination, `${name}.json`), 'utf8')).local).toBe(`${name} kept`)
+    const value = await run(cli, destination, ['get', `$projects.${name}.entry`, '--agent'])
+    expect(value.status, value.stdout).toBe(0)
+    expect(value.stdout).toContain(`${name} style / common dependency`)
+  }
+  expect((await readdir(join(destination, '.backups'))).length).toBe(1)
+})
+
+test('separates partial exports of projects backed by the same configuration file', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const source = join(directory, 'shared-project-file-source')
+  const destination = join(directory, 'shared-project-file-destination')
+  await config(source, { $schemaVersion: 2, $projects: { app: '<root>/both.json', docs: '<root>/both.json' } })
+  await put(
+    join(source, 'both.json'),
+    JSON.stringify({ $schemaVersion: 2, first: 'first token', second: 'second token' }),
+  )
+  const result = await run(cli, source, ['export', '$projects.app.first', '$projects.docs.second', '--agent'])
+  expect(result.status, result.stdout).toBe(0)
+  const path = /^Archive: (.+)$/m.exec(result.stdout)![1]!
+  const bundle = readBundleArchive(await readFile(path))
+  expect(bundle.projects.get('app')!.reference).not.toBe(bundle.projects.get('docs')!.reference)
+  expect(bundle.projects.get('app')!.data).toEqual({ $schemaVersion: 2, first: 'first token' })
+  expect(bundle.projects.get('docs')!.data).toEqual({ $schemaVersion: 2, second: 'second token' })
+  await config(destination, { $schemaVersion: 2 })
+  expect((await run(cli, destination, ['import', path, '--agent'])).status).toBe(0)
+  for (const [name, key] of [
+    ['app', 'first'],
+    ['docs', 'second'],
+  ])
+    expect((await run(cli, destination, ['get', `$projects.${name}.${key}`, '--agent'])).stdout).toBe(`${key} token`)
+})
+
+test('keeps project token decisions and prompt-file remapping separate in a combined import', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'scoped-remapping')
+  await config(home, { $schemaVersion: 2, $projects: { app: { value: 'local app' }, docs: { value: 'local docs' } } })
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      $projects: {
+        app: {
+          value: { $type: 'prompt', $exec: 'incoming app', $secrets: { APP_KEY: 'app.key' } },
+          entry: '<root>/entry.md',
+        },
+        docs: {
+          value: { $type: 'prompt', $exec: 'incoming docs', $secrets: { DOCS_KEY: 'docs.key' } },
+          entry: '<root>/entry.md',
+        },
+      },
+    }),
+    [{ path: 'entry.md', data: Buffer.from('{{value}} {{~value~}}') }],
+  )
+  const path = join(directory, 'scoped-remapping.zip')
+  await writeFile(path, archive)
+  const decisions = join(directory, 'scoped-decisions.json')
+  const ids = new Set<string>()
+  let file = 0
+  const result = await reviewAgentImport(cli, home, path, decisions, item => {
+    if (item.kind === 'project-token' && item.path === 'value') {
+      ids.add(item.id)
+      assert(item.project)
+      return { action: 'add', address: `${item.project}_value` }
+    }
+    if (item.kind === 'file') {
+      expect(item.requiredNewPath).toBe(true)
+      return { action: 'add', address: `imported-${++file}.md` }
+    }
+    return 'take'
+  })
+  expect(result.status, result.stdout).toBe(0)
+  expect(ids.size).toBe(2)
+  expect(file).toBe(2)
+  const imported = JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8'))
+  for (const name of ['app', 'docs']) {
+    expect(imported.$projects[name].value).toBe(`local ${name}`)
+    expect(imported.$projects[name][`${name}_value`].$exec).toBe(`incoming ${name}`)
+    expect(result.stdout).toContain(`$projects.${name}.${name}_value:`)
+    expect(await readFile(join(home, imported.$projects[name].entry.replace('<root>/', '')), 'utf8')).toBe(
+      `{{${name}_value}} {{~${name}_value~}}`,
+    )
+  }
+  expect(imported.$projects.app.entry).not.toBe(imported.$projects.docs.entry)
+})
+
+test('rejects shared renames shadowed by any imported project before remapping references', async ({
+  cli,
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'shared-rename-collisions')
+  await config(home, {
+    $schemaVersion: 2,
+    value: 'local',
+    $projects: { app: { app_value: 'unrelated app' }, docs: { docs_value: 'unrelated docs' } },
+  })
+  const original = await readFile(join(home, 'woof.config.json'))
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      value: 'incoming',
+      $projects: {
+        app: { entry: '{{value}}', later: '{{~value~}}', app_value: 'incoming app' },
+        docs: {
+          value: 'intentional project override',
+          entry: '{{value}}',
+          docs_value: 'incoming docs',
+          new_value: 'incoming override',
+        },
+      },
+    }),
+    [],
+  )
+  const plan = planImport(archive, { home, cwd: directory })
+  const shared = plan.conflicts.find(item => item.kind === 'token' && item.path === 'value')!
+  const choices: Record<string, 'take' | { action: 'add'; address: string }> = Object.fromEntries(
+    plan.conflicts.map(item => [item.id, 'take']),
+  )
+  for (const address of ['app_value', 'docs_value', 'new_value']) {
+    choices[shared.id] = { action: 'add', address }
+    const reviewed = reviewImport(plan, choices)
+    assert(reviewed.status === 'incomplete')
+    expect(reviewed.next).toMatchObject({ id: shared.id, invalid: true })
+    expect(await readFile(join(home, 'woof.config.json'))).toEqual(original)
+  }
+  choices[shared.id] = { action: 'add', address: 'imported_value' }
+  const override = plan.conflicts.find(item => item.project === 'docs' && item.path === 'value')!
+  choices[override.id] = { action: 'add', address: 'imported_value' }
+  for (const project of ['app', 'docs']) {
+    const item = plan.conflicts.find(item => item.project === project && item.path === `${project}_value`)!
+    choices[item.id] = { action: 'add', address: 'imported_value' }
+    const collided = reviewImport(plan, choices)
+    assert(collided.status === 'incomplete')
+    expect(collided.next).toMatchObject({ id: item.id, invalid: true })
+    expect(await readFile(join(home, 'woof.config.json'))).toEqual(original)
+    choices[item.id] = { action: 'add', address: `${project}_renamed` }
+  }
+  const reviewed = reviewImport(plan, choices)
+  assert(reviewed.status === 'ready')
+  applyImport(reviewed.candidate)
+  for (const project of ['app', 'docs'])
+    expect(await run(cli, home, ['get', 'entry', '--project', project, '--agent'])).toMatchObject({
+      status: 0,
+      stdout: project === 'app' ? 'incoming' : 'intentional project override',
+    })
+  const imported = JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8'))
+  expect(imported.value).toBe('local')
+  expect(imported.$projects.app.app_value).toBe('unrelated app')
+  expect(imported.$projects.docs.docs_value).toBe('unrelated docs')
+  expect(imported.$projects.app.app_renamed).toBe('incoming app')
+  expect(imported.$projects.docs.docs_renamed).toBe('incoming docs')
+  expect(imported.$projects.app.later).toBe('{{~imported_value~}}')
+})
+
+test('keeps original bytes when projects share an unchanged configuration file', async ({ directory, expect }) => {
+  for (const names of [
+    ['app', 'docs'],
+    ['docs', 'app'],
+  ]) {
+    const home = join(directory, `unchanged-project-${names[0]}`)
+    const projects = Object.fromEntries(names.map(name => [name, '<root>/shared.json']))
+    await config(home, { $schemaVersion: 2, $projects: projects })
+    const bytes = Buffer.from('{"$schemaVersion":2,"value":"local"}')
+    await put(join(home, 'shared.json'), bytes.toString())
+    const original = await readFile(join(home, 'woof.config.json'))
+    const archive = createBundleArchive(rootConfiguration({ $schemaVersion: 2, $projects: projects }), [
+      { path: 'shared.json', data: Buffer.from('{"$schemaVersion":2,"value":"incoming"}') },
+    ])
+    const plan = planImport(archive, { home, cwd: directory })
+    const choices: Record<string, 'keep' | 'take'> = {}
+    let candidate: ReturnType<typeof ready> | undefined
+    let keptFile = false
+    for (let count = 0; count < 10; count++) {
+      const reviewed = reviewImport(plan, choices)
+      if (reviewed.status === 'ready') {
+        candidate = reviewed.candidate
+        break
+      }
+      const item = reviewed.next
+      expect(item.invalid, item.notice).not.toBe(true)
+      if (item.kind === 'file') keptFile = true
+      choices[item.id] = item.kind === 'file' || item.project === 'app' ? 'keep' : 'take'
+    }
+    assert(candidate)
+    expect(keptFile).toBe(true)
+    applyImport(candidate)
+    expect(await readFile(join(home, 'shared.json'))).toEqual(bytes)
+    expect(await readFile(join(home, 'woof.config.json'))).toEqual(original)
+    expect(fs.existsSync(join(home, '.backups'))).toBe(false)
+  }
+})
+
+test('reviews physical project-file collisions across a multi-project import before any write', async ({
+  directory,
+  expect,
+}) => {
+  const home = join(directory, 'project-file-collisions')
+  await config(home, { $schemaVersion: 2, $projects: { app: '<root>/app.json', docs: '<root>/docs.json' } })
+  await put(join(home, 'app.json'), JSON.stringify({ $schemaVersion: 2, value: 'local' }))
+  await fs.promises.symlink('app.json', join(home, 'docs.json'))
+  const original = await readFile(join(home, 'woof.config.json'))
+  const archive = createBundleArchive(
+    rootConfiguration({
+      $schemaVersion: 2,
+      $projects: { app: '<root>/app.json', docs: '<root>/docs.json' },
+    }),
+    ['app', 'docs'].map(name => ({
+      path: `${name}.json`,
+      data: Buffer.from(JSON.stringify({ $schemaVersion: 2, value: `incoming ${name}` })),
+    })),
+  )
+  const plan = planImport(archive, { home, cwd: directory })
+  const choices: Record<string, 'take' | { action: 'add'; address: string }> = {}
+  let collided = false
+  let candidate: ReturnType<typeof ready> | undefined
+  for (let count = 0; count < 40; count++) {
+    const reviewed = reviewImport(plan, choices)
+    if (reviewed.status === 'ready') {
+      candidate = reviewed.candidate
+      break
+    }
+    const item = reviewed.next
+    if (item.invalid) {
+      expect(item.kind).toBe('file')
+      expect(item.project).toBe('docs')
+      collided = true
+      choices[item.id] = { action: 'add', address: 'separate-docs.json' }
+    } else choices[item.id] = 'take'
+  }
+  expect(collided).toBe(true)
+  assert(candidate)
+  expect(await readFile(join(home, 'woof.config.json'))).toEqual(original)
+  applyImport(candidate)
+  expect(JSON.parse(await readFile(join(home, 'app.json'), 'utf8')).value).toBe('incoming app')
+  expect(JSON.parse(await readFile(join(home, 'separate-docs.json'), 'utf8')).value).toBe('incoming docs')
+  expect(JSON.parse(await readFile(join(home, 'woof.config.json'), 'utf8')).$projects.docs).toBe(
+    '<root>/separate-docs.json',
+  )
+  expect((await readdir(join(home, '.backups'))).length).toBe(1)
 })

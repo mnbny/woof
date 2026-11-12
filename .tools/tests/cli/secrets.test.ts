@@ -317,7 +317,7 @@ test('sharing retains bindings, excludes stores and backups, and does not reuse 
   const task = (key: string) => ({ $type: 'node', $exec: 'process.stdout.write("ran")', $secrets: { TOKEN: key } })
   await config(source, { dependency: task('one'), $projects: { demo: { call: '{{dependency}}' } } })
   await put(join(source, 'woof.secrets.json'), JSON.stringify({ one: 'DUMMY_SOURCE_VALUE' }))
-  const exported = await run(source, ['export', '--project', 'demo'])
+  const exported = await run(source, ['export', '$projects.demo'])
   expect(exported.status, exported.stdout).toBe(0)
   const archivePath = /^Archive: (.+)$/m.exec(exported.stdout)![1]!
   const bytes = await readFile(archivePath)
