@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import a woof project.
 metadata:
-  version: 16
+  version: 17
 ---
 
 # woof execution
@@ -15,30 +15,33 @@ Every project can use or override shared tokens in woof home. A project is regis
 
 Keep the user's task, scope, and constraints. Select the command below. Try the CLI before you investigate its installation or source.
 
-| Command      | Purpose                                                               |
-| ------------ | --------------------------------------------------------------------- |
-| `get`        | Find tokens, or resolve a token to its payload.                       |
-| `tree`       | Show configuration structure without token content.                   |
-| `add`        | Add a token.                                                          |
-| `edit`       | Change the content, description, or tags of a token.                  |
-| `projects`   | List registered projects and show what the current directory selects. |
-| `init`       | Create a project configuration.                                       |
-| `explain`    | Show how a token resolves, without running scripts.                   |
-| `validate`   | Check the configuration, without running scripts.                     |
-| `export`     | Package a registered project as an archive.                           |
-| `import`     | Review an archive and apply it.                                       |
-| `readme`     | Print the user guide.                                                 |
-| `secret KEY` | Read one local secret inside shell command substitution.              |
+| Command      | Purpose                                                                |
+| ------------ | ---------------------------------------------------------------------- |
+| `get`        | Find tokens, or resolve a token to its payload.                        |
+| `tree`       | Show configuration structure without token content.                    |
+| `add`        | Add a token.                                                           |
+| `edit`       | Change the content, description, or tags of a token.                   |
+| `projects`   | List registered projects and show what the current directory selects.  |
+| `init`       | Create a project configuration.                                        |
+| `explain`    | Show how a token resolves, without running scripts.                    |
+| `validate`   | Check the configuration, without running scripts.                      |
+| `export`     | Package a registered project as an archive.                            |
+| `import`     | Review an archive and apply it.                                        |
+| `readme`     | Print the user guide.                                                  |
+| `upgrade`    | Find the latest release and get command-pin and skill-update guidance. |
+| `secret KEY` | Read one local secret inside shell command substitution.               |
 
 For a request to use a resource or task, follow **Use a token**. For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Use `npx --yes @mnbny/woof@0.1.9` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
+Use `npx --yes @mnbny/woof@0.1.10` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.9 <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.10 <command> --agent`.
 
 Shell-quote token addresses and search terms as data.
 
 Read and follow the output, including after a nonzero exit. A handoff makes no changes and exits with status 1. It names the missing decision and gives the next command. Report unresolved failures.
+
+When the user asks to upgrade woof, run `woof upgrade --agent` and follow its instructions. Use the returned exact version pin, then update and read the execution skill. The user's upgrade request authorizes updates to existing skill copies. A request only to check versions does not authorize changes.
 
 Reuse explicit user choices. Agent mode grants no additional permission. Save, change, import, or restore only after the user approves. Do not install other packages to guess a remedy.
 

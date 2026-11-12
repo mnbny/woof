@@ -88,7 +88,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 > Paste this into your agent:
 >
 > ```text
-> Run `npx @mnbny/woof@0.1.9 readme` and set up woof for me.
+> Run `npx @mnbny/woof@0.1.10 readme` and set up woof for me.
 > ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -344,11 +344,12 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.9 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.10 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
 | `woof readme` | Prints this guide. Agents run it first. | — |
+| `woof upgrade` | Shows the latest release and how to switch to it | — |
 | `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>`, `--args <text>` |
 | `woof tree [path]` | Shows token structure without content | `--project <name>` or `--repo` |
 | `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--arguments`, `--secret`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
@@ -361,7 +362,7 @@ Your agent runs these as `npx @mnbny/woof@0.1.9 <command>`. Add `--help` to any 
 | `woof export` | Packs a private project into a zip in `~/.woof/exports/` | `--project <name>` |
 | `woof import <archive>` | Asks about each conflict in an archive, then applies it | `--decisions <file>` |
 
-Every command takes `--agent`. All commands except `secret` also accept `--migrate`. `woof --help` and `woof --version` work too.
+Every command takes `--agent`. All commands except `secret` and `upgrade` also accept `--migrate`. `woof --help` and `woof --version` work too.
 
 #### Options
 
