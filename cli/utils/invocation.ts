@@ -44,6 +44,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
     'worktree-path': { type: 'string', multiple: true },
   },
   readme: {},
+  upgrade: {},
   secret: {},
 }
 
@@ -86,10 +87,11 @@ export function parseInvocation(rawArgs: string[]) {
     const count = parsed.positionals.length
     if (command === 'secret' && (count !== 1 || migrate))
       throw new Error('Use woof secret KEY. This command does not accept --migrate.')
+    if (command === 'upgrade' && migrate) throw new Error('upgrade does not accept --migrate.')
     if (command === 'import' && count !== 1) throw new Error('import requires exactly one argument.')
     // Without an address, explain offers a picker to a person and asks an agent for the address.
     if (command === 'explain' && count > 1) throw new Error('explain accepts one token address.')
-    if ((command === 'projects' || command === 'export' || command === 'readme') && count !== 0)
+    if (['projects', 'export', 'readme', 'upgrade'].includes(command) && count !== 0)
       throw new Error(`${command} accepts no positional arguments.`)
     if (command === 'validate' && count > 1) throw new Error('validate accepts at most one token address.')
     if (command === 'tree' && count > 1) throw new Error('tree accepts at most one path.')

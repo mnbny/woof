@@ -14,6 +14,7 @@ import projects from './commands/projects.ts'
 import readme from './commands/readme.ts'
 import secret, { reportSecretError } from './commands/secret.ts'
 import tree from './commands/tree.ts'
+import upgrade from './commands/upgrade.ts'
 import validate from './commands/validate.ts'
 import { parseInvocation } from './utils/invocation.ts'
 import { getWoofHome } from './utils/paths.ts'
@@ -25,11 +26,12 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code !== 'EPIPE') throw error
 })
 
-const secretInvocation = process.argv.slice(2).find(arg => !arg.startsWith('-')) === 'secret'
+const commandName = process.argv.slice(2).find(arg => !arg.startsWith('-'))
+const secretInvocation = commandName === 'secret'
 
 // Help and parse failures exit inside citty, so only an exit hook reaches every agent run.
 process.once('exit', () => {
-  if (!secretInvocation && agentPresentation()) recommendExecutionSkill()
+  if (!secretInvocation && commandName !== 'upgrade' && agentPresentation()) recommendExecutionSkill()
 })
 
 const subCommands: SubCommandsDef = {
@@ -44,6 +46,7 @@ const subCommands: SubCommandsDef = {
   readme,
   secret,
   tree,
+  upgrade,
   validate,
 }
 
@@ -63,7 +66,11 @@ const main = defineCommand({
 try {
   const invocation = parseInvocation(process.argv.slice(2))
   // The guide must stay readable when configuration is broken, which is when an agent needs it most.
-  if (invocation.command !== 'secret' && (invocation.command !== 'readme' || invocation.migrate))
+  if (
+    invocation.command !== 'secret' &&
+    invocation.command !== 'upgrade' &&
+    (invocation.command !== 'readme' || invocation.migrate)
+  )
     await prepareStartup({ migrate: invocation.migrate, passive: invocation.passive, cwd: process.cwd() })
   const rootVersion =
     invocation.args.some(arg => arg === '--version' || arg === '-v') &&
