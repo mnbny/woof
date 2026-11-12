@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import a woof project.
 metadata:
-  version: 14
+  version: 15
 ---
 
 # woof execution
@@ -32,9 +32,9 @@ Keep the user's task, scope, and constraints. Select the command below. Try the 
 
 For a request to use a resource or task, follow **Use a token**. For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Use `npx --yes @mnbny/woof@0.1.7` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
+Use `npx --yes @mnbny/woof@0.1.8` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.7 <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.8 <command> --agent`.
 
 Shell-quote token addresses and search terms as data.
 
@@ -72,6 +72,12 @@ If a payload names another token to use, retrieve its exact address when that in
 
 `get` runs expanded scripts in the selected project's checkout. woof does not undo script effects. Candidate kinds identify scripts. If a token can reach a script the user did not ask to run, inspect it with `woof explain` first.
 
+### Script arguments
+
+Pass script inputs with `woof get '<address>' --args 'ios --variant "woof alt"' --agent`. Woof forwards them to every script executed in that lookup. Prompts ignore them. Quotes group values containing spaces; flags and values are interpreted by the script.
+
+A `[has arguments]` badge means the script, or the target of an alias, documents its inputs. Run `woof explain '<address>' --agent` to read their names and descriptions, then supply the values for the user's task. The descriptions do not make inputs required. Undocumented scripts can also accept arguments. Follow script errors to correct missing or invalid inputs; account for any effects before retrying a failed script.
+
 ### Secrets
 
 Reference checks require nonempty values for declared secrets. `get` supplies secrets to script tokens. For commands described by prompts, prepend the supplied environment assignments, such as `ENV_NAME="$(woof secret 'secret.key')"`. The command must read its environment.
@@ -89,6 +95,8 @@ Run the command for the change and follow its drafting steps. Show the result to
 In prompt content, `{{path}}` inserts a token's content. `{{~path~}}` produces an instruction to use that token later, without loading or running it. Write `{{{{` and `}}}}` for literal double braces.
 
 Declare secret bindings with repeatable `--secret ENV_NAME=secret.key` flags on add or edit. Supply names only, never values. On edit, the flag replaces all bindings; `--secret ''` removes them. Omit the flag to preserve them.
+
+For scripts, save optional input descriptions with `--arguments '[{"name":"platform","description":"Platform to build"},{"name":"--variant"}]'` on add or edit. List positional names in the expected order; flag order does not matter. On edit, this replaces the whole list; `--arguments '[]'` clears it. Omit the flag to preserve existing descriptions. Include these descriptions in the draft shown to the user.
 
 woof cannot rename, move, retype, or remove a token. For these changes, edit the configuration file that `woof explain` reports. Then run `woof validate --agent`.
 

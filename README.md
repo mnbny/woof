@@ -88,7 +88,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 > Paste this into your agent:
 >
 > ```text
-> Run `npx @mnbny/woof@0.1.7 readme` and set up woof for me.
+> Run `npx @mnbny/woof@0.1.8 readme` and set up woof for me.
 > ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -302,6 +302,7 @@ And `acme`'s repo config:
 | `$tags` | A resource | Optional list of strings for search |
 | `$private` | A resource | Optional boolean. `true` replaces the content with `{{-woof:private-}}` on export. |
 | `$secrets` | A resource | Optional map of environment variable names to local secret keys. Values stay in the secrets store. |
+| `$arguments` | A script resource | Optional ordered list of objects with `name` and optional `description`, documenting positional arguments and flags. |
 | `$projects` | Your shared file | Private projects by name: inline, or a `<root>/` path to the project's own file, like `initech` |
 | `$metadata` | A private project | Optional `$basePaths` and `$worktreePaths` |
 | `$basePaths` | `$metadata` | Paths that select the project, including everything below them |
@@ -343,15 +344,15 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.7 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.8 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
 | `woof readme` | Prints this guide. Agents run it first. | — |
-| `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>` |
+| `woof get [query…]` | Prints a token's value when the query is its exact path. Otherwise, searches. | `--search` to always search, `--project <name>`, `--args <text>` |
 | `woof tree [path]` | Shows token structure without content | `--project <name>` or `--repo` |
-| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--secret`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
-| `woof edit [path]` | Changes a token's content, description, tags, or privacy | `--content`, `--description`, `--tag`, `--secret`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
+| `woof add [path]` | Adds a token | `--type`, `--content`, `--description`, `--tag`, `--arguments`, `--secret`, `--private`, and one of `--shared`, `--repo`, or `--project <name>` |
+| `woof edit [path]` | Changes a token's content, metadata, or privacy | `--content`, `--description`, `--tag`, `--arguments`, `--secret`, `--private` or `--no-private`, `--shared` or `--override`, `--project <name>` |
 | `woof init [location]` | Creates a repo config or a private project | `--repo`, or `--name <name>` with `--base-path` and `--worktree-path` |
 | `woof secret KEY` | Reads one local secret for command substitution | — |
 | `woof projects` | Shows which project the current directory selects, and lists private projects | — |
@@ -369,6 +370,7 @@ Every command takes `--agent`. All commands except `secret` also accept `--migra
 - In `edit`, an empty `--description` or `--tag` removes it. `--shared` changes a shared token for every project, and `--override` overrides it in the selected project only.
 - `--private` on `add` or `edit` sets `$private: true`. `edit --no-private` removes the field. Other edits preserve the privacy setting. Disabling privacy alone on an already public definition makes no change.
 - `--secret ENV_NAME=secret.key` on `add` or `edit` declares a secret binding. Repeat it for multiple bindings. On edit, the flags replace the entire binding set; `--secret ''` removes it. Omitting the flag preserves existing bindings. Supply names only, never values.
+- `--arguments '[{"name":"platform","description":"Platform to build"}]'` on `add` or `edit` sets `$arguments`. On edit, it replaces the list; `--arguments '[]'` clears it. Omit the flag to preserve it.
 - In `tree`, `--project` and `--repo` show only that project's own definitions. An optional exact path selects a branch or leaf.
 - A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone. Tree paths instead start at the selected scope.
 
@@ -427,6 +429,9 @@ A script token runs each time your agent gets it, and whatever it prints becomes
 #### Notes
 
 - Scripts run in the selected project's checkout, the same root as `<repo>`. Without one, they run in the current repo root, or in the current directory outside a repo.
+- `woof get scripts.build --args 'ios --variant "woof alt"'` passes arguments to every script executed in that lookup. Quotes group values containing spaces. Scripts interpret and validate their own arguments; prompts ignore them.
+- Optional `$arguments` descriptions list positional names in order and flags in any order. Search shows `[has arguments]`; `woof explain` shows the descriptions. Scripts can accept arguments without declarations.
+- Bash scripts read arguments through `$1`, `$2`, and `"$@"`. Node, tsx, and bun scripts use `process.argv.slice(1)` for inline source and `process.argv.slice(2)` for files.
 - Each script receives its own declared secrets in its environment. Bindings override matching inherited variables without changing woof's environment. Two scripts can bind the same variable to different keys. An inherited variable does not replace a missing store entry.
 - A list of scripts runs in order and stops at the first failure.
 - A private placeholder returns a request for the missing value without starting a runtime. If any entry in a script list is a placeholder, none of the list runs.
@@ -463,7 +468,6 @@ What woof doesn't do yet:
 
 - There's no rename, move, or delete command. Edit the JSON by hand, or ask your agent to, then run `woof validate`.
 - One project applies per run, so you can't layer personal overrides on top of a repo's config.
-- Scripts take no arguments. Each run uses the script as written.
 - On Windows, cancelling a script stops the script itself but not the processes it started. macOS and Linux clean up everything.
 - The `woof edit` page loads its styles from a CDN, so it's unstyled offline.
 
