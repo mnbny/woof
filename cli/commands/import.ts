@@ -45,8 +45,7 @@ function reviewText(value: unknown) {
   return value instanceof Uint8Array ? binaryText(value) : text(value)
 }
 
-// The diff shows the changed lines with their context. Its file header repeats the item, so it is left out. A missing
-// side is empty, so an addition shows only added lines.
+// The review already names the item, so omit the diff's file header.
 function patch(before: string, after: string) {
   return createPatch('', before, after, '', '', { context: 3 })
     .split('\n')
@@ -136,6 +135,7 @@ function decisionDocument(
     id: item.id,
     kind: item.kind,
     path: item.path,
+    ...(item.project ? { project: item.project } : {}),
     existingDigest: item.existingDigest,
     incomingDigest: item.incomingDigest,
     ...(item.notice ? { notice: item.notice } : {}),
@@ -173,7 +173,7 @@ function readDecisions(file: string, plan: ReturnType<typeof planImport>): Decis
   return document
 }
 
-function validateImportedCatalog(cwd: string, projectName: string, requirements: Set<string>) {
+function validateImportedCatalog(cwd: string, scopes: Map<string, string[]>, requirements: Set<string>) {
   const findings: string[] = []
   const loader = createResourceLoader({ cwd })
   let root: ReturnType<typeof loader.loadRootConfiguration>
@@ -195,13 +195,12 @@ function validateImportedCatalog(cwd: string, projectName: string, requirements:
         : { root, candidates: [], checkoutRoot: loader.repoRoot, selection: 'root' as const }
       const graph = createTokenGraph(context)
       const validation = preflightTokenGraph(graph, [...graph.tokens.keys()])
-      if (name === projectName) {
-        const projectDependencies = preflightTokenGraph(
-          graph,
-          [...graph.tokens.values()].filter(token => token.origin === 'project').map(token => token.path),
-        )
+      const starts = scopes.get(name ?? '')
+      if (starts) {
+        const projectDependencies = preflightTokenGraph(graph, starts)
         for (const token of projectDependencies.tokens)
-          for (const [env, key] of Object.entries(token.secrets)) requirements.add(`${token.path}: ${env} ← ${key}`)
+          for (const [env, key] of Object.entries(token.secrets))
+            requirements.add(`${name ? `$projects.${name}.` : ''}${token.path}: ${env} ← ${key}`)
       }
       for (const problem of validation.problems) findings.push(`${label}: ${problem}`)
     } catch (error) {
@@ -238,10 +237,10 @@ function presentBackup(backup: string | undefined) {
 export default defineCommand({
   args: {
     agent: { description: 'Use plain, noninteractive agent output', type: 'boolean' },
-    archive: { description: 'Project ZIP archive to import', type: 'positional', required: true },
+    archive: { description: 'Woof ZIP archive to import', type: 'positional', required: true },
     decisions: { description: 'Reviewed import choices JSON', type: 'string' },
   },
-  meta: { description: 'Review and import a portable project archive', name: 'import' },
+  meta: { description: 'Review and import a portable token or project archive', name: 'import' },
   async run({ rawArgs }) {
     try {
       const { values, positionals } = parseArgs({
@@ -260,13 +259,16 @@ export default defineCommand({
       const archive = readFileSync(archivePath)
 
       const plan = planImport(archive, { cwd })
+      const label = [...plan.bundle.projects.keys()].join(', ') || 'shared tokens'
       const placeholders = [
         ...[...flattenImportTokens(plan.bundle.configuration)]
           .filter(([, value]) => hasPrivatePlaceholder(value))
           .map(([path]) => `- shared: ${path}`),
-        ...[...flattenImportTokens(plan.bundle.project)]
-          .filter(([, value]) => hasPrivatePlaceholder(value))
-          .map(([path]) => `- ${plan.bundle.projectName}: ${path}`),
+        ...[...plan.bundle.projects.values()].flatMap(project =>
+          [...flattenImportTokens(project.data)]
+            .filter(([, value]) => hasPrivatePlaceholder(value))
+            .map(([path]) => `- ${project.name}: ${path}`),
+        ),
       ]
       if (placeholders.length) presentWarning('import-private', { tokens: placeholders.join('\n') })
       const prior = decisionsPath ? readDecisions(decisionsPath, plan) : undefined
@@ -323,6 +325,8 @@ export default defineCommand({
           reviewed = reviewImport(plan, choices)
           continue
         }
+        const address =
+          item.kind === 'project-token' && item.project ? `$projects.${item.project}.${item.path}` : item.path
         const diff = conflictDiff(item)
         const notice = item.notice ? `\n${item.notice}` : ''
         const reusable = item.candidates?.length
@@ -341,7 +345,7 @@ export default defineCommand({
           : ''
         presentConflict(
           {
-            summary: `Review ${KIND_LABELS[item.kind]} ${inlineCodeText(item.path)}`,
+            summary: `Review ${KIND_LABELS[item.kind]} ${inlineCodeText(address)}`,
             details: diffText(diff),
             notes: `${notice}${reusable}${rechecks}`.trim(),
           },
@@ -360,7 +364,7 @@ export default defineCommand({
               template: 'import-decision',
               values: {
                 kind: KIND_LABELS[item.kind],
-                path: item.path,
+                path: address,
                 diff,
                 notice,
                 reusable,
@@ -374,7 +378,6 @@ export default defineCommand({
           process.exitCode = 1
           return
         }
-        // Taking the archive's version comes first, so it is the default.
         const local = item.existing !== undefined
         const file = item.kind === 'file' || item.kind === 'project'
         const options = [
@@ -415,7 +418,7 @@ export default defineCommand({
               ]
             : []),
         ]
-        const selected = await chooseOption({ message: `${inlineCodeText(item.path)}: choose an action`, options })
+        const selected = await chooseOption({ message: `${inlineCodeText(address)}: choose an action`, options })
         if (!selected) return presentCancel('Import cancelled. Nothing was changed.')
         let choice: ImportChoice
         if (selected === 'keep' || selected === 'take') choice = selected
@@ -479,7 +482,7 @@ export default defineCommand({
       const requirements = new Set<string>()
       let findings: string[]
       try {
-        findings = validateImportedCatalog(cwd, plan.bundle.projectName, requirements)
+        findings = validateImportedCatalog(cwd, reviewed.candidate.scopes, requirements)
       } catch (error) {
         findings = [
           renderTemplateFile('import-finding-incomplete', {
@@ -493,18 +496,17 @@ export default defineCommand({
         : ''
       const validation = findings.length ? renderTemplateFile('import-validation-findings') : ''
 
-      // An import that changed nothing is a notice. Success reports a change.
       if (result.completed.length)
         presentResult(
           {
-            summary: `Imported ${inlineCodeText(plan.bundle.projectName)}.`,
+            summary: `Imported ${inlineCodeText(label)}.`,
             details: `${outcomeText(result)}${rechecked}`,
             ...(validation ? { recovery: validation } : {}),
           },
           {
             template: 'import-imported',
             values: {
-              project: plan.bundle.projectName,
+              project: label,
               report,
               rechecked,
               validation: validation ? `\n\n${validation}` : '',
@@ -520,7 +522,7 @@ export default defineCommand({
       if (requirements.size)
         presentNotice(
           {
-            summary: 'This project declares secret requirements.',
+            summary: 'Imported tokens declare secret requirements.',
             details: [...requirements].join('\n'),
             recovery: 'Supply the values locally in woof.secrets.json before running the affected commands.',
           },
@@ -537,7 +539,10 @@ export default defineCommand({
         )
         presentWarning(configurationBroken ? 'import-findings-configuration' : 'import-findings', {
           findings: findings.join('\n'),
-          project: shellQuote(plan.bundle.projectName),
+          command:
+            plan.bundle.projects.size === 1
+              ? `woof validate --project ${shellQuote([...plan.bundle.projects.keys()][0]!)}`
+              : 'woof validate',
         })
       }
     } catch (error) {
