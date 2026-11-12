@@ -166,12 +166,12 @@ function changes(candidate: ReviewedImportCandidate, current: ReadonlyMap<string
       kind: 'resource',
     })
   }
-  if (candidate.projectFile) {
-    const { path, data } = candidate.projectFile
+  for (const projectFile of candidate.projectFiles) {
+    const { path, data } = projectFile
     const original = current.get(path)
     const finalBytes = serialized(data)
     const unchanged =
-      (candidate.initialProject?.path === path && isDeepStrictEqual(candidate.initialProject.data, data)) ||
+      (projectFile.initial?.path === path && isDeepStrictEqual(projectFile.initial.data, data)) ||
       (original && equalBytes(original, finalBytes))
     if (!unchanged) {
       const source = candidate.sources.find(source => source.path === path)

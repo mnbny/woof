@@ -11,11 +11,14 @@ import { isMarkedResourceReference } from './resources.ts'
 import { SECRETS_FILE } from './secrets.ts'
 
 export type BundleFile = { path: string; data: Uint8Array }
+export type BundleProject = {
+  name: string
+  data: ProjectDefinition
+  reference: string | undefined
+}
 export type WoofBundle = {
   configuration: RootConfiguration
-  projectName: string
-  project: ProjectDefinition
-  projectReference: string | undefined
+  projects: Map<string, BundleProject>
   files: ReadonlyMap<string, Uint8Array>
 }
 
@@ -106,34 +109,30 @@ function validateBundle(files: ReadonlyMap<string, Uint8Array>): WoofBundle {
     'root',
     'bundle woof.config.json',
   )
-  const projects = Object.entries(configuration.$projects ?? {})
-  if (projects.length !== 1)
-    throw new BundleError(`the root configuration must select exactly one project; found ${projects.length}.`)
-  const [projectName, definition] = projects[0]!
-  let project: ProjectDefinition
-  let projectReference: string | undefined
-  let projectPath: string | undefined
-  if (typeof definition === 'string') {
-    projectReference = definition
-    projectPath = resourcePath(definition)
-    if (!projectPath) throw new BundleError('a selected project configuration cannot be checkout-relative.')
-    if (projectPath === 'woof.config.json')
-      throw new BundleError('the selected project configuration cannot alias the root configuration.')
-    const bytes = files.get(projectPath)
-    if (!bytes) throw new BundleError(`selected project configuration ${projectPath} is missing.`)
-    project = parseConfigurationDocument(configurationText(bytes, projectPath), 'project', `bundle ${projectPath}`)
-  } else project = definition
-
   const required = new Set<string>()
-  if (projectPath) required.add(projectPath)
-  for (const reference of referencedResources(configuration, project)) {
+  const projects = new Map<string, BundleProject>()
+  for (const [name, definition] of Object.entries(configuration.$projects ?? {})) {
+    let data: ProjectDefinition
+    if (typeof definition === 'string') {
+      const path = resourcePath(definition)
+      if (!path) throw new BundleError('a selected project configuration cannot be checkout-relative.')
+      if (path === 'woof.config.json')
+        throw new BundleError('the selected project configuration cannot alias the root configuration.')
+      const bytes = files.get(path)
+      if (!bytes) throw new BundleError(`selected project configuration ${path} is missing.`)
+      data = parseConfigurationDocument(configurationText(bytes, path), 'project', `bundle ${path}`)
+      required.add(path)
+    } else data = definition
+    projects.set(name, { name, data, reference: typeof definition === 'string' ? definition : undefined })
+  }
+  for (const reference of referencedResources(configuration, ...[...projects.values()].map(project => project.data))) {
     const path = resourcePath(reference)
     if (!path) continue
     if (path === 'woof.config.json') throw new BundleError('a payload cannot replace the root configuration.')
     required.add(path)
   }
   const selected = new Map([...files].filter(([path]) => path === 'woof.config.json' || required.has(path)))
-  return { configuration, projectName, project, projectReference, files: selected }
+  return { configuration, projects, files: selected }
 }
 
 function decodeFailure(error: unknown): never {
