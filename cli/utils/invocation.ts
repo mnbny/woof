@@ -1,11 +1,13 @@
 import { parseArgs } from 'node:util'
 
+import { normalizeGetArguments } from './arguments.ts'
 import { splitProjectAddress } from './tokens.ts'
 
 type Option = { type: 'boolean' | 'string'; short?: string; multiple?: boolean }
 
 const commandOptions: Record<string, Record<string, Option>> = {
   add: {
+    arguments: { type: 'string' },
     secret: { type: 'string', multiple: true },
     private: { type: 'boolean' },
     type: { type: 'string' },
@@ -16,8 +18,9 @@ const commandOptions: Record<string, Record<string, Option>> = {
     repo: { type: 'boolean' },
     project: { type: 'string' },
   },
-  get: { project: { type: 'string' }, search: { type: 'boolean' } },
+  get: { project: { type: 'string' }, search: { type: 'boolean' }, args: { type: 'string' } },
   edit: {
+    arguments: { type: 'string' },
     secret: { type: 'string', multiple: true },
     private: { type: 'boolean' },
     'no-private': { type: 'boolean' },
@@ -45,6 +48,7 @@ const commandOptions: Record<string, Record<string, Option>> = {
 }
 
 export function parseInvocation(rawArgs: string[]) {
+  rawArgs = normalizeGetArguments(rawArgs)
   const terminator = rawArgs.indexOf('--')
   const before = terminator < 0 ? rawArgs : rawArgs.slice(0, terminator)
   const after = terminator < 0 ? [] : rawArgs.slice(terminator)

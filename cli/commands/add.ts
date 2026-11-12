@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
+import { argumentDescriptionText, parseArgumentDescriptions } from '../utils/arguments.ts'
 import {
   assertTokenPath,
   checkDraft,
@@ -85,6 +86,10 @@ export default defineCommand({
     tag: { description: 'Tag for discovery (repeatable)', type: 'string' },
     private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
     secret: { description: 'ENV_NAME=secret.key binding (repeatable; names only)', type: 'string' },
+    arguments: {
+      description: 'Script argument descriptions as a JSON array of name/description objects',
+      type: 'string',
+    },
     shared: { description: 'Add the token to the shared tokens', type: 'boolean' },
     repo: { description: 'Add the token to the repository configuration', type: 'boolean' },
     project: { description: 'Add the token to this registered project', type: 'string' },
@@ -103,6 +108,7 @@ export default defineCommand({
           tag: { type: 'string', multiple: true },
           private: { type: 'boolean' },
           secret: { type: 'string', multiple: true },
+          arguments: { type: 'string' },
           shared: { type: 'boolean' },
           repo: { type: 'boolean' },
           project: { type: 'string' },
@@ -145,6 +151,7 @@ export default defineCommand({
       let description = values.description?.trim() || undefined
       let tags = values.tag ?? []
       const secrets = parseSecretBindings(values.secret ?? [])
+      const args = values.arguments === undefined ? undefined : parseArgumentDescriptions(values.arguments)
 
       if (!interactive) {
         const missing = [
@@ -168,6 +175,7 @@ export default defineCommand({
             target ? targetFlag(target) : 'TARGET',
             ...(values.private ? ['--private'] : []),
             ...(values.secret ?? []).flatMap(binding => ['--secret', shellQuote(binding)]),
+            ...(values.arguments === undefined ? [] : ['--arguments', shellQuote(values.arguments)]),
             '--description',
             description === undefined ? 'DESCRIPTION' : shellQuote(description),
             ...(tags.length ? tags.flatMap(tag => ['--tag', shellQuote(tag)]) : ['--tag', 'TAG']),
@@ -214,6 +222,7 @@ export default defineCommand({
                 tags,
                 private: values.private,
                 secrets,
+                arguments: args,
               },
               cwd,
             )
@@ -231,6 +240,7 @@ export default defineCommand({
           tags,
           private: values.private,
           secrets,
+          arguments: args,
         })
       }
 
@@ -303,7 +313,17 @@ export default defineCommand({
         tags = splitList(entered)
       }
 
-      await save({ target, path, type: tokenType, content, description, tags, private: values.private, secrets })
+      await save({
+        target,
+        path,
+        type: tokenType,
+        content,
+        description,
+        tags,
+        private: values.private,
+        secrets,
+        arguments: args,
+      })
     } catch (error) {
       const details = message(error)
       presentError(
@@ -350,6 +370,7 @@ export default defineCommand({
             ['Tags', tags],
             ['Private', draft.private ? 'yes' : 'no'],
             ['Secrets', secretBindingText(draft.secrets ?? {}) || 'none'],
+            ['Arguments', argumentDescriptionText(draft.arguments ?? []) || 'none'],
             ['Overrides a shared token', override],
           ]),
           recovery: `Check it with ${inlineCodeText(command)}.`,
@@ -365,6 +386,7 @@ export default defineCommand({
             tags,
             private: draft.private ? 'yes' : 'no',
             secrets: secretBindingText(draft.secrets ?? {}) || 'none',
+            arguments: argumentDescriptionText(draft.arguments ?? []) || 'none',
             override,
             command: `${command} --agent`,
           },

@@ -91,6 +91,7 @@ function tokenText(value: unknown) {
     $tags?: string[]
     $private?: boolean
     $secrets?: Record<string, string>
+    $arguments?: { name: string; description?: string }[]
   }
   return `${[
     ...(token.$type ? [`Type: ${token.$type}`] : []),
@@ -98,6 +99,7 @@ function tokenText(value: unknown) {
     ...(token.$description !== undefined ? [`Description: ${token.$description}`] : []),
     ...(token.$tags?.length ? [`Tags: ${token.$tags.join(', ')}`] : []),
     ...Object.entries(token.$secrets ?? {}).map(([name, key]) => `Secret: ${name} ← ${key}`),
+    ...(token.$arguments ?? []).map(arg => `Argument: ${arg.name}${arg.description ? `: ${arg.description}` : ''}`),
     '',
     ...(Array.isArray(token.$exec) ? token.$exec : [token.$exec]),
   ].join('\n')}\n`

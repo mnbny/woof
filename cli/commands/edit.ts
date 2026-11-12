@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
+import { argumentDescriptionText, parseArgumentDescriptions } from '../utils/arguments.ts'
 import { copyScriptForOverride, describeToken, editToken, targetLabel, targetPath } from '../utils/authoring.ts'
 import { discoverResources } from '../utils/discovery.ts'
 import { fieldsText, hintText, inlineCodeText, markdownText, shellQuote } from '../utils/display.ts'
@@ -43,6 +44,10 @@ export default defineCommand({
     content: { description: 'New content; - reads standard input', type: 'string' },
     description: { description: 'New description; an empty value removes it', type: 'string' },
     tag: { description: 'New tag set (repeatable); an empty value removes all tags', type: 'string' },
+    arguments: {
+      description: 'Replace script argument descriptions with a JSON array; [] removes them',
+      type: 'string',
+    },
     private: { description: 'Replace the token content with a private placeholder on export', type: 'boolean' },
     'no-private': { description: 'Include the token content in exports', type: 'boolean' },
     secret: {
@@ -64,6 +69,7 @@ export default defineCommand({
           content: { type: 'string' },
           description: { type: 'string' },
           tag: { type: 'string', multiple: true },
+          arguments: { type: 'string' },
           private: { type: 'boolean' },
           'no-private': { type: 'boolean' },
           secret: { type: 'string', multiple: true },
@@ -110,6 +116,7 @@ export default defineCommand({
             : `${inlineCodeText(path)} is a project token. Only a shared token can get an override.`,
         )
       const edit: TokenEdit = {
+        ...(values.arguments === undefined ? {} : { arguments: parseArgumentDescriptions(values.arguments) }),
         ...(values.content !== undefined
           ? { content: values.content === '-' ? readFileSync(0, 'utf8').trimEnd() : values.content }
           : {}),
@@ -154,15 +161,16 @@ export default defineCommand({
               .join('\n')
           : `none needed: the token is defined in ${targetLabel(token.definition)}`
         const content = token.content ?? `The content is in ${token.files.join(', ')}.`
-        const command = `woof edit ${shellQuote(path)}${projectFlag}${values.private ? ' --private' : values['no-private'] ? ' --no-private' : ''}${(values.secret ?? []).map(binding => ` --secret ${shellQuote(binding)}`).join('')}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
+        const command = `woof edit ${shellQuote(path)}${projectFlag}${values.private ? ' --private' : values['no-private'] ? ' --no-private' : ''}${(values.secret ?? []).map(binding => ` --secret ${shellQuote(binding)}`).join('')}${values.arguments === undefined ? '' : ` --arguments ${shellQuote(values.arguments)}`}${token.override && !layer ? ' LAYER' : ''} --description DESCRIPTION --tag TAG${
           token.kind === 'fixed' ? suffix : ` --content -${suffix} <<'WOOF'\nCONTENT\nWOOF`
         }`
         const description = token.description ?? 'none'
         const tags = token.tags.join(', ') || 'none'
+        const argumentsText = argumentDescriptionText(token.arguments) || 'none'
         presentSelection(
           {
             summary: `Edit ${path}.`,
-            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\nPrivate: ${token.private ? 'yes' : 'no'}\nSecrets: ${secretBindingText(token.secrets) || 'none'}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
+            details: `Type: ${token.type}\nDefined in: ${targetLabel(token.definition)}\nContent: ${location}\nDescription: ${description}\nTags: ${tags}\nPrivate: ${token.private ? 'yes' : 'no'}\nSecrets: ${secretBindingText(token.secrets) || 'none'}\nArguments: ${argumentsText}\n\n${content}\n\nLayers:\n${layers}\n\n${command}`,
             recovery: 'Pass only the fields that change.',
           },
           {
@@ -177,6 +185,7 @@ export default defineCommand({
               tags,
               private: token.private ? 'yes' : 'no',
               secrets: secretBindingText(token.secrets) || 'none',
+              arguments: argumentsText,
               content,
               layers,
               command,

@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util'
 
 import { isAgent } from '../utils/agent.ts'
 import { discoverResources } from '../utils/discovery.ts'
-import { inlineCodeText, mutedText, runtimeBadge, scopeBadge, shellQuote } from '../utils/display.ts'
+import { argumentsBadge, inlineCodeText, mutedText, runtimeBadge, scopeBadge, shellQuote } from '../utils/display.ts'
 import {
   aliasedMetadata,
   chooseOption,
@@ -63,7 +63,8 @@ function candidateText(
         .filter(Boolean)
         .join('  ')
       const runtime = candidate.target ? '' : runtimeBadge(candidate.kind)
-      const badges = `${scopeBadge(candidate.origin)}${runtime ? ` ${runtime}` : ''}`
+      const hasArguments = aliasedMetadata(candidate, all).arguments?.length
+      const badges = `${scopeBadge(candidate.origin)}${runtime ? ` ${runtime}` : ''}${hasArguments ? ` ${argumentsBadge()}` : ''}`
       return `${agent ? '- ' : ''}${candidate.path.padEnd(width)}  ${badges}${metadata ? `  ${mutedText(metadata)}` : ''}`
     })
     .join('\n')
@@ -75,6 +76,7 @@ export default defineCommand({
     project: { description: 'Select a registered project', type: 'string' },
     query: { description: 'Exact token address or discovery terms', type: 'positional', required: false },
     search: { description: 'Discover metadata without executing a match', type: 'boolean' },
+    args: { description: 'Arguments passed to scripts; quote values containing spaces', type: 'string' },
   },
   meta: { description: 'Resolve an exact token or discover resources', name: 'get' },
   async run({ rawArgs }) {
@@ -88,6 +90,7 @@ export default defineCommand({
           agent: { type: 'boolean' },
           project: { type: 'string' },
           search: { type: 'boolean' },
+          args: { type: 'string' },
         },
       })
       const agent = values.agent === true || Boolean(isAgent())
@@ -100,6 +103,7 @@ export default defineCommand({
         )
       const explicitProject = qualified?.project ?? values.project
       const search = values.search === true
+      const argsFlag = values.args === undefined ? '' : ` --args ${shellQuote(values.args)}`
 
       process.on('SIGINT', onCancel)
       process.on('SIGTERM', onCancel)
@@ -128,7 +132,7 @@ export default defineCommand({
               return path ? `${name}  ${mutedText(path)}` : name
             })
             .join('\n')
-          const command = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project NAME${agent ? ' --agent' : ''}`
+          const command = `woof get${query ? ` ${shellQuote(query)}` : ''}${search ? ' --search' : ''} --project NAME${argsFlag}${agent ? ' --agent' : ''}`
           presentSelection(
             {
               summary: 'Several projects match this directory.',
@@ -150,6 +154,7 @@ export default defineCommand({
           createScriptEvaluator({
             checkoutRoot: context.checkoutRoot,
             signal: controller.signal,
+            args: values.args ?? '',
           }),
           explanation => warnOnPreflight(explanation, graph),
         )
@@ -177,8 +182,9 @@ export default defineCommand({
       const project = context.project?.kind === 'registered' ? context.project : undefined
       const details = candidateText(graph, candidates, agent)
       const projectFlag = project ? ` --project ${shellQuote(project.name)}` : ''
-      const command = `woof get 'PATH'${projectFlag}${agent ? ' --agent' : ''}`
-      const searchCommand = `woof get 'TERMS' --search${projectFlag}${agent ? ' --agent' : ''}`
+      const command = `woof get 'PATH'${projectFlag}${argsFlag}${agent ? ' --agent' : ''}`
+      const searchCommand = `woof get 'TERMS' --search${projectFlag}${argsFlag}${agent ? ' --agent' : ''}`
+      const explainCommand = `woof explain 'PATH'${projectFlag}${agent ? ' --agent' : ''}`
       const template = search
         ? candidates.length
           ? 'get-search'
@@ -195,10 +201,10 @@ export default defineCommand({
             : 'No resources matched this lookup.',
           details,
           recovery: candidates.length
-            ? `Get a token with ${inlineCodeText(command)}.`
+            ? `Get a token with ${inlineCodeText(command)}. See argument descriptions with ${inlineCodeText(explainCommand)}.`
             : `Search with other terms: ${inlineCodeText(searchCommand)}.`,
         },
-        { template, values: { candidates: details, command, search: searchCommand } },
+        { template, values: { candidates: details, command, search: searchCommand, explain: explainCommand } },
       )
       if (!search && query) process.exitCode = 1
     } catch (error) {

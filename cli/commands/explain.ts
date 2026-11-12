@@ -123,6 +123,10 @@ export default defineCommand({
             `${inlineCodeText(token.path)} ${scopeBadge(token.origin)}${runtime ? ` ${runtime}` : ''}`,
             ...[
               ...fieldsText(fields).split('\n'),
+              ...listFieldText(
+                'Argument',
+                token.arguments.map(arg => `${arg.name}${arg.description ? `: ${arg.description}` : ''}`),
+              ),
               ...listFieldText('Reference', [...new Set(token.references)]),
               ...listFieldText('Deferred reference', [...new Set(token.deferred)]),
               ...listFieldText(

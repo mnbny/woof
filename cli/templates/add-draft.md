@@ -9,7 +9,8 @@ Draft the token from the conversation:
 5. Write a one-line description and a few tags, so that discovery can find the token.
 6. Choose one target below. Shared tokens are available in every project. A project token exists only in that project, and it overrides a shared token at the same path.
 7. If the user wants the content omitted from exports, add --private to the command. The token will export with a placeholder. Local access still returns its value.
-8. Show the user the path, target, type, description, tags, privacy setting and content. Save only after the user approves.
+8. For scripts with known inputs, include their argument descriptions in the draft. Save them with --arguments '[{"name":"platform","description":"Platform to build"},{"name":"--variant"}]'. List positional names in their expected order; flag order does not matter. Descriptions are optional and do not require or validate runtime arguments.
+9. Show the user the path, target, type, description, tags, privacy setting, argument descriptions and content. Save only after the user approves.
 
 Existing namespaces:
 {{namespaces}}
