@@ -54,12 +54,17 @@ Add each document using this format:
 #### [cli.md](./cli.md)
 
 - Description: Command set, invocation and startup order, presentation conventions and exit status, and distribution.
-- Tags: `cli`, `commands`, `presentation`, `distribution`, `upgrade`
+- Tags: `cli`, `commands`, `presentation`, `distribution`
 
 #### [cli-command-readme.md](./cli-command-readme.md)
 
 - Description: User-guide output for people and agents who want to learn what woof does.
 - Tags: `readme`
+
+#### [cli-command-upgrade.md](./cli-command-upgrade.md)
+
+- Description: Release lookup, execution-skill guidance, and upgrade permission boundaries.
+- Tags: `upgrade`
 
 #### [cli-command-init.md](./cli-command-init.md)
 
@@ -98,7 +103,7 @@ Add each document using this format:
 
 #### [cli-command-export.md](./cli-command-export.md)
 
-- Description: Project dependency selection, archive assembly, destination naming, and export report.
+- Description: Definition selection, dependency collection, archive assembly, and export report.
 - Tags: `export`
 
 #### [cli-command-import.md](./cli-command-import.md)
@@ -133,7 +138,7 @@ Add each document using this format:
 
 #### [sharing.md](./sharing.md)
 
-- Description: Project bundle scope, private content, import review semantics, remapping, decisions, and application safety.
+- Description: Token and project bundle scope, private content, import review, remapping, decisions, and application safety.
 - Tags: `sharing`, `export`, `import`, `privacy`
 
 #### [questions-brief.md](./questions-brief.md)

@@ -1,4 +1,4 @@
 you    share my globex setup with sam
 
-agent  › woof export --project globex
+agent  › woof export '$projects.globex'
          Saved ~/.woof/exports/globex.woof.zip. Send it to Sam.

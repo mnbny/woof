@@ -13,7 +13,7 @@ woof is a local command-line application. It helps developers and coding agents 
 - A project is registered by name in woof home, or a repository configuration defines it without a name. All checkouts and worktrees of a project share one context.
 - Resources can be shared, private, or outside a repository. Callers address them the same way in each case. Folder layout has no restrictions.
 - Discovery uses token paths and optional metadata. Callers choose a resource before they read its body or run it.
-- Registered projects move between homes as portable archives with explicit import review. Repository projects move through Git.
+- Shared tokens and registered-project definitions move between homes as portable archives with explicit import review. Repository projects move through Git.
 - Convention over configuration guides the design. If a reference is missing or immediate references form a cycle, resolution fails before any computed side effect.
 
 ## Scope
@@ -43,5 +43,5 @@ These items are outside the product: provider installers, hosted services, seman
 - **Effective view:** the root tokens, with the tokens of the selected project on top.
 - **Discovery:** a search over metadata only, in the effective view.
 - **Migration:** an explicit startup upgrade of configuration documents to the current schema version. Migration keeps the original bytes for rollback.
-- **Export and import:** export packages a registered project as a portable archive. Import applies an archive after a review of each item that needs a decision.
+- **Export and import:** export packages selected shared and registered-project definitions with their dependencies as a portable archive. Import applies an archive after a review of each item that needs a decision.
 - **Handoff:** plain output that returns a pending decision to the caller. A handoff replaces a terminal question.

@@ -2,13 +2,14 @@
 
 ## Purpose and ownership
 
-Sharing moves a registered project between woof homes through a portable archive. Repository projects move through Git, and they cannot be exported or imported. The export and import commands own their flows. This domain owns archive content, review semantics, and application safety.
+Sharing moves selected shared and registered-project definitions between woof homes through a portable archive. Repository projects move through Git, and they cannot be exported or imported. The export and import commands own their flows. This domain owns archive content, review semantics, and application safety.
 
 ## Archives
 
-- An archive is a standard ZIP file without a manifest. It holds the selected project's tokens and only their reachable shared dependencies, through immediate and deferred references. References follow the effective view, so overridden root definitions and unrelated tokens are omitted. An empty project exports no shared tokens. Pruning changes only the archive. It never changes the source registry.
+- An archive is a standard ZIP file without a manifest. It holds selected definitions and their full reachable dependencies, through immediate and deferred references. It can contain shared tokens and zero, one, or several registered projects. References follow each selected scope's effective view.
+- A whole-project selection starts from that project's own definitions. An empty project exports no shared tokens. Unrelated tokens and overridden shared defaults stay out unless another selection needs them. Pruning changes only the archive and never changes the source registry.
 - Shared dependencies that rely on a project override through either reference kind travel as project tokens. This also applies to their callers, including deferred cycles. Independent shared dependencies stay in the root configuration, so the exported shared catalog can resolve without the project.
-- The archive includes only the files that the retained tokens declare, plus the project's configuration file, if one exists. Included payload bytes stay unchanged. An unchanged project configuration also keeps its original bytes.
+- The archive includes only the files that the retained tokens declare, plus the configuration files of retained projects, where applicable. Included payload bytes stay unchanged. An unchanged project configuration also keeps its original bytes. Different partial selections from a shared configuration file receive distinct archive destinations.
 - Export copies project files under `<repo>` into a project-specific directory. The exported references point to the copies. Export does not copy the checkout or undeclared script dependencies.
 
 When woof reads an archive, it checks entry names, sizes, and checksums. It also checks that the central and local records agree. These conditions cause a failure: unsafe paths, duplicate destinations, required entries that are not regular files, multi-disk archives, and ZIP64. woof ignores entries that no definition references. These entries never become writes.
@@ -27,13 +28,13 @@ Local recovery backups retain private values and files. Export privacy does not 
 
 ## Review
 
-Secret declarations travel with their tokens. Secret values and their store never enter archives, import writes, or import backups. Export checks declared secret dependencies through ordinary reference validation. Import can save the bindings before local values are configured. After saving, it lists the imported project's requirements and reports missing local values as validation findings.
+Secret declarations travel with their tokens. Secret values and their store never enter archives, import writes, or import backups. Export checks declared secret dependencies through ordinary reference validation. Import can save the bindings before local values are configured. After saving, it lists requirements for the imported shared and project tokens and reports missing local values as validation findings.
 
 Secret bindings affect execution and are part of token identity for reuse. Tokens with different bindings are not interchangeable. Review shows binding differences. Token remapping leaves secret keys unchanged because they are not token addresses.
 
 Script argument descriptions travel as metadata, including on private placeholders. Review shows their differences. They do not change execution or reuse matching. Reuse keeps the local descriptions with the rest of the local metadata.
 
-Import compares the archive with the local home. The items are shared tokens, the project entry, project tokens, project metadata, and files.
+Import compares the archive with the local home. The items are shared tokens, project entries, project tokens, project metadata, and files. Project identity is part of each project token decision. Partial imports merge into each selected project and preserve omitted local tokens. Shared-only imports preserve the local project registry exactly.
 
 These items need no decision:
 
@@ -60,19 +61,19 @@ Project metadata and project override bindings allow only keep or take.
 
 ## Remapping
 
-Accepted renames and reuses remap both reference kinds only in imported content, including prompt files. Local references keep their meaning, unless their own definitions are replaced. A project override stays bound to the address of its shared token. If reuse selects another definition, a project alias keeps this binding. Reuse rejects cycles of immediate references, but permits deferred cycles. woof never rewrites escaped examples or script bodies.
+Accepted renames and reuses remap both reference kinds only in imported content, including prompt files. Shared mappings and each project's effective mappings remain separate. A prompt file receives separate destinations when its uses require different rewritten content. Local references keep their meaning, unless their own definitions are replaced. A project override stays bound to the address of its shared token. If reuse selects another definition, a project alias keeps this binding. Reuse rejects cycles of immediate references, but permits deferred cycles. woof never rewrites escaped examples or script bodies.
 
 ## Decisions
 
 Decisions bind the archive, the observed source state, and earlier choices. If a later choice changes the context of an earlier choice, the earlier choice must be reviewed again. Saved decisions fail if the archive is different or the sources changed. If the review is incomplete, import writes nothing.
 
-Each decision claims one physical destination. woof compares destinations after links resolve, even for files that do not exist yet. These items claim destinations: writes, kept files, the imported project configuration, and added files whose incoming content is missing. If two decisions claim the same file, the review reopens the conflicting choice.
+Each decision claims one physical destination. woof compares destinations after links resolve, even for files that do not exist yet. These items claim destinations: writes, kept files, imported project configurations, and added files whose incoming content is missing. If two decisions claim the same file, the review reopens the conflicting choice.
 
 ## Application and recovery
 
 After each item has a decision, woof checks each source snapshot and reuse snapshot again. Before the first write, woof saves a backup archive in the backups area of woof home. The archive holds the root configuration, each file that it references, and each existing file that the import replaces. Its paths are relative to woof home, so an extraction over woof home restores these files. If woof cannot save the backup, the import stops before any change. An import that changes nothing makes no backup. woof keeps every backup and has no restore command.
 
-woof stages each write with its original mode. woof replaces resources and the project configuration before the root registry.
+woof stages each write with its original mode. woof replaces resources and project configurations before the root registry. All selected scopes share one review, backup, and application. Destination claims cover the entire import, including projects whose configuration files resolve to the same physical file.
 
 If a write fails, woof restores the completed replacements in reverse order. woof does not overwrite later edits during this restoration. If the restoration cannot finish, copies of the originals stay as recovery artifacts. woof does not promise atomic behavior across several files after a crash.
 

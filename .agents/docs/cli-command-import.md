@@ -2,7 +2,9 @@
 
 ## Purpose and ownership
 
-Import applies a portable project archive to the local woof home after an explicit review. Import owns the review loop, the decision handoff, the application report, and post-import validation. The sharing domain owns the review semantics.
+Import applies a portable token and project archive to the local woof home after an explicit review. Import owns the review loop, the decision handoff, the application report, and post-import validation. The sharing domain owns the review semantics.
+
+The archive supplies the destination scopes. Import needs no project selection or destination mapping. Shared-only imports leave the project registry unchanged. Partial project imports preserve omitted local tokens.
 
 ## Inputs
 
@@ -27,6 +29,6 @@ When import saved a backup, it shows the backup location after the report, also 
 
 ## Validation findings
 
-After application, import lists the imported project's secret requirements and checks them through ordinary reference validation. It imports only the bindings, never the values. Missing local values produce setup findings without undoing the import.
+After application, import lists secret requirements for the imported shared and project tokens and checks them through ordinary reference validation. It imports only the bindings, never the values. Missing local values produce setup findings without undoing the import.
 
 After a save, import validates the shared catalog and every registered project. It does not run scripts. Findings go to standard error after the success report, and the command still exits with status 0. If a finding shows an unreadable configuration, import asks for a repair before the next woof run. Other findings point to the affected tokens and to project validation.

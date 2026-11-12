@@ -69,7 +69,7 @@ If you can commit to a repo, like `acme`, keep its woof configuration there, and
 
 Ask your agent to export it. woof packs the tokens and files `globex` needs into one zip:
 
-<img src=".github/assets/readme/export.jpg" alt="you: share my globex setup with sam. agent: runs woof export --project globex, saves ~/.woof/exports/globex.woof.zip, and says to send it to Sam.">
+<img src=".github/assets/readme/export.jpg" alt="you: share my globex setup with sam. agent: runs woof export with the shell-quoted path $projects.globex, saves ~/.woof/exports/globex.woof.zip, and says to send it to Sam.">
 
 On Sam's side, anything new comes straight in. Anything that differs from what Sam already has waits for Sam's choice, one at a time:
 
@@ -88,7 +88,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 > Paste this into your agent:
 >
 > ```text
-> Run `npx @mnbny/woof@0.1.10 readme` and set up woof for me.
+> Run `npx @mnbny/woof@0.1.11 readme` and set up woof for me.
 > ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -210,7 +210,7 @@ Ask your agent to set up woof for the repo. It creates a `woof.config.json` at t
 
 #### Which project applies
 
-woof picks one project per run: the one you name, then the repo's own config, then the private project whose paths match. If nothing matches, your shared tokens apply alone.
+For a lookup, woof picks one project: the one you name, then the repo's own config, then the private project whose paths match. If nothing matches, your shared tokens apply alone.
 
 ## Reference
 
@@ -344,7 +344,7 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.10 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.11 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
@@ -359,7 +359,7 @@ Your agent runs these as `npx @mnbny/woof@0.1.10 <command>`. Add `--help` to any
 | `woof projects` | Shows which project the current directory selects, and lists private projects | — |
 | `woof explain [path]` | Traces how a token resolves, without running scripts | `--project <name>` |
 | `woof validate [path]` | Checks every token, or one token's graph, without running scripts | `--project <name>` |
-| `woof export` | Packs a private project into a zip in `~/.woof/exports/` | `--project <name>` |
+| `woof export [paths…]` | Packs shared tokens, namespaces, or private project definitions into a zip | — |
 | `woof import <archive>` | Asks about each conflict in an archive, then applies it | `--decisions <file>` |
 
 Every command takes `--agent`. All commands except `secret` and `upgrade` also accept `--migrate`. `woof --help` and `woof --version` work too.
@@ -373,7 +373,7 @@ Every command takes `--agent`. All commands except `secret` and `upgrade` also a
 - `--secret ENV_NAME=secret.key` on `add` or `edit` declares a secret binding. Repeat it for multiple bindings. On edit, the flags replace the entire binding set; `--secret ''` removes it. Omitting the flag preserves existing bindings. Supply names only, never values.
 - `--arguments '[{"name":"platform","description":"Platform to build"}]'` on `add` or `edit` sets `$arguments`. On edit, it replaces the list; `--arguments '[]'` clears it. Omit the flag to preserve it.
 - In `tree`, `--project` and `--repo` show only that project's own definitions. An optional exact path selects a branch or leaf.
-- A qualified address, such as `'$projects.globex.git.commit'`, selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone. Tree paths instead start at the selected scope.
+- In `get`, `explain`, and `validate`, a qualified address such as `'$projects.globex.git.commit'` selects a project the same way `--project globex` does. Quote it so the shell leaves `$projects` alone. Tree paths instead start at the selected scope.
 
 #### Agent mode and exit status
 
@@ -400,7 +400,8 @@ TEST_API_KEY="$(woof secret 'acme.tests')" pnpm test
 
 #### Export and import
 
-- Export starts with the selected project's tokens and follows their references after applying overrides. It omits unrelated shared tokens, overridden defaults, and unused files. An empty project exports no shared tokens.
+- Export accepts shared paths such as `git.commits`, whole projects such as `'$projects.globex'`, or project definitions such as `'$projects.globex.git.commit'`. Supply several paths to combine them. Paths select actual definitions, not inherited values, regardless of the current directory. Without paths, the interactive CLI offers a project picker. Agents must supply paths. Import reads their destinations from the archive.
+- Export follows every selected token's immediate and deferred references, applying project overrides within each project's chain. It omits tokens and files outside those chains. An empty project exports no shared tokens.
 - A shared token that depends on a project override, directly or through another token, exports as a project token. Independent shared dependencies stay shared.
 - For each exported token with `$private: true`, woof replaces `$exec` with `{{-woof:private-}}` and keeps the token's address, type, metadata, and privacy flag. Files and references used only by the omitted content stay out of the archive.
 - Privacy applies only to the marked token. An unmarked token can still export the same file. Local values and source files stay unchanged, and recovery backups retain private values.
@@ -468,7 +469,7 @@ Everything woof keeps lives in your woof home, `~/.woof`.
 What woof doesn't do yet:
 
 - There's no rename, move, or delete command. Edit the JSON by hand, or ask your agent to, then run `woof validate`.
-- One project applies per run, so you can't layer personal overrides on top of a repo's config.
+- One project applies per lookup, so you can't layer personal overrides on top of a repo's config.
 - On Windows, cancelling a script stops the script itself but not the processes it started. macOS and Linux clean up everything.
 - The `woof edit` page loads its styles from a CDN, so it's unstyled offline.
 
@@ -478,7 +479,7 @@ What woof does on purpose:
 
 - An override replaces the whole token. To build on a shared value, reference its pieces from your override. A token can't insert its own value.
 - A change to a shared token reaches every project at once, the way a design token does. There's no version pinning.
-- Repo configs travel through Git. Only private projects export.
+- Repo configs travel through Git. Shared tokens and private project definitions export.
 - Script output is plain text. woof never looks for references in it.
 - An immediate reference to a script runs it on every lookup, so keep scripts with side effects out of those compositions.
 - Scripts run as you, with no sandbox, timeout, or undo. Before you get tokens from an unfamiliar repo, check its config with `woof explain`.

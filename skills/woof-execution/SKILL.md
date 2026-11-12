@@ -1,15 +1,15 @@
 ---
 name: woof-execution
-description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import a woof project.
+description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import woof tokens and projects.
 metadata:
-  version: 17
+  version: 18
 ---
 
 # woof execution
 
 woof is a local CLI for reusable prompts and scripts. It stores each resource as a token with a dotted path, such as `conventions.commit`. A prompt is text. A script runs in bash, node, tsx, or bun; its output becomes the token's value. Tokens combine instructions through `{{path}}` references.
 
-Every project can use or override shared tokens in woof home. A project is registered by name in woof home or defined by a repository configuration. Run `woof` from the user's target project. The current directory selects the project.
+Every project can use or override shared tokens in woof home. A project is registered by name in woof home or defined by a repository configuration. Run `woof` from the user's target project. The current directory selects the project for lookup. Export uses explicit definition paths.
 
 ## Choose the command
 
@@ -25,7 +25,7 @@ Keep the user's task, scope, and constraints. Select the command below. Try the 
 | `init`       | Create a project configuration.                                        |
 | `explain`    | Show how a token resolves, without running scripts.                    |
 | `validate`   | Check the configuration, without running scripts.                      |
-| `export`     | Package a registered project as an archive.                            |
+| `export`     | Package selected tokens, namespaces, or projects as an archive.        |
 | `import`     | Review an archive and apply it.                                        |
 | `readme`     | Print the user guide.                                                  |
 | `upgrade`    | Find the latest release and get command-pin and skill-update guidance. |
@@ -33,9 +33,9 @@ Keep the user's task, scope, and constraints. Select the command below. Try the 
 
 For a request to use a resource or task, follow **Use a token**. For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Use `npx --yes @mnbny/woof@0.1.10` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
+Use `npx --yes @mnbny/woof@0.1.11` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.10 <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.11 <command> --agent`.
 
 Shell-quote token addresses and search terms as data.
 
@@ -103,9 +103,11 @@ For scripts, save optional input descriptions with `--arguments '[{"name":"platf
 
 woof cannot rename, move, retype, or remove a token. For these changes, edit the configuration file that `woof explain` reports. Then run `woof validate --agent`.
 
-## Share a project
+## Share tokens and projects
 
-To share a registered project, run `woof export --project '<name>' --agent`. To receive a project, run `woof import '<archive>' --agent`.
+Run `woof export '<path>' '<another-path>' --agent`. An ordinary path selects a shared token or namespace. `'$projects.NAME'` selects a whole registered project; `'$projects.NAME.path'` selects a token or namespace actually defined in that project. Quote qualified paths so the shell preserves `$projects`. Mixed shared and project selections can travel together.
+
+Selection does not include inherited tokens that the project has not defined. Woof includes the full referenced and deferred dependency chain automatically, with project overrides applied. To receive the archive, run `woof import '<archive>' --agent`; its contents determine the destination scopes.
 
 Import adds new items automatically. Each item that exists on both sides and differs requires a user decision. Record only decisions the user made. Import saves secret bindings and reports missing local values during post-import validation.
 
