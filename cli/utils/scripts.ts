@@ -189,6 +189,7 @@ function execute(
         return
       }
       if (code !== 0) {
+        process.stderr.write(Buffer.concat(stdout))
         finish(
           new ScriptExecutionError(
             `${display} failed with ${code === null ? `signal ${signal}` : `exit ${code}`}. Prior script effects are not rolled back.`,
