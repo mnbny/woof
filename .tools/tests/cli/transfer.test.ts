@@ -62,7 +62,12 @@ test('redacts private values and files from raw exports and preserves placeholde
         $tags: ['e2e'],
         $exec: '<repo>/accounts.txt',
       },
-      script: { $type: 'node', $private: true, $exec: ['<repo>/run.js', 'throw new Error("private-inline-script")'] },
+      script: {
+        $type: 'node',
+        $private: true,
+        $exec: ['<repo>/run.js', 'throw new Error("private-inline-script")'],
+        $arguments: [{ name: 'platform', description: 'Platform to build' }],
+      },
       shadowed: 'public override',
       instructions: 'Sign in with {{account}}. Use {{shared}} {{file}} {{public}}.',
     }
@@ -493,7 +498,11 @@ test('round trips shared definitions and raw files without executing project scr
     conventions: { commit: '<root>/shared/commit.md' },
     agents: '{{conventions.commit}}',
     raw: '<root>/shared/raw.md',
-    computed: { $type: 'node', $exec: `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')` },
+    computed: {
+      $type: 'node',
+      $exec: `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`,
+      $arguments: [{ name: 'platform' }, { name: '--variant', description: 'App variant' }],
+    },
     $projects: {
       demo: { conventions: { commit: 'project override' }, instructions: '{{agents}} {{raw}}', run: '{{computed}}' },
       other: { agents: 'other project', missing: '{{not-selected}}' },
@@ -523,6 +532,10 @@ test('round trips shared definitions and raw files without executing project scr
   await config(destination, { $schemaVersion: 2, $projects: { local: { agents: 'local project' } } })
   const imported = await finishAgentImport(cli, destination, archivePath, join(directory, 'roundtrip-decisions.json'))
   expect(imported.status).toBe(0)
+  expect(JSON.parse(await readFile(join(destination, 'woof.config.json'), 'utf8')).computed.$arguments).toEqual([
+    { name: 'platform' },
+    { name: '--variant', description: 'App variant' },
+  ])
   expect(await readFile(join(destination, 'shared/raw.md'))).toEqual(raw)
   expect(await run(cli, destination, ['get', 'agents', '--project', 'demo'])).toMatchObject({
     status: 0,
