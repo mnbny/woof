@@ -2,7 +2,7 @@
 name: woof-execution
 description: Use woof to find tokens, follow reusable prompts, run computed resources, and add, edit, or share tokens. Use when the user mentions woof or asks to use a woof convention, find a token for a task, save or change a token, set up woof for a repository, or export or import a woof project.
 metadata:
-  version: 15
+  version: 16
 ---
 
 # woof execution
@@ -32,9 +32,9 @@ Keep the user's task, scope, and constraints. Select the command below. Try the 
 
 For a request to use a resource or task, follow **Use a token**. For example, "use woof's commit convention" means `woof get 'commit convention' --agent`.
 
-Use `npx --yes @mnbny/woof@0.1.8` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
+Use `npx --yes @mnbny/woof@0.1.9` wherever this skill or CLI output shows `woof`. Keep this pin until the user asks to change it.
 
-Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.8 <command> --agent`.
+Pass `--agent` to every command: `npx --yes @mnbny/woof@0.1.9 <command> --agent`.
 
 Shell-quote token addresses and search terms as data.
 

@@ -88,7 +88,7 @@ woof runs through npx, so there's nothing to install. You need Node.js 22.13+, 2
 > Paste this into your agent:
 >
 > ```text
-> Run `npx @mnbny/woof@0.1.8 readme` and set up woof for me.
+> Run `npx @mnbny/woof@0.1.9 readme` and set up woof for me.
 > ```
 
 Your agent reads this guide. The first time it runs woof, woof suggests the companion skill, and your agent asks you before installing it.
@@ -344,7 +344,7 @@ Deferred instructions include the project name when a registered project is sele
 
 ### Commands
 
-Your agent runs these as `npx @mnbny/woof@0.1.8 <command>`. Add `--help` to any command for its full options.
+Your agent runs these as `npx @mnbny/woof@0.1.9 <command>`. Add `--help` to any command for its full options.
 
 | Command | What it does | Options |
 | --- | --- | --- |
