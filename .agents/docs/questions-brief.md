@@ -28,10 +28,6 @@ A change to a shared token reaches every project that uses the token. There is n
 
 Script output is literal. A future decision can define whether generated output can add token references. The decision can also define how that affects side effects and validation.
 
-### Script arguments
-
-Scripts receive no arguments or parameters from the caller. A decision can define whether lookup can pass them.
-
 ### Action scripts in compositions
 
 If a composite token immediately references a script, each lookup runs that script. A convention can define whether scripts with side effects belong in compositions or only in explicit requests.

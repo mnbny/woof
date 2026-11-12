@@ -95,3 +95,4 @@ Discovery helps callers choose a resource before they retrieve or run it. Exact 
 - Without terms, discovery lists the project tokens first, then the shared tokens. Each group is in alphabetical order.
 - Discovery never reads bodies, evaluates references, or runs scripts. It has no result cap.
 - Each candidate has a kind: prompt, alias, or a script runtime. An alias candidate names its target.
+- Scripts with argument descriptions have a badge, which aliases inherit from their target. The full descriptions belong to explanation and do not participate in search matching.

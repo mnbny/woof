@@ -2,7 +2,7 @@
 
 ## Purpose and ownership
 
-Edit changes the content, description, tags, or export privacy of one token. People edit prompt content in a local browser page. They edit the description and tags in the terminal. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
+Edit changes the content, metadata, or export privacy of one token. People edit prompt content in a local browser page. They edit the description and tags in the terminal. Agents edit through flags after the user approves the change. Edit owns the layer choice, the page, and the write. The token domain owns references and the effective view. Edit does not rename, move, retype, or remove a token.
 
 ## Inputs
 
@@ -10,6 +10,7 @@ Edit changes the content, description, tags, or export privacy of one token. Peo
 - The changes: new content, a description, or a tag set. A flag that is not given keeps its field. An empty description or an empty tag removes that field.
 - Secret bindings can be replaced or removed as a set. Other edits and overrides preserve them. The same reference checks used for other dependencies require the declared local values before saving.
 - Privacy flags include or omit the content in exports. They cannot be combined. Other edits, including replacement of a placeholder and creation of an override, preserve the privacy setting.
+- Callers can replace a script's argument descriptions as a list or remove them with an empty list. Other edits and overrides preserve them. The agent handoff shows the current descriptions. The interactive editor preserves them. Callers use a flag to change them.
 - A layer, when a project context shows a shared token: change the shared token for all projects, or add an override for this project only.
 
 ## What changes

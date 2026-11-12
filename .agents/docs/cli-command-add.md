@@ -10,6 +10,7 @@ Add creates one token in the shared tokens, in a registered project, or in the r
 - A type: prompt, or a bash, node, tsx, or bun script.
 - The content, as text or from standard input.
 - An optional description and tags, for discovery.
+- Optional script argument descriptions, supplied as a list. Positional names follow their expected order. The declarations document inputs without requiring or validating runtime values.
 - An optional privacy flag, to omit the content from exports.
 - Optional secret bindings, containing environment names and secret keys only. Reference checks require the declared local values before the token is saved.
 - One target: the shared tokens, the repository configuration, or a registered project.
@@ -40,8 +41,9 @@ A project token at the path of a shared token is an override. Add reports it.
 - The target choices are the shared tokens and the detected project. If woof detects no project, the choices are the shared tokens and all registered projects, or the matching projects if several match.
 - An agent without complete input receives a drafting handoff. The agent drafts the token from the conversation and searches for a similar token. The draft includes the export privacy setting. The agent shows the draft to the user and saves only after approval. The handoff lists the existing namespaces, the same targets as the human question, and the exact command.
 - With complete input, add reports every problem that it finds in one message.
+- When the script's inputs are known, the agent draft includes argument descriptions. The terminal does not ask additional questions for these descriptions. Callers supply them through a flag.
 - Add checks again when it saves, because the configuration can change during the questions. The save replaces the document atomically and keeps its other content.
 
 ## Output and exit status
 
-On success, add reports the configuration file, the type or alias target, and how the content was saved. It also reports the description, tags, export privacy setting, whether the token is an override, and a command to check the token. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.
+On success, add reports the configuration file, the type or alias target, and how the content was saved. It also reports the description, tags, argument descriptions, export privacy setting, and whether the token is an override. A command to check the token follows. A handoff or a failure exits with status 1 and writes nothing. An interactive cancellation exits with status 130.

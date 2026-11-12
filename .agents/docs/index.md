@@ -128,8 +128,8 @@ Add each document using this format:
 
 #### [scripts.md](./scripts.md)
 
-- Description: Computed resource runtimes, execution, output, failure, and cancellation.
-- Tags: `scripts`, `execution`, `secrets`
+- Description: Computed resource inputs, runtimes, execution, output, failure, and cancellation.
+- Tags: `scripts`, `execution`, `arguments`, `secrets`
 
 #### [sharing.md](./sharing.md)
 

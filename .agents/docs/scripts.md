@@ -22,6 +22,14 @@ woof has no dependency installer. woof does not analyze script dependencies.
 - Array entries run in sequence. Each entry starts from the same directory and environment. The first failure stops the remaining entries. Directory and environment changes do not pass to the next entry.
 - Each computed script runs noninteractively, with quiet package-manager settings. Its error output goes to woof's standard error.
 
+## Arguments
+
+Lookup can supply one argument string. woof splits it into words, respecting single quotes, double quotes, and backslash escapes. Quoted empty values remain arguments. woof does not expand variables, evaluate shell expressions, or interpret flags.
+
+Every script executed during that lookup receives the same arguments. This includes scripts reached through aliases and immediate references, and each entry in an execution list. All runtimes support arguments for inline source and files. A deferred lookup is a separate invocation. Prompts ignore arguments and do not substitute them into text.
+
+A script can document its inputs with an ordered list of names and optional descriptions. Positional names follow the order the script expects; flag order does not matter. The declarations affect discovery and explanation only. Scripts accept undeclared arguments and validate their own inputs. Missing inputs do not prevent configuration checks, explanation, or export.
+
 ## Secrets
 
 Script resources can declare environment variables bound to named local secrets. The token domain checks those dependencies during preflight and supplies the resolved values to the existing script runner.

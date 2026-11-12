@@ -21,6 +21,7 @@ The schema version is the first field in a standalone document. The root configu
 - Token names use case-sensitive ASCII letters, digits, underscores, and hyphens. woof rejects prototype-sensitive names explicitly.
 - A value is a string, a namespace, or a resource object. Other scalars and generic arrays are not valid.
 - A resource object declares a type and an execution value. A description, tags, and a boolean privacy field are optional. Privacy controls export of the content. A prompt takes one string. A script takes one string or a nonempty list of strings.
+- A script resource can declare an ordered list of argument names and optional descriptions. These describe its inputs without making them required or validating runtime values. Prompt resources do not support argument declarations.
 - A resource can declare secret bindings. Each binding maps an environment variable name to a path in the local secrets store. The declaration contains no secret values. Secret paths use the same namespace lookup and name rules as configuration tokens. Configuration validation checks the names and structure without reading the store.
 - A failure names the source file and the failing path. woof never drops valid ad hoc content.
 

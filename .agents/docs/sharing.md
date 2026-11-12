@@ -31,6 +31,8 @@ Secret declarations travel with their tokens. Secret values and their store neve
 
 Secret bindings affect execution and are part of token identity for reuse. Tokens with different bindings are not interchangeable. Review shows binding differences. Token remapping leaves secret keys unchanged because they are not token addresses.
 
+Script argument descriptions travel as metadata, including on private placeholders. Review shows their differences. They do not change execution or reuse matching. Reuse keeps the local descriptions with the rest of the local metadata.
+
 Import compares the archive with the local home. The items are shared tokens, the project entry, project tokens, project metadata, and files.
 
 These items need no decision:

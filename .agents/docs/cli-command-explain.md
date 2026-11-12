@@ -19,5 +19,6 @@ Explain reports these items:
 - The selected project and the reason for the selection, or that only shared tokens apply.
 - The requested token first, then each token that it reaches, in the order of the references, with an arrow between tokens. For each token, explain shows its scope badge, its runtime badge if it is a script, its source file, the shared definition that it overrides, its description, tags, references, secret binding names, and resolved resource files.
 - Deferred references in a separate field on the token that names them.
+- The declared script arguments and their descriptions, in declaration order. Explanation requires no runtime arguments.
 
 Missing token targets, missing or empty secrets, and immediate reference cycles stop explanation with status 1. Errors identify the dependency without displaying secret values.
