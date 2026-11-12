@@ -16,17 +16,17 @@ function skillVersion(file: string) {
   }
 }
 
-/**
- * Agents use woof well only with the execution skill, so agent runs end by recommending it when the
- * user's home has no copy or only an older one.
- */
-export function recommendExecutionSkill() {
-  const source = getWoofRoot('skills', SKILL)
-  const bundled = skillVersion(join(source, 'SKILL.md')) ?? 0
+export function executionSkillState(source = getWoofRoot('skills', SKILL)) {
   const copies = ['.claude', '.agents'].map(directory => {
     const location = join(homedir(), directory, 'skills', SKILL)
     return { location, version: skillVersion(join(location, 'SKILL.md')) }
   })
+  return { source, version: skillVersion(join(source, 'SKILL.md')), copies }
+}
+
+export function recommendExecutionSkill() {
+  const { source, version, copies } = executionSkillState()
+  const bundled = version ?? 0
   const installed = copies.filter(copy => copy.version !== undefined)
   const outdated = installed.filter(copy => copy.version! < bundled)
 
